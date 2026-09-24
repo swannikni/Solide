@@ -1,4 +1,8 @@
-# Chef2Box — Suivi nutritionnel (V1)
+# Chef2Box Appli — Suivi nutritionnel (V1)
+
+Nom du projet (npm / Netlify) : `chef2box-appli`, pour le distinguer des
+autres projets Chef2Box (`chef2box`, `chef2box-cuisine`,
+`chef2box-questionnaire`, `chef2box-client`).
 
 Web app de suivi macro pour les clients Chef2Box : dashboard calories/macros,
 3 modes d'ajout de repas (scan étiquette Chef2Box, scan code-barres commerce,

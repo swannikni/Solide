@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chef2Box - Suivi",
+  title: "Chef2Box Appli",
   description: "Prêt. Sain. Maîtrisé.",
 };
 
