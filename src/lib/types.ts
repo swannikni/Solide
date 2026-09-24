@@ -1,0 +1,69 @@
+export type Palier = "P1" | "P2" | "P3" | "P4" | "P5" | "P6";
+export type RepasType = "petit_dejeuner" | "dejeuner" | "diner" | "collation";
+export type SourceRepas = "chef2box" | "code_barres" | "manuel";
+
+export interface Client {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  palier: Palier | null;
+  objectif_calories: number;
+  objectif_proteines: number;
+  objectif_glucides: number;
+  objectif_lipides: number;
+  est_admin: boolean;
+  created_at: string;
+}
+
+export interface Plat {
+  id: string;
+  nom: string;
+  description: string | null;
+  qr_code: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  photo_url: string | null;
+  actif: boolean;
+  created_at: string;
+}
+
+export interface Commande {
+  id: string;
+  client_id: string;
+  plat_id: string | null;
+  date_livraison: string;
+  repas_type: "dejeuner" | "diner";
+  statut: "confirmee" | "annulee" | "livree";
+  created_at: string;
+  plats?: Plat | null;
+}
+
+export interface RepasJournal {
+  id: string;
+  client_id: string;
+  date: string;
+  repas_type: RepasType;
+  source: SourceRepas;
+  nom: string;
+  quantite: number;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  photo_url: string | null;
+  plat_id: string | null;
+  commande_id: string | null;
+  cree_par: "client" | "admin";
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  client_id: string;
+  expediteur: "client" | "admin";
+  contenu: string;
+  lu: boolean;
+  created_at: string;
+}

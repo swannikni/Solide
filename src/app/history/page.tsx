@@ -1,0 +1,79 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { Nav } from "@/components/Nav";
+import { totauxDuJour } from "@/lib/macros";
+import type { Client, RepasJournal } from "@/lib/types";
+import Image from "next/image";
+import { UtensilsCrossed } from "lucide-react";
+
+export default async function HistoryPage() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: client } = await supabase.from("clients").select("*").eq("id", user.id).single<Client>();
+  if (!client) redirect("/login");
+
+  const { data: repas } = await supabase
+    .from("repas_journal")
+    .select("*")
+    .eq("client_id", user.id)
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(300)
+    .returns<RepasJournal[]>();
+
+  const parJour = new Map<string, RepasJournal[]>();
+  for (const r of repas ?? []) {
+    if (!parJour.has(r.date)) parJour.set(r.date, []);
+    parJour.get(r.date)!.push(r);
+  }
+
+  return (
+    <div className="min-h-screen pb-24 md:pb-6 md:pt-20">
+      <Nav estAdmin={client.est_admin} />
+      <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
+        <h1 className="font-hand text-3xl text-c2b-green">Historique</h1>
+
+        {parJour.size === 0 && (
+          <p className="text-sm text-c2b-green/50 italic text-center py-8">Aucun repas enregistré pour le moment.</p>
+        )}
+
+        {[...parJour.entries()].map(([date, repasJour]) => {
+          const totaux = totauxDuJour(repasJour);
+          return (
+            <section key={date} className="bg-white rounded-2xl border border-c2b-green/10 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-medium text-c2b-green">
+                  {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                </h2>
+                <span className="text-xs text-c2b-green/60">
+                  {Math.round(totaux.calories)} kcal · {Math.round(totaux.proteines)}g P
+                </span>
+              </div>
+              <div className="space-y-2">
+                {repasJour.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      {r.photo_url ? (
+                        <Image src={r.photo_url} alt={r.nom} width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <UtensilsCrossed size={16} className="text-c2b-green/30" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-c2b-green truncate">{r.nom}</p>
+                      <p className="text-[11px] text-c2b-green/50">{Math.round(r.calories * r.quantite)} kcal</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </main>
+    </div>
+  );
+}
