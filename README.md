@@ -29,14 +29,16 @@ npm install
 
 ### 2. Brancher un projet Supabase
 
-Vous pouvez réutiliser le projet Supabase déjà connecté aux outils
-`chef2box-questionnaire` / `chef2box-cuisine`, ou en créer un nouveau dédié à
-cette app.
+L'appli utilise le **même projet Supabase** que `chef2box-questionnaire` et
+`chef2box-cuisine`. Tout ce qui lui appartient est préfixé `application_`
+(tables `application_clients`, `application_plats`, `application_commandes`,
+`application_repas_journal`, `application_messages`, `application_factures`,
+bucket photos `application-repas-photos`) : les tables des autres outils ne
+sont jamais touchées.
 
-1. Dans le **SQL Editor** de votre projet Supabase, exécutez tout le
-   contenu de [`supabase/schema.sql`](./supabase/schema.sql). Le script est
-   idempotent (`if not exists` partout) : si les tables `clients` / `plats`
-   existent déjà avec d'autres colonnes, adaptez le script avant de l'exécuter.
+1. Dans le **SQL Editor** du projet Supabase, exécutez tout le contenu de
+   [`supabase/schema.sql`](./supabase/schema.sql). Le script peut être relancé
+   sans risque.
 2. Copiez `.env.example` vers `.env.local` et renseignez :
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -49,10 +51,10 @@ Il n'y a pas d'auto-inscription (accès réservé aux clients Chef2Box) :
 1. Dans **Authentication → Users** du dashboard Supabase, créez un utilisateur
    par client (email + mot de passe, ou lien d'invitation).
 2. Pour chaque utilisateur créé, ajoutez la ligne correspondante dans la
-   table `clients` (même `id` que l'utilisateur Auth) avec ses objectifs
-   caloriques/macros et son palier.
+   table `application_clients` (même `id` que l'utilisateur Auth) avec ses
+   objectifs caloriques/macros et son palier.
 3. Pour **votre** compte admin (Swann), mettez `est_admin = true` sur votre
-   ligne `clients`.
+   ligne `application_clients`.
 
 ### 4. Lancer en local
 

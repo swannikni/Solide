@@ -12,12 +12,12 @@ export default async function MessagesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: moi } = await supabase.from("clients").select("*").eq("id", user.id).single<Client>();
+  const { data: moi } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
   if (!moi) redirect("/login");
 
   if (moi.est_admin) {
     const { data: clients } = await supabase
-      .from("clients")
+      .from("application_clients")
       .select("*")
       .eq("est_admin", false)
       .order("nom")
@@ -32,7 +32,7 @@ export default async function MessagesPage() {
   }
 
   const { data: messages } = await supabase
-    .from("messages")
+    .from("application_messages")
     .select("*")
     .eq("client_id", user.id)
     .order("created_at", { ascending: true })

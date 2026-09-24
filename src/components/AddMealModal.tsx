@@ -59,7 +59,7 @@ export function AddMealModal({
 
   async function onScanChef2Box(qrCode: string) {
     const { data, error } = await supabase
-      .from("plats")
+      .from("application_plats")
       .select("*")
       .eq("qr_code", qrCode)
       .eq("actif", true)
@@ -150,15 +150,15 @@ export function AddMealModal({
     let photoUrl: string | null = null;
     if (photo) {
       const chemin = `${clientId}/${Date.now()}-${photo.name}`;
-      const { data, error } = await supabase.storage.from("repas-photos").upload(chemin, photo);
+      const { data, error } = await supabase.storage.from("application-repas-photos").upload(chemin, photo);
       if (!error && data) {
-        photoUrl = supabase.storage.from("repas-photos").getPublicUrl(data.path).data.publicUrl;
+        photoUrl = supabase.storage.from("application-repas-photos").getPublicUrl(data.path).data.publicUrl;
       }
     }
 
     const quantiteFinale = trouve.paGrammes ? grammes / 100 : quantite;
 
-    const { error } = await supabase.from("repas_journal").insert({
+    const { error } = await supabase.from("application_repas_journal").insert({
       client_id: clientId,
       repas_type: repasType,
       source: trouve.source,

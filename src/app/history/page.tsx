@@ -13,11 +13,11 @@ export default async function HistoryPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: client } = await supabase.from("clients").select("*").eq("id", user.id).single<Client>();
+  const { data: client } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
   if (!client) redirect("/login");
 
   const { data: repas } = await supabase
-    .from("repas_journal")
+    .from("application_repas_journal")
     .select("*")
     .eq("client_id", user.id)
     .order("date", { ascending: false })

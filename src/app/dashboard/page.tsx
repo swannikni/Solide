@@ -14,15 +14,15 @@ export default async function DashboardPage() {
   const aujourdhui = new Date().toISOString().slice(0, 10);
 
   const [{ data: client }, { data: commandes }, { data: repas }] = await Promise.all([
-    supabase.from("clients").select("*").eq("id", user.id).single<Client>(),
+    supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
-      .from("commandes")
-      .select("*, plats(*)")
+      .from("application_commandes")
+      .select("*, plats:application_plats(*)")
       .eq("client_id", user.id)
       .eq("date_livraison", aujourdhui)
       .returns<Commande[]>(),
     supabase
-      .from("repas_journal")
+      .from("application_repas_journal")
       .select("*")
       .eq("client_id", user.id)
       .eq("date", aujourdhui)

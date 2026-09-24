@@ -36,7 +36,7 @@ export function DashboardClient({
   }
 
   async function supprimerRepas(id: string) {
-    await supabase.from("repas_journal").delete().eq("id", id);
+    await supabase.from("application_repas_journal").delete().eq("id", id);
     rafraichir();
   }
 

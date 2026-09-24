@@ -31,7 +31,7 @@ export function AdminClient({
     setEnregistrementId(cle);
 
     const { data, error } = await supabase
-      .from("commandes")
+      .from("application_commandes")
       .upsert(
         {
           client_id: clientId,
@@ -42,7 +42,7 @@ export function AdminClient({
         },
         { onConflict: "client_id,date_livraison,repas_type" }
       )
-      .select("*, plats(*)")
+      .select("*, plats:application_plats(*)")
       .single<Commande>();
 
     setEnregistrementId(null);
@@ -135,7 +135,7 @@ function FormulaireNouveauPlat({ onCree }: { onCree: () => void }) {
   async function creer() {
     if (!nom || !qrCode || !calories) return;
     setEnregistrement(true);
-    await supabase.from("plats").insert({
+    await supabase.from("application_plats").insert({
       nom,
       qr_code: qrCode,
       calories: Number(calories),

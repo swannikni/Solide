@@ -28,7 +28,7 @@ export function MessagesThread({
       .channel(`messages-${clientId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `client_id=eq.${clientId}` },
+        { event: "INSERT", schema: "public", table: "application_messages", filter: `client_id=eq.${clientId}` },
         (payload) => {
           setMessages((prev) => [...prev, payload.new as Message]);
         }
@@ -49,7 +49,7 @@ export function MessagesThread({
     if (!texte.trim()) return;
     const contenu = texte.trim();
     setTexte("");
-    await supabase.from("messages").insert({
+    await supabase.from("application_messages").insert({
       client_id: clientId,
       expediteur: expediteurActuel,
       contenu,

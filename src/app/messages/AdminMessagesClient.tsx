@@ -13,7 +13,7 @@ export function AdminMessagesClient({ clients }: { clients: Client[] }) {
   async function selectionner(client: Client) {
     setClientSelectionne(client);
     const { data } = await supabase
-      .from("messages")
+      .from("application_messages")
       .select("*")
       .eq("client_id", client.id)
       .order("created_at", { ascending: true })

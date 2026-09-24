@@ -10,7 +10,7 @@ export default async function Home() {
   if (!user) redirect("/login");
 
   const { data: client } = await supabase
-    .from("clients")
+    .from("application_clients")
     .select("est_admin")
     .eq("id", user.id)
     .single();

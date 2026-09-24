@@ -1,14 +1,13 @@
--- Chef2Box - Suivi nutritionnel - Schéma V1
--- A exécuter dans le SQL Editor de votre projet Supabase.
--- Utilise "if not exists" partout : si vous branchez ce projet sur le Supabase
--- déjà utilisé par le questionnaire / l'outil cuisine, les tables clients/plats
--- existantes ne seront pas écrasées. Adaptez les noms de colonnes si elles
--- diffèrent déjà chez vous.
+-- Chef2Box Appli - Suivi nutritionnel - Schéma V1
+-- A exécuter dans le SQL Editor du projet Supabase Chef2Box (le même que le
+-- questionnaire et l'outil cuisine).
+-- Tout ce qui appartient à l'appli est préfixé "application_" (tables,
+-- fonction, bucket photos) : rien ne touche aux tables existantes des autres
+-- outils. Le script peut être relancé sans risque.
 
 -- ============ CLIENTS ============
--- Un client = une ligne, liée à un utilisateur Supabase Auth (vrai login,
--- plus d'accès par lien+id).
-create table if not exists public.clients (
+-- Un client = une ligne, liée à un utilisateur Supabase Auth (vrai login).
+create table if not exists public.application_clients (
   id uuid primary key references auth.users (id) on delete cascade,
   nom text not null,
   telephone text,
@@ -24,7 +23,7 @@ create table if not exists public.clients (
 -- ============ PLATS (menu Chef2Box) ============
 -- Macros exactes pré-enregistrées par Swann, une fois pour toutes.
 -- qr_code = identifiant unique scanné sur l'étiquette du plat.
-create table if not exists public.plats (
+create table if not exists public.application_plats (
   id uuid primary key default gen_random_uuid(),
   nom text not null,
   description text,
@@ -39,13 +38,12 @@ create table if not exists public.plats (
 );
 
 -- ============ COMMANDES ============
--- La commande connue d'un client pour un jour/repas donné (déjeuner/dîner).
--- C'est elle qui permet à l'admin de pré-remplir la "box du jour" sans
--- ressaisir les macros à la main.
-create table if not exists public.commandes (
+-- La commande connue d'un client pour un jour/repas donné. C'est elle qui
+-- permet à l'admin de pré-remplir la "box du jour".
+create table if not exists public.application_commandes (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients (id) on delete cascade,
-  plat_id uuid references public.plats (id),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  plat_id uuid references public.application_plats (id),
   date_livraison date not null,
   repas_type text not null check (repas_type in ('dejeuner', 'diner')),
   statut text not null default 'confirmee' check (statut in ('confirmee', 'annulee', 'livree')),
@@ -54,11 +52,11 @@ create table if not exists public.commandes (
 );
 
 -- ============ REPAS_JOURNAL ============
--- Chaque repas réellement ajouté par (ou pour) un client, quel que soit le mode :
--- scan Chef2Box, code-barres commerce, ou saisie manuelle.
-create table if not exists public.repas_journal (
+-- Chaque repas ajouté par (ou pour) un client : scan Chef2Box, code-barres
+-- commerce, ou saisie manuelle.
+create table if not exists public.application_repas_journal (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients (id) on delete cascade,
+  client_id uuid not null references public.application_clients (id) on delete cascade,
   date date not null default current_date,
   repas_type text not null check (repas_type in ('petit_dejeuner', 'dejeuner', 'diner', 'collation')),
   source text not null check (source in ('chef2box', 'code_barres', 'manuel')),
@@ -69,33 +67,33 @@ create table if not exists public.repas_journal (
   glucides numeric not null,
   lipides numeric not null,
   photo_url text,
-  plat_id uuid references public.plats (id),
-  commande_id uuid references public.commandes (id),
+  plat_id uuid references public.application_plats (id),
+  commande_id uuid references public.application_commandes (id) on delete set null,
   cree_par text not null default 'client' check (cree_par in ('client', 'admin')),
   created_at timestamptz not null default now()
 );
 
-create index if not exists repas_journal_client_date_idx on public.repas_journal (client_id, date);
+create index if not exists application_repas_journal_client_date_idx
+  on public.application_repas_journal (client_id, date);
 
 -- ============ MESSAGES ============
--- Messagerie directe client <-> Swann (admin).
-create table if not exists public.messages (
+create table if not exists public.application_messages (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients (id) on delete cascade,
+  client_id uuid not null references public.application_clients (id) on delete cascade,
   expediteur text not null check (expediteur in ('client', 'admin')),
   contenu text not null,
   lu boolean not null default false,
   created_at timestamptz not null default now()
 );
 
-create index if not exists messages_client_idx on public.messages (client_id, created_at);
+create index if not exists application_messages_client_idx
+  on public.application_messages (client_id, created_at);
 
 -- ============ FACTURES ============
--- Hors scope V1 (paiement/commande en ligne repoussés en V2), table posée
--- pour ne pas re-designer le modèle de données plus tard.
-create table if not exists public.factures (
+-- Hors scope V1, table posée pour la V2.
+create table if not exists public.application_factures (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients (id) on delete cascade,
+  client_id uuid not null references public.application_clients (id) on delete cascade,
   periode_debut date not null,
   periode_fin date not null,
   montant numeric not null,
@@ -103,78 +101,97 @@ create table if not exists public.factures (
   created_at timestamptz not null default now()
 );
 
--- ============ STORAGE ============
--- Bucket pour les photos de repas (public en lecture pour affichage simple,
--- écriture restreinte par policy ci-dessous).
-insert into storage.buckets (id, name, public)
-values ('repas-photos', 'repas-photos', true)
-on conflict (id) do nothing;
-
 -- ============ ROW LEVEL SECURITY ============
-alter table public.clients enable row level security;
-alter table public.plats enable row level security;
-alter table public.commandes enable row level security;
-alter table public.repas_journal enable row level security;
-alter table public.messages enable row level security;
-alter table public.factures enable row level security;
+alter table public.application_clients enable row level security;
+alter table public.application_plats enable row level security;
+alter table public.application_commandes enable row level security;
+alter table public.application_repas_journal enable row level security;
+alter table public.application_messages enable row level security;
+alter table public.application_factures enable row level security;
 
--- Un client ne voit/modifie que sa propre ligne ; un admin voit tout.
-create or replace function public.is_admin()
+create or replace function public.application_is_admin()
 returns boolean
 language sql
 security definer
+set search_path = public
 stable
 as $$
-  select coalesce((select est_admin from public.clients where id = auth.uid()), false);
+  select coalesce(
+    (select est_admin from public.application_clients where id = auth.uid()),
+    false
+  );
 $$;
 
-drop policy if exists "clients_self_or_admin_select" on public.clients;
-create policy "clients_self_or_admin_select" on public.clients
-  for select using (auth.uid() = id or public.is_admin());
+drop policy if exists "clients_self_or_admin_select" on public.application_clients;
+create policy "clients_self_or_admin_select" on public.application_clients
+  for select using (auth.uid() = id or public.application_is_admin());
 
-drop policy if exists "clients_self_update" on public.clients;
-create policy "clients_self_update" on public.clients
-  for update using (auth.uid() = id or public.is_admin());
+-- Seul l'admin modifie les fiches clients (objectifs, palier, est_admin) :
+-- un client ne doit pas pouvoir se passer admin lui-même.
+drop policy if exists "clients_admin_write" on public.application_clients;
+create policy "clients_admin_write" on public.application_clients
+  for all using (public.application_is_admin()) with check (public.application_is_admin());
 
-drop policy if exists "plats_read_all" on public.plats;
-create policy "plats_read_all" on public.plats
-  for select using (true);
+drop policy if exists "plats_read_all" on public.application_plats;
+create policy "plats_read_all" on public.application_plats
+  for select using (auth.role() = 'authenticated');
 
-drop policy if exists "plats_admin_write" on public.plats;
-create policy "plats_admin_write" on public.plats
-  for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "plats_admin_write" on public.application_plats;
+create policy "plats_admin_write" on public.application_plats
+  for all using (public.application_is_admin()) with check (public.application_is_admin());
 
-drop policy if exists "commandes_self_or_admin" on public.commandes;
-create policy "commandes_self_or_admin" on public.commandes
-  for select using (auth.uid() = client_id or public.is_admin());
+drop policy if exists "commandes_self_or_admin" on public.application_commandes;
+create policy "commandes_self_or_admin" on public.application_commandes
+  for select using (auth.uid() = client_id or public.application_is_admin());
 
-drop policy if exists "commandes_admin_write" on public.commandes;
-create policy "commandes_admin_write" on public.commandes
-  for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "commandes_admin_write" on public.application_commandes;
+create policy "commandes_admin_write" on public.application_commandes
+  for all using (public.application_is_admin()) with check (public.application_is_admin());
 
-drop policy if exists "repas_self_or_admin_select" on public.repas_journal;
-create policy "repas_self_or_admin_select" on public.repas_journal
-  for select using (auth.uid() = client_id or public.is_admin());
+drop policy if exists "repas_self_or_admin" on public.application_repas_journal;
+create policy "repas_self_or_admin" on public.application_repas_journal
+  for all using (auth.uid() = client_id or public.application_is_admin())
+  with check (auth.uid() = client_id or public.application_is_admin());
 
-drop policy if exists "repas_self_or_admin_write" on public.repas_journal;
-create policy "repas_self_or_admin_write" on public.repas_journal
-  for all using (auth.uid() = client_id or public.is_admin())
-  with check (auth.uid() = client_id or public.is_admin());
+-- Un client ne peut envoyer qu'en son nom ("client"), jamais se faire passer
+-- pour Swann.
+drop policy if exists "messages_select" on public.application_messages;
+create policy "messages_select" on public.application_messages
+  for select using (auth.uid() = client_id or public.application_is_admin());
 
-drop policy if exists "messages_self_or_admin" on public.messages;
-create policy "messages_self_or_admin" on public.messages
-  for all using (auth.uid() = client_id or public.is_admin())
-  with check (auth.uid() = client_id or public.is_admin());
+drop policy if exists "messages_insert" on public.application_messages;
+create policy "messages_insert" on public.application_messages
+  for insert with check (
+    (auth.uid() = client_id and expediteur = 'client')
+    or (public.application_is_admin() and expediteur = 'admin')
+  );
 
-drop policy if exists "factures_self_or_admin" on public.factures;
-create policy "factures_self_or_admin" on public.factures
-  for select using (auth.uid() = client_id or public.is_admin());
+drop policy if exists "factures_self_or_admin" on public.application_factures;
+create policy "factures_self_or_admin" on public.application_factures
+  for select using (auth.uid() = client_id or public.application_is_admin());
+
+-- ============ STORAGE (photos de repas) ============
+insert into storage.buckets (id, name, public)
+values ('application-repas-photos', 'application-repas-photos', true)
+on conflict (id) do nothing;
+
+-- Chaque client dépose ses photos dans son propre dossier (<son id>/...).
+drop policy if exists "application_photos_insert" on storage.objects;
+create policy "application_photos_insert" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'application-repas-photos'
+    and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or public.application_is_admin()
+    )
+  );
 
 -- ============ REALTIME ============
--- Nécessaire pour que la messagerie se mette à jour en direct sans recharger.
+-- Pour que la messagerie se mette à jour en direct.
 do $$
 begin
-  alter publication supabase_realtime add table public.messages;
+  alter publication supabase_realtime add table public.application_messages;
 exception
   when duplicate_object then null;
 end $$;

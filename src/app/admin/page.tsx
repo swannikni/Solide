@@ -11,17 +11,17 @@ export default async function AdminPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: moi } = await supabase.from("clients").select("*").eq("id", user.id).single<Client>();
+  const { data: moi } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
   if (!moi?.est_admin) redirect("/dashboard");
 
   const aujourdhui = new Date().toISOString().slice(0, 10);
 
   const [{ data: clients }, { data: plats }, { data: commandes }] = await Promise.all([
-    supabase.from("clients").select("*").eq("est_admin", false).order("nom").returns<Client[]>(),
-    supabase.from("plats").select("*").eq("actif", true).order("nom").returns<Plat[]>(),
+    supabase.from("application_clients").select("*").eq("est_admin", false).order("nom").returns<Client[]>(),
+    supabase.from("application_plats").select("*").eq("actif", true).order("nom").returns<Plat[]>(),
     supabase
-      .from("commandes")
-      .select("*, plats(*)")
+      .from("application_commandes")
+      .select("*, plats:application_plats(*)")
       .eq("date_livraison", aujourdhui)
       .returns<Commande[]>(),
   ]);
