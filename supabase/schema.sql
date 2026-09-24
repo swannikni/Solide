@@ -170,6 +170,66 @@ drop policy if exists "factures_self_or_admin" on public.application_factures;
 create policy "factures_self_or_admin" on public.application_factures
   for select using (auth.uid() = client_id or public.application_is_admin());
 
+-- ============ ALIMENTS (table CIQUAL / ANSES) ============
+-- Base d'aliments génériques pour la saisie manuelle, macros pour 100 g.
+create extension if not exists unaccent with schema extensions;
+create extension if not exists pg_trgm with schema extensions;
+
+create table if not exists public.application_aliments (
+  id bigint generated always as identity primary key,
+  code_ciqual text unique,
+  nom text not null,
+  groupe text,
+  calories numeric not null,
+  proteines numeric not null,
+  glucides numeric not null,
+  lipides numeric not null,
+  -- nom sans accents ni majuscules, rempli à l'import (unaccent n'est pas
+  -- utilisable dans une colonne générée)
+  nom_normalise text not null
+);
+
+create index if not exists application_aliments_nom_trgm_idx
+  on public.application_aliments using gin (nom_normalise extensions.gin_trgm_ops);
+
+alter table public.application_aliments enable row level security;
+
+drop policy if exists "aliments_read_authenticated" on public.application_aliments;
+create policy "aliments_read_authenticated" on public.application_aliments
+  for select to authenticated using (true);
+
+drop policy if exists "aliments_admin_write" on public.application_aliments;
+create policy "aliments_admin_write" on public.application_aliments
+  for all using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Recherche multi-mots insensible aux accents : chaque mot doit apparaître.
+create or replace function public.application_rechercher_aliments(q text, limite int default 30)
+returns setof public.application_aliments
+language sql
+stable
+set search_path = public, extensions
+as $$
+  with requete as (
+    select lower(extensions.unaccent(trim(q))) as qn
+  ), mots as (
+    select array_remove(string_to_array(qn, ' '), '') as liste, qn from requete
+  )
+  select a.*
+  from public.application_aliments a, mots
+  where cardinality(mots.liste) > 0
+    and not exists (
+      select 1 from unnest(mots.liste) w where a.nom_normalise not like '%' || w || '%'
+    )
+  order by
+    (a.nom_normalise like mots.liste[1] || '%') desc,
+    extensions.similarity(a.nom_normalise, mots.qn) desc,
+    length(a.nom)
+  limit least(greatest(limite, 1), 100);
+$$;
+
+revoke execute on function public.application_rechercher_aliments(text, int) from public, anon;
+grant execute on function public.application_rechercher_aliments(text, int) to authenticated;
+
 -- ============ STORAGE (photos de repas) ============
 insert into storage.buckets (id, name, public)
 values ('application-repas-photos', 'application-repas-photos', true)

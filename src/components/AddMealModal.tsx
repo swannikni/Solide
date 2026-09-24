@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
-import { chercherProduitParCodeBarres } from "@/lib/openfoodfacts";
+import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, RepasType, SourceRepas } from "@/lib/types";
 
-type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "manuel" | "confirmation" | "erreur";
+type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
+
+type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
+
+const GRAMMES_RAPIDES = [50, 100, 150, 200, 250];
 
 interface Trouve {
   nom: string;
@@ -48,7 +52,68 @@ export function AddMealModal({
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [rechercheManuelle, setRechercheManuelle] = useState("");
+  const [resultatsAliments, setResultatsAliments] = useState<Aliment[]>([]);
+  const [rechercheEnCours, setRechercheEnCours] = useState(false);
+  const [resultatsMarques, setResultatsMarques] = useState<ProduitMarque[] | null>(null);
+  const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
+
+  const rechercheActive = rechercheManuelle.trim().length >= 2;
+
+  useEffect(() => {
+    setResultatsMarques(null);
+    if (!rechercheActive) {
+      setResultatsAliments([]);
+      return;
+    }
+    let annule = false;
+    setRechercheEnCours(true);
+    const minuteur = setTimeout(async () => {
+      const { data } = await supabase.rpc("application_rechercher_aliments", {
+        q: rechercheManuelle,
+        limite: 30,
+      });
+      if (!annule) {
+        setResultatsAliments((data as Aliment[] | null) ?? []);
+        setRechercheEnCours(false);
+      }
+    }, 300);
+    return () => {
+      annule = true;
+      clearTimeout(minuteur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rechercheManuelle]);
+
+  async function chercherMarques() {
+    setRechercheMarquesEnCours(true);
+    try {
+      setResultatsMarques(await rechercherProduitsParNom(rechercheManuelle.trim()));
+    } catch {
+      setResultatsMarques([]);
+    } finally {
+      setRechercheMarquesEnCours(false);
+    }
+  }
+
+  function choisirPour100g(
+    nom: string,
+    valeurs: { calories: number; proteines: number; glucides: number; lipides: number },
+    source: SourceRepas
+  ) {
+    setTrouve({
+      nom,
+      calories: Math.round(valeurs.calories),
+      proteines: valeurs.proteines,
+      glucides: valeurs.glucides,
+      lipides: valeurs.lipides,
+      source,
+      quantiteParDefaut: 1,
+      paGrammes: true,
+    });
+    setGrammes(100);
+    setEtape("confirmation");
+  }
 
   // Saisie 100% manuelle (aliment absent de la base)
   const [nomLibre, setNomLibre] = useState("");
@@ -86,25 +151,24 @@ export function AddMealModal({
   }
 
   async function onScanBarcode(code: string) {
-    const produit = await chercherProduitParCodeBarres(code);
-    if (!produit) {
-      setMessageErreur("Produit introuvable dans la base Open Food Facts. Essayez la saisie manuelle.");
+    setEtape("recherche_code");
+    let produit = null;
+    try {
+      produit = await chercherProduitParCodeBarres(code);
+    } catch {
+      setMessageErreur("Impossible de joindre la base produits. Vérifiez votre connexion et réessayez.");
+      setEtape("erreur");
+      return;
+    }
+    if (!produit || produit.calories === 0) {
+      setMessageErreur(
+        `Produit ${code} introuvable ou sans valeurs nutritionnelles. Recherchez-le par son nom dans la saisie manuelle.`
+      );
       setEtape("erreur");
       return;
     }
 
-    setTrouve({
-      nom: produit.nom,
-      calories: produit.calories,
-      proteines: produit.proteines,
-      glucides: produit.glucides,
-      lipides: produit.lipides,
-      source: "code_barres",
-      quantiteParDefaut: 1,
-      paGrammes: true,
-    });
-    setGrammes(100);
-    setEtape("confirmation");
+    choisirPour100g(produit.nom, produit, "code_barres");
   }
 
   function choisirAlimentPopulaire(nom: string, cal: number, prot: number, gluc: number, lip: number) {
@@ -184,9 +248,7 @@ export function AddMealModal({
     }
   }
 
-  const alimentsFiltres = ALIMENTS_POPULAIRES.filter((a) =>
-    a.nom.toLowerCase().includes(rechercheManuelle.toLowerCase())
-  );
+  const facteur = trouve ? (trouve.paGrammes ? grammes / 100 : quantite) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/40 z-30 flex items-end md:items-center justify-center">
@@ -230,21 +292,38 @@ export function AddMealModal({
                 <PenLine className="text-c2b-green" />
                 <div>
                   <p className="font-medium text-c2b-green">Saisie manuelle</p>
-                  <p className="text-xs text-c2b-green/60">Aliments populaires ou personnalisé</p>
+                  <p className="text-xs text-c2b-green/60">Recherche parmi des milliers d'aliments</p>
                 </div>
               </button>
             </div>
           )}
 
-          {etape === "scan_chef2box" && <Scanner onResult={onScanChef2Box} onClose={() => setEtape("choix")} />}
-          {etape === "scan_barcode" && <Scanner onResult={onScanBarcode} onClose={() => setEtape("choix")} />}
+          {etape === "scan_chef2box" && (
+            <Scanner mode="qr" onResult={onScanChef2Box} onClose={() => setEtape("choix")} />
+          )}
+          {etape === "scan_barcode" && (
+            <Scanner mode="code_barres" onResult={onScanBarcode} onClose={() => setEtape("choix")} />
+          )}
+
+          {etape === "recherche_code" && (
+            <div className="flex flex-col items-center gap-2 py-8 text-sm text-c2b-green/70">
+              <Loader2 className="animate-spin" />
+              Recherche du produit...
+            </div>
+          )}
 
           {etape === "erreur" && (
             <div className="space-y-3 text-center">
               <p className="text-sm text-red-700">{messageErreur}</p>
               <button
-                onClick={() => setEtape("choix")}
+                onClick={() => setEtape("manuel")}
                 className="w-full rounded-lg bg-c2b-green text-c2b-cream py-2 text-sm"
+              >
+                Chercher par nom
+              </button>
+              <button
+                onClick={() => setEtape("choix")}
+                className="w-full rounded-lg border border-c2b-green/20 py-2 text-sm text-c2b-green"
               >
                 Retour
               </button>
@@ -258,23 +337,99 @@ export function AddMealModal({
                 <input
                   value={rechercheManuelle}
                   onChange={(e) => setRechercheManuelle(e.target.value)}
-                  placeholder="Rechercher un aliment..."
+                  placeholder="Rechercher un aliment (ex : poulet rôti, riz...)"
+                  autoFocus
                   className="w-full rounded-lg border border-c2b-green/20 pl-9 pr-3 py-2 text-sm"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {alimentsFiltres.map((a) => (
-                  <button
-                    key={a.nom}
-                    onClick={() => choisirAlimentPopulaire(a.nom, a.calories, a.proteines, a.glucides, a.lipides)}
-                    className="bg-white rounded-lg border border-c2b-green/10 p-2.5 text-left"
-                  >
-                    <p className="text-sm font-medium text-c2b-green">{a.nom}</p>
-                    <p className="text-[11px] text-c2b-green/50">{a.portion} · {a.calories} kcal</p>
-                  </button>
-                ))}
-              </div>
+              {!rechercheActive && (
+                <>
+                  <p className="text-xs uppercase tracking-wide text-c2b-green/50">Ajout rapide</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALIMENTS_POPULAIRES.map((a) => (
+                      <button
+                        key={a.nom}
+                        onClick={() => choisirAlimentPopulaire(a.nom, a.calories, a.proteines, a.glucides, a.lipides)}
+                        className="bg-white rounded-lg border border-c2b-green/10 p-2.5 text-left"
+                      >
+                        <p className="text-sm font-medium text-c2b-green">{a.nom}</p>
+                        <p className="text-[11px] text-c2b-green/50">
+                          {a.portion} · {a.calories} kcal
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {rechercheActive && (
+                <div className="space-y-2">
+                  {rechercheEnCours ? (
+                    <div className="flex justify-center py-4 text-c2b-green/50">
+                      <Loader2 className="animate-spin" size={20} />
+                    </div>
+                  ) : resultatsAliments.length === 0 ? (
+                    <p className="text-sm text-c2b-green/50 italic text-center py-2">
+                      Aucun aliment générique trouvé.
+                    </p>
+                  ) : (
+                    <ul className="bg-white rounded-lg border border-c2b-green/10 divide-y divide-c2b-green/10">
+                      {resultatsAliments.map((a) => (
+                        <li key={a.id}>
+                          <button
+                            onClick={() => choisirPour100g(a.nom, a, "manuel")}
+                            className="w-full text-left px-3 py-2.5"
+                          >
+                            <p className="text-sm text-c2b-green">{a.nom}</p>
+                            <p className="text-[11px] text-c2b-green/50">
+                              100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
+                              {a.lipides}g L
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {resultatsMarques === null ? (
+                    <button
+                      onClick={chercherMarques}
+                      disabled={rechercheMarquesEnCours}
+                      className="w-full rounded-lg border border-c2b-green/20 py-2 text-sm text-c2b-green flex items-center justify-center gap-2"
+                    >
+                      {rechercheMarquesEnCours && <Loader2 className="animate-spin" size={16} />}
+                      Chercher aussi dans les produits de marque
+                    </button>
+                  ) : (
+                    <>
+                      <p className="text-xs uppercase tracking-wide text-c2b-green/50 pt-2">Produits de marque</p>
+                      {resultatsMarques.length === 0 ? (
+                        <p className="text-sm text-c2b-green/50 italic text-center py-2">Aucun produit trouvé.</p>
+                      ) : (
+                        <ul className="bg-white rounded-lg border border-c2b-green/10 divide-y divide-c2b-green/10">
+                          {resultatsMarques.map((p, i) => (
+                            <li key={`${p.nom}-${i}`}>
+                              <button
+                                onClick={() => choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel")}
+                                className="w-full text-left px-3 py-2.5"
+                              >
+                                <p className="text-sm text-c2b-green">
+                                  {p.nom}
+                                  {p.marque && <span className="text-c2b-green/50"> · {p.marque}</span>}
+                                </p>
+                                <p className="text-[11px] text-c2b-green/50">
+                                  100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
+                                </p>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
               <details className="bg-white rounded-lg border border-c2b-green/10 p-3">
                 <summary className="text-sm font-medium text-c2b-green cursor-pointer">
@@ -369,6 +524,25 @@ export function AddMealModal({
                   }
                   className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
                 />
+                {trouve.paGrammes && (
+                  <div className="flex gap-1.5 mt-2">
+                    {GRAMMES_RAPIDES.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setGrammes(g)}
+                        className={`flex-1 rounded-md py-1 text-xs ${
+                          grammes === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
+                        }`}
+                      >
+                        {g} g
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-sm text-c2b-green mt-2 font-medium">
+                  = {Math.round(trouve.calories * facteur)} kcal · {Math.round(trouve.proteines * facteur)}g P ·{" "}
+                  {Math.round(trouve.glucides * facteur)}g G · {Math.round(trouve.lipides * facteur)}g L
+                </p>
               </div>
 
               <div>

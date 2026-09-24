@@ -29,6 +29,17 @@ export interface Plat {
   created_at: string;
 }
 
+export interface Aliment {
+  id: number;
+  code_ciqual: string | null;
+  nom: string;
+  groupe: string | null;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+}
+
 export interface Commande {
   id: string;
   client_id: string;
