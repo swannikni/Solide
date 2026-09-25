@@ -27,6 +27,7 @@ export function DashboardClient({
   repasVeille,
   favoris,
   recents,
+  serie,
   platScanne,
   codePlatInconnu,
 }: {
@@ -37,6 +38,7 @@ export function DashboardClient({
   repasVeille: RepasJournal[];
   favoris: Favori[];
   recents: RepasJournal[];
+  serie: number;
   platScanne: Plat | null;
   codePlatInconnu: string | null;
 }) {
@@ -140,6 +142,15 @@ export function DashboardClient({
             </>
           )}
         </h1>
+        {estAujourdhui && serie > 0 && (
+          <Link
+            href="/history"
+            className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-c2b-gold/[0.14] px-3 py-1 text-[13px] font-bold text-c2b-green"
+          >
+            🔥 {serie} jour{serie > 1 ? "s" : ""} d&apos;affilée
+            {repasDuJour.length === 0 && <span className="font-medium text-c2b-muted">· notez un repas pour la garder</span>}
+          </Link>
+        )}
         {!estAujourdhui && (
           <Link href="/dashboard" className="inline-block mt-1 text-sm font-semibold text-c2b-gold">
             Revenir à aujourd&apos;hui →

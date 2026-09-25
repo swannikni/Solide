@@ -4,6 +4,7 @@ import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
 import type { Client, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
+import { serieActuelle } from "@/lib/progres";
 
 export default async function DashboardPage(props: { searchParams: Promise<{ date?: string; plat?: string }> }) {
   const searchParams = await props.searchParams;
@@ -16,7 +17,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }] =
+  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: datesRecentes }] =
     await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
@@ -46,6 +47,13 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       .order("created_at", { ascending: false })
       .limit(80)
       .returns<RepasJournal[]>(),
+    supabase
+      .from("application_repas_journal")
+      .select("date")
+      .eq("client_id", user.id)
+      .gte("date", decalerDate(aujourdhui, -90))
+      .order("date", { ascending: false })
+      .returns<{ date: string }[]>(),
   ]);
 
   // Récents : derniers aliments distincts (par nom), hors box Chef2Box du jour.
@@ -78,6 +86,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}
         recents={recents}
+        serie={serieActuelle(new Set((datesRecentes ?? []).map((r) => r.date)), aujourdhui)}
         platScanne={platScanne}
         codePlatInconnu={codePlat && !platScanne ? codePlat : null}
       />

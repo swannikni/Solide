@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { totauxDuJour } from "@/lib/macros";
 import type { Client, Poids, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
+import { Motivation } from "@/components/Motivation";
+import { calculerBadges, meilleureSerie, serieActuelle, totauxParJour } from "@/lib/progres";
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
 import Image from "next/image";
@@ -22,7 +24,7 @@ export default async function HistoryPage() {
   const aujourdhui = dateDuJour();
   const debutSemaine = decalerDate(aujourdhui, -6);
 
-  const [{ data: repas }, { data: semaine }, { data: poids }] = await Promise.all([
+  const [{ data: repas }, { data: lignes }, { data: poids }] = await Promise.all([
     supabase
       .from("application_repas_journal")
       .select("*")
@@ -31,28 +33,59 @@ export default async function HistoryPage() {
       .order("created_at", { ascending: true })
       .limit(300)
       .returns<RepasJournal[]>(),
+    // Une année de journal (colonnes minimales) pour la série et les badges.
     supabase
       .from("application_repas_journal")
-      .select("date, calories, quantite")
+      .select("date, calories, proteines, quantite")
       .eq("client_id", user.id)
-      .gte("date", debutSemaine)
+      .gte("date", decalerDate(aujourdhui, -365))
       .lte("date", aujourdhui)
-      .returns<Pick<RepasJournal, "date" | "calories" | "quantite">[]>(),
+      .order("date", { ascending: false }) // si la limite du serveur coupe, on garde le plus récent
+      .limit(5000)
+      .returns<Pick<RepasJournal, "date" | "calories" | "proteines" | "quantite">[]>(),
     supabase
       .from("application_poids")
       .select("date, poids_kg")
       .eq("client_id", user.id)
-      .gte("date", decalerDate(aujourdhui, -180))
+      .gte("date", decalerDate(aujourdhui, -365))
       .order("date", { ascending: true })
       .returns<Pick<Poids, "date" | "poids_kg">[]>(),
   ]);
 
+  const jours = totauxParJour(lignes ?? []);
   const caloriesSemaine = Array.from({ length: 7 }, (_, i) => {
     const date = decalerDate(debutSemaine, i);
-    const calories = (semaine ?? [])
-      .filter((r) => r.date === date)
-      .reduce((t, r) => t + Number(r.calories) * Number(r.quantite), 0);
-    return { date, calories: Math.round(calories) };
+    return { date, calories: Math.round(jours.get(date)?.calories ?? 0) };
+  });
+
+  const datesNotees = new Set(jours.keys());
+  const serie = serieActuelle(datesNotees, aujourdhui);
+  const record = meilleureSerie(datesNotees);
+
+  // Objectif de poids : départ = poids du questionnaire, sinon première pesée.
+  const pesees = (poids ?? []).map((p) => Number(p.poids_kg));
+  const poidsObjectif = client.poids_objectif != null ? Number(client.poids_objectif) : null;
+  const poidsDepart = client.profil?.poids ? Number(client.profil.poids) : (pesees[0] ?? null);
+  const poidsActuel = pesees[pesees.length - 1] ?? poidsDepart;
+  const sens = poidsObjectif != null && poidsDepart != null && poidsObjectif > poidsDepart ? 1 : -1;
+  const kilosVersObjectif =
+    poidsDepart != null && poidsActuel != null ? Math.max(0, (poidsActuel - poidsDepart) * sens) : 0;
+  const objectifAtteint =
+    poidsObjectif != null &&
+    poidsDepart != null &&
+    poidsActuel != null &&
+    pesees.length > 0 &&
+    poidsObjectif !== poidsDepart &&
+    (poidsActuel - poidsObjectif) * sens >= 0;
+
+  const badges = calculerBadges({
+    jours: [...jours.values()],
+    record,
+    objectifCalories: client.objectif_calories,
+    objectifProteines: client.objectif_proteines,
+    pesees: pesees.length,
+    kilosVersObjectif,
+    objectifAtteint,
   });
 
   const parJour = new Map<string, RepasJournal[]>();
@@ -71,12 +104,24 @@ export default async function HistoryPage() {
           </h1>
         </div>
 
+        <Motivation
+          serie={serie}
+          record={record}
+          aujourdhui={aujourdhui}
+          jours={jours}
+          objectifCalories={client.objectif_calories}
+          objectifProteines={client.objectif_proteines}
+          badges={badges}
+        />
+
         <Progres
           clientId={client.id}
           aujourdhui={aujourdhui}
           poids={poids ?? []}
           caloriesSemaine={caloriesSemaine}
           objectifCalories={client.objectif_calories}
+          poidsObjectif={poidsObjectif}
+          poidsDepart={poidsDepart}
         />
 
         <h2 className="font-serif text-[26px] text-c2b-green pt-2">Journal des repas</h2>

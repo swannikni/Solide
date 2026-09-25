@@ -499,6 +499,29 @@ create policy "application_photos_insert" on storage.objects
     )
   );
 
+-- ============ OBJECTIF DE POIDS ============
+-- Fixé par le client lui-même (onglet Progrès) : seule cette colonne lui est
+-- modifiable, via cette fonction ; le reste de sa fiche reste réservé à l'admin.
+alter table public.application_clients
+  add column if not exists poids_objectif numeric check (poids_objectif between 30 and 300);
+
+create or replace function public.application_definir_poids_objectif(p_kg numeric)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_kg is not null and (p_kg < 30 or p_kg > 300) then
+    raise exception 'poids hors limites';
+  end if;
+  update public.application_clients set poids_objectif = round(p_kg, 1) where id = auth.uid();
+end;
+$$;
+
+revoke execute on function public.application_definir_poids_objectif(numeric) from public, anon;
+grant execute on function public.application_definir_poids_objectif(numeric) to authenticated;
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$

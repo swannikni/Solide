@@ -13,6 +13,7 @@ export interface Client {
   objectif_lipides: number;
   est_admin: boolean;
   profil?: import("@/lib/objectifs").Profil | null;
+  poids_objectif?: number | null;
   created_at: string;
 }
 
