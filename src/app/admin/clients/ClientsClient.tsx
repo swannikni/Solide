@@ -8,6 +8,7 @@ import { Pastille } from "@/components/Pastille";
 import {
   GRIGNOTAGE,
   METIERS,
+  PLAISIR,
   OBJECTIFS,
   PALIERS,
   SEANCES,
@@ -41,6 +42,7 @@ type ProfilSaisi = {
   seances: Profil["seances"];
   job: Profil["job"];
   grignotage: Profil["grignotage"];
+  plaisir: NonNullable<Profil["plaisir"]>;
 };
 
 const PROFIL_VIDE: ProfilSaisi = {
@@ -51,7 +53,8 @@ const PROFIL_VIDE: ProfilSaisi = {
   objectifs: [],
   seances: "0",
   job: "Principalement assis",
-  grignotage: "Occasionnellement",
+  grignotage: "—",
+  plaisir: "—",
 };
 
 function versProfil(p: ProfilSaisi): Partial<Profil> {
@@ -59,11 +62,12 @@ function versProfil(p: ProfilSaisi): Partial<Profil> {
     sexe: p.sexe || undefined,
     age: parseInt(p.age, 10) || 0,
     taille: parseInt(p.taille, 10) || 0,
-    poids: parseFloat(p.poids.replace(",", ".")) || 0,
+    poids: parseInt(p.poids, 10) || 0, // comme le site : kg entiers
     objectifs: p.objectifs,
     seances: p.seances,
     job: p.job,
     grignotage: p.grignotage,
+    plaisir: p.plaisir,
   };
 }
 
@@ -73,11 +77,12 @@ function depuisProfil(p: Profil | null | undefined): ProfilSaisi {
     sexe: p.sexe,
     age: String(p.age),
     taille: String(p.taille),
-    poids: String(p.poids).replace(".", ","),
+    poids: String(p.poids),
     objectifs: p.objectifs ?? [],
     seances: p.seances,
     job: p.job,
-    grignotage: p.grignotage,
+    grignotage: p.grignotage ?? "—",
+    plaisir: p.plaisir ?? "—",
   };
 }
 
@@ -188,6 +193,7 @@ export function ClientsClient({
         proteines: String(o.proteines),
         glucides: String(o.glucides),
         lipides: String(o.lipides),
+        palier: o.palier,
       });
     }
     setFiche(suivant);
@@ -575,7 +581,7 @@ export function ClientsClient({
                       onChange={(e) => changerProfil({ grignotage: e.target.value as Profil["grignotage"] })}
                       className="champ px-2 text-sm"
                     >
-                      {GRIGNOTAGE.map((g) => (
+                      {(["—", ...GRIGNOTAGE] as const).map((g) => (
                         <option key={g} value={g}>
                           {g}
                         </option>
@@ -583,6 +589,19 @@ export function ClientsClient({
                     </select>
                   </Champ>
                 </div>
+                <Champ label="Rapport à la nourriture">
+                  <select
+                    value={fiche.profil.plaisir}
+                    onChange={(e) => changerProfil({ plaisir: e.target.value as ProfilSaisi["plaisir"] })}
+                    className="champ px-2 text-sm"
+                  >
+                    {PLAISIR.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </Champ>
               </div>
 
               <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Objectifs par jour</p>
@@ -615,7 +634,7 @@ export function ClientsClient({
                 ))}
               </div>
               <p className="text-[11px] text-c2b-muted">
-                Calculés automatiquement dès que le profil est complet. Vous pouvez les ajuster à la main.
+                Calculés automatiquement (avec le palier) dès que le profil est complet. Vous pouvez les ajuster à la main.
               </p>
 
               {erreur && <p className="text-sm font-semibold text-red-600">{erreur}</p>}

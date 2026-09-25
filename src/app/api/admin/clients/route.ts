@@ -56,11 +56,12 @@ export async function POST(request: Request) {
         sexe: profilBrut.sexe,
         age: Number(profilBrut.age),
         taille: Number(profilBrut.taille),
-        poids: Number(profilBrut.poids),
+        poids: Math.trunc(Number(profilBrut.poids)),
         objectifs: profilBrut.objectifs.map(String).slice(0, 5),
         seances: String(profilBrut.seances),
         job: String(profilBrut.job),
-        grignotage: String(profilBrut.grignotage),
+        grignotage: String(profilBrut.grignotage ?? "—"),
+        plaisir: String(profilBrut.plaisir ?? "—"),
       }
     : null;
 
