@@ -30,24 +30,16 @@ function versProduitCommerce(p: ProduitOFF): ProduitCommerce {
   };
 }
 
-// Recherche par nom dans les produits de marque. L'API de recherche Open
-// Food Facts est limitée (~10 requêtes/minute) : à déclencher sur action de
-// l'utilisateur, pas à chaque frappe.
-export async function rechercherProduitsParNom(recherche: string): Promise<(ProduitCommerce & { marque: string })[]> {
-  const params = new URLSearchParams({
-    search_terms: recherche,
-    search_simple: "1",
-    action: "process",
-    json: "1",
-    page_size: "20",
-    fields: "product_name,product_name_fr,brands,nutriments,image_front_small_url",
-  });
-  const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?${params}`);
+export interface ProduitMarque extends ProduitCommerce {
+  marque: string;
+  maroc: boolean;
+}
+
+// Produits de marque via le relais /api/produits (Maroc en premier).
+export async function rechercherProduitsParNom(recherche: string, signal?: AbortSignal): Promise<ProduitMarque[]> {
+  const res = await fetch(`/api/produits?q=${encodeURIComponent(recherche)}`, { signal });
   if (!res.ok) return [];
-  const data = await res.json();
-  return ((data.products ?? []) as ProduitOFF[])
-    .filter((p) => p.nutriments?.["energy-kcal_100g"] != null && (p.product_name_fr || p.product_name))
-    .map((p) => ({ ...versProduitCommerce(p), marque: p.brands?.split(",")[0]?.trim() ?? "" }));
+  return (await res.json()) as ProduitMarque[];
 }
 
 // Open Food Facts : base publique de produits du commerce par code-barres,

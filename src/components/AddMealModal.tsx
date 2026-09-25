@@ -85,6 +85,7 @@ export function AddMealModal({
   const [repasType, setRepasType] = useState<RepasType>(repasTypeParDefaut);
   const [quantite, setQuantite] = useState(1);
   const [grammes, setGrammes] = useState(100);
+  const [saisieQuantite, setSaisieQuantite] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [rechercheManuelle, setRechercheManuelle] = useState("");
@@ -104,6 +105,7 @@ export function AddMealModal({
   }, [etape]);
   const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
   const [filtreGras, setFiltreGras] = useState<string | null>(null);
+  const [tousLesAliments, setTousLesAliments] = useState(false);
 
   const { termes: termesRecherche, grammes: grammesSaisis } = analyserRecherche(rechercheManuelle);
   const rechercheActive = termesRecherche.length >= 2;
@@ -122,14 +124,17 @@ export function AddMealModal({
 
   useEffect(() => {
     setNomAffiche(trouve?.nom ?? "");
+    setSaisieQuantite(null);
   }, [trouve]);
 
   useEffect(() => {
     setFiltreCuisson("tous");
     setFiltreGras(null);
     setResultatsMarques(null);
+    setTousLesAliments(false);
     if (!rechercheActive) {
       setResultatsAliments([]);
+      setRechercheMarquesEnCours(false);
       return;
     }
     let annule = false;
@@ -144,23 +149,29 @@ export function AddMealModal({
         setRechercheEnCours(false);
       }
     }, 300);
+    // Produits de marque : lancés automatiquement, un peu plus tard que la
+    // base générique pour ne pas interroger Open Food Facts à chaque lettre.
+    const controleur = new AbortController();
+    setRechercheMarquesEnCours(true);
+    const minuteurMarques = setTimeout(async () => {
+      try {
+        const produits = await rechercherProduitsParNom(termesRecherche, controleur.signal);
+        if (!annule) setResultatsMarques(produits);
+      } catch {
+        if (!annule) setResultatsMarques([]);
+      } finally {
+        if (!annule) setRechercheMarquesEnCours(false);
+      }
+    }, 600);
+
     return () => {
       annule = true;
       clearTimeout(minuteur);
+      clearTimeout(minuteurMarques);
+      controleur.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [termesRecherche]);
-
-  async function chercherMarques() {
-    setRechercheMarquesEnCours(true);
-    try {
-      setResultatsMarques(await rechercherProduitsParNom(termesRecherche));
-    } catch {
-      setResultatsMarques([]);
-    } finally {
-      setRechercheMarquesEnCours(false);
-    }
-  }
 
   function choisirPour100g(
     nom: string,
@@ -474,14 +485,13 @@ export function AddMealModal({
 
               {rechercheActive && (
                 <div className="space-y-2">
+                  <p className="lbl pt-1">Aliments</p>
                   {rechercheEnCours ? (
                     <div className="flex justify-center py-4 text-c2b-green/50">
                       <Loader2 className="animate-spin" size={20} />
                     </div>
                   ) : resultatsAliments.length === 0 ? (
-                    <p className="text-sm text-c2b-muted italic text-center py-2">
-                      Aucun aliment générique trouvé.
-                    </p>
+                    <p className="text-sm text-c2b-muted italic py-1">Aucun aliment générique trouvé.</p>
                   ) : (
                     <>
                       {((aDesCrus && aDesCuits) || tauxGras.length > 1) && (
@@ -504,62 +514,68 @@ export function AddMealModal({
                             ))}
                         </div>
                       )}
+                      <ul className="carte overflow-hidden divide-y divide-black/5">
+                        {(tousLesAliments ? alimentsAffiches : alimentsAffiches.slice(0, 5)).map((a) => (
+                          <li key={a.id}>
+                            <button
+                              onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
+                              className="w-full text-left px-4 py-3"
+                            >
+                              <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
+                              <p className="text-[11px] text-c2b-muted">
+                                100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
+                                {a.lipides}g L
+                              </p>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {!tousLesAliments && alimentsAffiches.length > 5 && (
+                        <button
+                          onClick={() => setTousLesAliments(true)}
+                          className="w-full py-1.5 text-sm font-semibold text-c2b-green"
+                        >
+                          Voir les {alimentsAffiches.length} aliments
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  <p className="lbl pt-3">Produits de marque</p>
+                  {rechercheMarquesEnCours || resultatsMarques === null ? (
+                    <div className="flex items-center justify-center gap-2 py-4 text-sm text-c2b-muted">
+                      <Loader2 className="animate-spin" size={18} /> Recherche dans les marques…
+                    </div>
+                  ) : resultatsMarques.length === 0 ? (
+                    <p className="text-sm text-c2b-muted italic py-1">
+                      Aucun produit de marque trouvé. Essayez avec le nom de la marque (ex : « Jaouda yaourt »).
+                    </p>
+                  ) : (
                     <ul className="carte overflow-hidden divide-y divide-black/5">
-                      {alimentsAffiches.map((a) => (
-                        <li key={a.id}>
+                      {resultatsMarques.map((p, i) => (
+                        <li key={`${p.nom}-${p.marque}-${i}`}>
                           <button
-                            onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
+                            onClick={() =>
+                              choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis)
+                            }
                             className="w-full text-left px-4 py-3"
                           >
-                            <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
+                            <p className="text-[15px] font-semibold text-c2b-green">
+                              {p.nom}
+                              {p.marque && <span className="font-medium text-c2b-muted"> · {p.marque}</span>}
+                            </p>
                             <p className="text-[11px] text-c2b-muted">
-                              100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
-                              {a.lipides}g L
+                              {p.maroc && (
+                                <span className="mr-1.5 rounded-full bg-c2b-gold/15 px-1.5 py-0.5 font-bold text-c2b-gold">
+                                  Maroc
+                                </span>
+                              )}
+                              100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
                             </p>
                           </button>
                         </li>
                       ))}
                     </ul>
-                    </>
-                  )}
-
-                  {resultatsMarques === null ? (
-                    <button
-                      onClick={chercherMarques}
-                      disabled={rechercheMarquesEnCours}
-                      className="btn-secondary w-full"
-                    >
-                      {rechercheMarquesEnCours && <Loader2 className="animate-spin" size={16} />}
-                      Voir aussi les produits de marque
-                    </button>
-                  ) : (
-                    <>
-                      <p className="lbl pt-2">Produits de marque</p>
-                      {resultatsMarques.length === 0 ? (
-                        <p className="text-sm text-c2b-muted italic text-center py-2">Aucun produit trouvé.</p>
-                      ) : (
-                        <ul className="carte overflow-hidden divide-y divide-black/5">
-                          {resultatsMarques.map((p, i) => (
-                            <li key={`${p.nom}-${i}`}>
-                              <button
-                                onClick={() =>
-                                  choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis)
-                                }
-                                className="w-full text-left px-3 py-2.5"
-                              >
-                                <p className="text-sm text-c2b-green">
-                                  {p.nom}
-                                  {p.marque && <span className="text-c2b-green/50"> · {p.marque}</span>}
-                                </p>
-                                <p className="text-[11px] text-c2b-muted">
-                                  100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
-                                </p>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </>
                   )}
                 </div>
               )}
@@ -647,18 +663,23 @@ export function AddMealModal({
                 <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   {trouve.paGrammes ? "Quantité (grammes)" : "Quantité (portions)"}
                 </label>
+                {/* Champ texte (et non number) : garde la saisie telle quelle,
+                    vide possible, virgule acceptée, pas de "0" collé devant. */}
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min={0}
-                  step={trouve.paGrammes ? 1 : 0.5}
                   onFocus={(e) => e.target.select()}
-                  value={trouve.paGrammes ? grammes : quantite}
-                  onChange={(e) =>
-                    trouve.paGrammes
-                      ? setGrammes(Number(e.target.value))
-                      : setQuantite(Number(e.target.value))
-                  }
+                  value={saisieQuantite ?? String(trouve.paGrammes ? grammes : quantite)}
+                  onChange={(e) => {
+                    const texte = e.target.value.replace(/[^0-9.,]/g, "");
+                    setSaisieQuantite(texte);
+                    const valeur = parseFloat(texte.replace(",", "."));
+                    const nombre = Number.isFinite(valeur) ? valeur : 0;
+                    if (trouve.paGrammes) setGrammes(nombre);
+                    else setQuantite(nombre);
+                  }}
+                  onBlur={() => setSaisieQuantite(null)}
+                  placeholder={trouve.paGrammes ? "100" : "1"}
                   className="champ"
                 />
                 {trouve.paGrammes && (
@@ -666,7 +687,10 @@ export function AddMealModal({
                     {GRAMMES_RAPIDES.map((g) => (
                       <button
                         key={g}
-                        onClick={() => setGrammes(g)}
+                        onClick={() => {
+                          setGrammes(g);
+                          setSaisieQuantite(null);
+                        }}
                         className={`flex-1 rounded-full py-1.5 text-xs font-bold ${
                           grammes === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                         }`}
@@ -705,7 +729,7 @@ export function AddMealModal({
 
               <button
                 onClick={enregistrerRepas}
-                disabled={enregistrement}
+                disabled={enregistrement || facteur <= 0}
                 className="btn-primary w-full py-4"
               >
                 {enregistrement ? "Enregistrement..." : "Ajouter"}
