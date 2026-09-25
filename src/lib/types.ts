@@ -26,8 +26,6 @@ export interface Plat {
   glucides: number;
   lipides: number;
   photo_url: string | null;
-  ingredients: string | null;
-  recette: string | null;
   actif: boolean;
   created_at: string;
 }

@@ -10,9 +10,9 @@ import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { Aliment, Favori, Plat, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
-type Etape = "choix" | "plats_chef2box" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
+type Etape = "choix" | "mon_plat" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
 
 type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
 
@@ -104,12 +104,14 @@ export function AddMealModal({
   const [enregistrement, setEnregistrement] = useState(false);
   const [nomAffiche, setNomAffiche] = useState(prefillTrouve?.nom ?? "");
   const [ajoutes, setAjoutes] = useState<{ nom: string; kcal: number }[]>([]);
-  const [platsMenu, setPlatsMenu] = useState<Plat[] | null>(null);
+  // « Mon plat Chef2Box » : macros recopiées de l'étiquette de la box.
+  const [messageMonPlat, setMessageMonPlat] = useState("");
+  const [monPlat, setMonPlat] = useState({ nom: "", calories: "", proteines: "", glucides: "", lipides: "" });
   const [origine, setOrigine] = useState<Etape>("choix");
 
   // Écran où revenir après un ajout ou un "Retour" depuis la confirmation.
   useEffect(() => {
-    if (etape === "choix" || etape === "manuel" || etape === "plats_chef2box") setOrigine(etape);
+    if (etape === "choix" || etape === "manuel") setOrigine(etape);
   }, [etape]);
   const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
   const [filtreGras, setFiltreGras] = useState<string | null>(null);
@@ -217,32 +219,44 @@ export function AddMealModal({
   const [glucidesLibre, setGlucidesLibre] = useState("");
   const [lipidesLibre, setLipidesLibre] = useState("");
 
-  // Menu Chef2Box : chargé la première fois qu'on ouvre la liste.
-  async function ouvrirPlatsChef2Box() {
-    setEtape("plats_chef2box");
-    if (platsMenu) return;
-    const { data } = await supabase
-      .from("application_plats")
-      .select("*")
-      .eq("actif", true)
-      .order("nom")
-      .returns<Plat[]>();
-    setPlatsMenu(data ?? []);
+  function ouvrirMonPlat() {
+    if (repasType !== "dejeuner" && repasType !== "diner") setRepasType(new Date().getHours() < 16 ? "dejeuner" : "diner");
+    setEtape("mon_plat");
   }
 
-  function choisirPlat(plat: Plat) {
-    setTrouve({
-      nom: plat.nom,
-      calories: plat.calories,
-      proteines: plat.proteines,
-      glucides: plat.glucides,
-      lipides: plat.lipides,
+  async function ajouterMonPlat() {
+    const valeur = (t: string) => {
+      const n = parseFloat(t.replace(",", "."));
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const calories = Math.round(valeur(monPlat.calories));
+    if (!calories) {
+      setMessageMonPlat("Indiquez au moins les calories écrites sur la box.");
+      return;
+    }
+    setEnregistrement(true);
+    const nom = monPlat.nom.trim() || "Plat Chef2Box";
+    const { error } = await supabase.from("application_repas_journal").insert({
+      client_id: clientId,
+      date,
+      repas_type: repasType,
+      unite: "portion",
       source: "chef2box",
-      plat_id: plat.id,
-      quantiteParDefaut: 1,
+      nom,
+      quantite: 1,
+      calories,
+      proteines: valeur(monPlat.proteines),
+      glucides: valeur(monPlat.glucides),
+      lipides: valeur(monPlat.lipides),
+      cree_par: "client",
     });
-    setQuantite(1);
-    setEtape("confirmation");
+    setEnregistrement(false);
+    if (error) {
+      setMessageMonPlat("Erreur lors de l'enregistrement, réessayez.");
+      return;
+    }
+    onAjoute();
+    onClose();
   }
 
   async function onScanChef2Box(texteScanne: string) {
@@ -483,13 +497,13 @@ export function AddMealModal({
           {etape === "choix" && (
             <div className="space-y-3">
               <button
-                onClick={ouvrirPlatsChef2Box}
+                onClick={ouvrirMonPlat}
                 className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
               >
                 <UtensilsCrossed className="text-c2b-gold" />
                 <div>
-                  <p className="font-bold text-c2b-green">Plats Chef2Box</p>
-                  <p className="text-xs text-c2b-muted">Choisir votre box dans le menu</p>
+                  <p className="font-bold text-c2b-green">Mon plat Chef2Box</p>
+                  <p className="text-xs text-c2b-muted">Recopiez les macros écrites sur votre box</p>
                 </div>
               </button>
 
@@ -528,20 +542,57 @@ export function AddMealModal({
             </div>
           )}
 
-          {etape === "plats_chef2box" && (
-            <div className="space-y-3">
-              <button onClick={() => setEtape("choix")} className="text-sm font-semibold text-c2b-muted">
+          {etape === "mon_plat" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                {(["dejeuner", "diner"] as const).map((r) => (
+                  <Pastille key={r} active={repasType === r} onClick={() => setRepasType(r)} large>
+                    {REPAS_TYPE_LABELS[r]}
+                  </Pastille>
+                ))}
+              </div>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du plat</span>
+                <input
+                  value={monPlat.nom}
+                  onChange={(e) => setMonPlat({ ...monPlat, nom: e.target.value })}
+                  placeholder="Ex : Poulet tikka, riz basmati"
+                  className="champ"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                {(
+                  [
+                    ["calories", "Calories (kcal)"],
+                    ["proteines", "Protéines (g)"],
+                    ["glucides", "Glucides (g)"],
+                    ["lipides", "Lipides (g)"],
+                  ] as const
+                ).map(([cle, label]) => (
+                  <label key={cle} className="block">
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
+                      {label}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={monPlat[cle]}
+                      onChange={(e) => {
+                        setMonPlat({ ...monPlat, [cle]: e.target.value.replace(/[^0-9.,]/g, "") });
+                        setMessageMonPlat("");
+                      }}
+                      className="champ"
+                    />
+                  </label>
+                ))}
+              </div>
+              {messageMonPlat && <p className="text-sm font-semibold text-red-600">{messageMonPlat}</p>}
+              <button onClick={ajouterMonPlat} disabled={enregistrement} className="btn-primary w-full py-4">
+                {enregistrement ? "Ajout..." : "Ajouter à ma journée"}
+              </button>
+              <button onClick={() => setEtape("choix")} className="w-full text-sm font-semibold text-c2b-muted">
                 ← Retour
               </button>
-              {platsMenu === null ? (
-                <div className="flex justify-center py-8 text-c2b-green/60">
-                  <Loader2 className="animate-spin" />
-                </div>
-              ) : platsMenu.length === 0 ? (
-                <p className="carte p-6 text-center text-sm text-c2b-muted">Le menu n&apos;est pas encore en ligne.</p>
-              ) : (
-                platsMenu.map((plat) => <CartePlat key={plat.id} plat={plat} onChoisir={() => choisirPlat(plat)} />)
-              )}
             </div>
           )}
 
@@ -990,46 +1041,3 @@ function sourcesRestaurants(produits: ProduitRestaurant[]) {
   return Array.from(new Set(produits.map((p) => `${p.enseigne} ${PAYS[p.pays] ?? p.pays}`))).join(", ");
 }
 
-// Un plat du menu : photo, macros, ingrédients et recette dépliable.
-function CartePlat({ plat, onChoisir }: { plat: Plat; onChoisir: () => void }) {
-  const ingredients = (plat.ingredients ?? "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  return (
-    <div className="carte overflow-hidden">
-      {plat.photo_url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={plat.photo_url} alt={plat.nom} className="w-full h-40 object-cover" />
-      )}
-      <div className="p-4">
-        <p className="font-serif text-[20px] leading-tight text-c2b-green">{plat.nom}</p>
-        {plat.description && <p className="text-sm text-c2b-muted mt-1">{plat.description}</p>}
-        <p className="text-xs font-semibold text-c2b-green mt-2">
-          {plat.calories} kcal · {plat.proteines}g P · {plat.glucides}g G · {plat.lipides}g L
-        </p>
-        {ingredients.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5 mt-2.5">
-            {ingredients.map((ing) => (
-              <li key={ing} className="rounded-full bg-c2b-cream px-2.5 py-1 text-xs text-c2b-green">
-                {ing}
-              </li>
-            ))}
-          </ul>
-        )}
-        {plat.recette && (
-          <details className="mt-2.5 group">
-            <summary className="cursor-pointer list-none text-sm font-bold text-c2b-gold">
-              <span className="group-open:hidden">Voir la recette →</span>
-              <span className="hidden group-open:inline">Masquer la recette</span>
-            </summary>
-            <p className="mt-2 text-sm text-c2b-green whitespace-pre-line">{plat.recette}</p>
-          </details>
-        )}
-        <button onClick={onChoisir} className="btn-primary w-full py-3 mt-3.5 text-sm">
-          J&apos;ai mangé ce plat
-        </button>
-      </div>
-    </div>
-  );
-}

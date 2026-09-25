@@ -2,21 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Camera, Plus, Printer, Pencil, X } from "lucide-react";
+import { Plus, Printer, Pencil, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { QrCode } from "@/components/QrCode";
 import { genererCodePlat, lienPlat } from "@/lib/qr";
-import { reduirePhoto } from "@/lib/image";
 import type { Plat } from "@/lib/types";
 
 type Brouillon = {
   id?: string;
   nom: string;
   description: string;
-  ingredients: string;
-  recette: string;
-  photo_url: string | null;
   calories: string;
   proteines: string;
   glucides: string;
@@ -24,7 +20,7 @@ type Brouillon = {
   actif: boolean;
 };
 
-const VIDE: Brouillon = { nom: "", description: "", ingredients: "", recette: "", photo_url: null, calories: "", proteines: "", glucides: "", lipides: "", actif: true };
+const VIDE: Brouillon = { nom: "", description: "", calories: "", proteines: "", glucides: "", lipides: "", actif: true };
 
 function nombre(texte: string) {
   const n = parseFloat(texte.replace(",", "."));
@@ -38,7 +34,6 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreur, setErreur] = useState("");
-  const [envoiPhoto, setEnvoiPhoto] = useState(false);
   const origine = typeof window !== "undefined" ? window.location.origin : "";
 
   function editer(p: Plat) {
@@ -47,36 +42,12 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
       id: p.id,
       nom: p.nom,
       description: p.description ?? "",
-      ingredients: p.ingredients ?? "",
-      recette: p.recette ?? "",
-      photo_url: p.photo_url,
       calories: String(p.calories),
       proteines: String(p.proteines),
       glucides: String(p.glucides),
       lipides: String(p.lipides),
       actif: p.actif,
     });
-  }
-
-  async function choisirPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const fichier = e.target.files?.[0];
-    e.target.value = "";
-    if (!fichier || !brouillon) return;
-    setEnvoiPhoto(true);
-    setErreur("");
-    try {
-      const image = await reduirePhoto(fichier);
-      const chemin = `${crypto.randomUUID()}.jpg`;
-      const { error } = await supabase.storage
-        .from("application-plats-photos")
-        .upload(chemin, image, { contentType: "image/jpeg" });
-      if (error) throw error;
-      const { data } = supabase.storage.from("application-plats-photos").getPublicUrl(chemin);
-      setBrouillon((b) => (b ? { ...b, photo_url: data.publicUrl } : b));
-    } catch {
-      setErreur("Photo impossible à envoyer, essayez une autre image.");
-    }
-    setEnvoiPhoto(false);
   }
 
   async function enregistrer() {
@@ -89,9 +60,6 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
     const valeurs = {
       nom: brouillon.nom.trim(),
       description: brouillon.description.trim() || null,
-      ingredients: brouillon.ingredients.trim() || null,
-      recette: brouillon.recette.trim() || null,
-      photo_url: brouillon.photo_url,
       calories: Math.round(nombre(brouillon.calories)),
       proteines: nombre(brouillon.proteines),
       glucides: nombre(brouillon.glucides),
@@ -174,13 +142,7 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
         <div className="grid gap-3 sm:grid-cols-2">
           {plats.map((p) => (
             <div key={p.id} className={`carte p-4 flex gap-3.5 ${p.actif ? "" : "opacity-55"}`}>
-              <div className="flex-shrink-0 space-y-2">
-                <QrCode valeur={lienPlat(origine, p.qr_code)} className="w-20 h-20" />
-                {p.photo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.photo_url} alt="" className="w-20 h-20 rounded-xl object-cover" />
-                )}
-              </div>
+              <QrCode valeur={lienPlat(origine, p.qr_code)} className="w-20 h-20 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-bold text-[15px] text-c2b-green leading-snug">{p.nom}</p>
@@ -233,62 +195,15 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
                   className="champ"
                 />
               </Champ>
-              <div>
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
-                  Photo du plat
-                </span>
-                {brouillon.photo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={brouillon.photo_url} alt="" className="w-full h-44 object-cover rounded-2xl mb-2" />
-                )}
-                <div className="flex items-center gap-3">
-                  <label className="btn-secondary px-4 py-2.5 text-sm cursor-pointer">
-                    <Camera size={16} />
-                    {envoiPhoto ? "Envoi..." : brouillon.photo_url ? "Changer la photo" : "Ajouter une photo"}
-                    <input type="file" accept="image/*" onChange={choisirPhoto} disabled={envoiPhoto} className="hidden" />
-                  </label>
-                  {brouillon.photo_url && !envoiPhoto && (
-                    <button
-                      type="button"
-                      onClick={() => setBrouillon({ ...brouillon, photo_url: null })}
-                      className="text-sm font-semibold text-c2b-muted"
-                    >
-                      Retirer
-                    </button>
-                  )}
-                </div>
-              </div>
               <Champ label="Description (optionnel)">
                 <textarea
                   value={brouillon.description}
                   onChange={(e) => setBrouillon({ ...brouillon, description: e.target.value })}
                   rows={2}
-                  placeholder="Ex : Poulet mariné aux épices, sauce tomate crémeuse"
                   className="champ resize-none"
                 />
               </Champ>
-              <Champ label="Ingrédients (un par ligne)">
-                <textarea
-                  value={brouillon.ingredients}
-                  onChange={(e) => setBrouillon({ ...brouillon, ingredients: e.target.value })}
-                  rows={4}
-                  placeholder={"Blanc de poulet\nRiz basmati\nYaourt, citron, épices tikka"}
-                  className="champ resize-none"
-                />
-              </Champ>
-              <Champ label="Recette (optionnel)">
-                <textarea
-                  value={brouillon.recette}
-                  onChange={(e) => setBrouillon({ ...brouillon, recette: e.target.value })}
-                  rows={4}
-                  placeholder="Les étapes, ou comment réchauffer la box"
-                  className="champ resize-none"
-                />
-              </Champ>
-              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Macros d'une box</p>
-              <p className="text-xs text-c2b-muted -mt-1.5">
-                Le client voit la photo, les ingrédients et la recette dans « Plats Chef2Box » quand il ajoute un repas.
-              </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Macros pour une box</p>
               <div className="grid grid-cols-2 gap-2.5">
                 {(
                   [
