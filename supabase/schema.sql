@@ -76,6 +76,37 @@ create table if not exists public.application_repas_journal (
 create index if not exists application_repas_journal_client_date_idx
   on public.application_repas_journal (client_id, date);
 
+-- "g" : quantite = grammes / 100 (valeurs pour 100 g) ; "portion" : nombre de portions.
+alter table public.application_repas_journal
+  add column if not exists unite text check (unite in ('g', 'portion'));
+
+-- ============ FAVORIS ============
+create table if not exists public.application_favoris (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  nom text not null,
+  calories numeric not null,
+  proteines numeric not null,
+  glucides numeric not null,
+  lipides numeric not null,
+  unite text not null default 'portion' check (unite in ('g', 'portion')),
+  quantite numeric not null default 1,
+  source text not null default 'manuel' check (source in ('chef2box', 'code_barres', 'manuel')),
+  plat_id uuid references public.application_plats (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (client_id, nom)
+);
+
+-- ============ SUIVI DU POIDS ============
+create table if not exists public.application_poids (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  date date not null,
+  poids_kg numeric not null check (poids_kg between 20 and 400),
+  created_at timestamptz not null default now(),
+  unique (client_id, date)
+);
+
 -- ============ MESSAGES ============
 create table if not exists public.application_messages (
   id uuid primary key default gen_random_uuid(),
@@ -310,6 +341,21 @@ create policy "assistant_self_insert" on public.application_assistant_messages
 drop policy if exists "assistant_self_delete" on public.application_assistant_messages;
 create policy "assistant_self_delete" on public.application_assistant_messages
   for delete using (auth.uid() = client_id);
+
+alter table public.application_favoris enable row level security;
+alter table public.application_poids enable row level security;
+
+drop policy if exists "favoris_self" on public.application_favoris;
+create policy "favoris_self" on public.application_favoris
+  for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
+
+drop policy if exists "poids_self_or_admin_select" on public.application_poids;
+create policy "poids_self_or_admin_select" on public.application_poids
+  for select using (auth.uid() = client_id or public.application_is_admin());
+
+drop policy if exists "poids_self_write" on public.application_poids;
+create policy "poids_self_write" on public.application_poids
+  for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
 -- ============ STORAGE (photos de repas) ============
 insert into storage.buckets (id, name, public)

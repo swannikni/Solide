@@ -10,6 +10,7 @@ import {
   contexteClient,
 } from "@/lib/assistant";
 import type { Client, RepasJournal } from "@/lib/types";
+import { dateDuJour, debutDuJour } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +34,7 @@ export async function POST(request: NextRequest) {
   if (!question) return erreur("Message vide.", 400);
   if (question.length > LONGUEUR_MAX_QUESTION) return erreur("Message trop long.", 400);
 
-  const maintenant = new Date();
-  const aujourdhui = maintenant.toISOString().slice(0, 10);
+  const aujourdhui = dateDuJour();
 
   const [{ data: client }, { count }, { data: historique }, { data: repas }] = await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       .select("id", { count: "exact", head: true })
       .eq("client_id", user.id)
       .eq("role", "user")
-      .gte("created_at", `${aujourdhui}T00:00:00Z`),
+      .gte("created_at", debutDuJour(aujourdhui)),
     supabase
       .from("application_assistant_messages")
       .select("role, contenu")
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     max_tokens: 2048,
     system: [
       { type: "text", text: SYSTEME_ASSISTANT },
-      { type: "text", text: contexteClient(client, repas ?? [], maintenant) },
+      { type: "text", text: contexteClient(client, repas ?? [], new Date()) },
     ],
     messages,
   });

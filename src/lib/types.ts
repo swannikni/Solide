@@ -59,6 +59,7 @@ export interface RepasJournal {
   source: SourceRepas;
   nom: string;
   quantite: number;
+  unite: "g" | "portion" | null; // "g" : quantite = grammes / 100
   calories: number;
   proteines: number;
   glucides: number;
@@ -76,5 +77,28 @@ export interface Message {
   expediteur: "client" | "admin";
   contenu: string;
   lu: boolean;
+  created_at: string;
+}
+
+export interface Favori {
+  id: string;
+  client_id: string;
+  nom: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  unite: "g" | "portion";
+  quantite: number;
+  source: SourceRepas;
+  plat_id: string | null;
+  created_at: string;
+}
+
+export interface Poids {
+  id: string;
+  client_id: string;
+  date: string;
+  poids_kg: number;
   created_at: string;
 }

@@ -44,7 +44,7 @@ export function contexteClient(client: Client, repasDuJour: RepasJournal[], date
 - Prénom : ${client.nom.split(" ")[0]}
 - Objectifs quotidiens : ${client.objectif_calories} kcal, ${client.objectif_proteines} g de protéines, ${client.objectif_glucides} g de glucides, ${client.objectif_lipides} g de lipides${client.palier ? ` (palier ${client.palier})` : ""}
 
-Ce qu'il a mangé aujourd'hui (${date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}) :
+Ce qu'il a mangé aujourd'hui (${date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Casablanca" })}) :
 ${lignesRepas}
 Total : ${Math.round(totaux.calories)} kcal. Reste pour atteindre l'objectif : ${reste(client.objectif_calories, totaux.calories)} kcal, ${reste(
     client.objectif_proteines,

@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2 } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
+import { Pastille } from "@/components/Pastille";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { Aliment, RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, Favori, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
 type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
 
 type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
 
-const GRAMMES_RAPIDES = [50, 100, 150, 200, 250];
+export const GRAMMES_RAPIDES = [50, 100, 150, 200, 250];
 
 const RE_CRU = /\bcrue?s?\b/i;
 const RE_CUIT = /(cuit|rôti|poêlé|sauté|grillé|bouilli|vapeur|au four|frit)/i;
@@ -68,10 +69,16 @@ export function AddMealModal({
   repasTypeParDefaut = "dejeuner",
   prefillTrouve,
   commandeId,
+  date,
+  favoris = [],
+  recents = [],
   onClose,
   onAjoute,
 }: {
   clientId: string;
+  date: string;
+  favoris?: Favori[];
+  recents?: RepasJournal[];
   repasTypeParDefaut?: RepasType;
   prefillTrouve?: Trouve;
   commandeId?: string;
@@ -121,6 +128,13 @@ export function AddMealModal({
       (filtreCuisson === "tous" || (filtreCuisson === "cru" ? RE_CRU : RE_CUIT).test(a.nom)) &&
       (filtreGras === null || a.nom.match(RE_GRAS)?.[1] === filtreGras)
   );
+
+  const nomsFavoris = new Set(favoris.map((f) => f.nom.toLowerCase()));
+  const [favoriCoche, setFavoriCoche] = useState(false);
+  useEffect(() => {
+    setFavoriCoche(!!trouve && nomsFavoris.has(trouve.nom.toLowerCase()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trouve]);
 
   useEffect(() => {
     setNomAffiche(trouve?.nom ?? "");
@@ -249,6 +263,29 @@ export function AddMealModal({
     choisirPour100g(produit.nom, produit, "code_barres");
   }
 
+  // Favori ou aliment récent : mêmes valeurs et même quantité que la dernière fois.
+  function choisirMemorise(m: Pick<Favori, "nom" | "calories" | "proteines" | "glucides" | "lipides" | "quantite" | "source"> & {
+    unite: "g" | "portion" | null;
+    plat_id: string | null;
+  }) {
+    const enGrammes = m.unite === "g";
+    setTrouve({
+      nom: m.nom,
+      calories: Number(m.calories),
+      proteines: Number(m.proteines),
+      glucides: Number(m.glucides),
+      lipides: Number(m.lipides),
+      source: m.source,
+      plat_id: m.plat_id ?? undefined,
+      quantiteParDefaut: 1,
+      paGrammes: enGrammes,
+    });
+    if (enGrammes) setGrammes(Math.round(Number(m.quantite) * 100));
+    else setQuantite(Number(m.quantite) || 1);
+    setSaisieQuantite(null);
+    setEtape("confirmation");
+  }
+
   function choisirAlimentPopulaire(nom: string, cal: number, prot: number, gluc: number, lip: number) {
     setTrouve({
       nom,
@@ -302,7 +339,9 @@ export function AddMealModal({
 
     const { error } = await supabase.from("application_repas_journal").insert({
       client_id: clientId,
+      date,
       repas_type: repasType,
+      unite: trouve.paGrammes ? "g" : "portion",
       source: trouve.source,
       nom: nomAffiche.trim() || trouve.nom,
       quantite: quantiteFinale,
@@ -316,6 +355,29 @@ export function AddMealModal({
       cree_par: "client",
     });
 
+    if (!error) {
+      const nomFinal = nomAffiche.trim() || trouve.nom;
+      const etaitFavori = nomsFavoris.has(nomFinal.toLowerCase());
+      if (favoriCoche) {
+        await supabase.from("application_favoris").upsert(
+          {
+            client_id: clientId,
+            nom: nomFinal,
+            calories: trouve.calories,
+            proteines: trouve.proteines,
+            glucides: trouve.glucides,
+            lipides: trouve.lipides,
+            unite: trouve.paGrammes ? "g" : "portion",
+            quantite: quantiteFinale,
+            source: trouve.source,
+            plat_id: trouve.plat_id ?? null,
+          },
+          { onConflict: "client_id,nom" }
+        );
+      } else if (etaitFavori) {
+        await supabase.from("application_favoris").delete().eq("client_id", clientId).eq("nom", nomFinal);
+      }
+    }
     setEnregistrement(false);
     if (!error) {
       // On reste dans la fenêtre pour enchaîner les aliments du même repas.
@@ -403,7 +465,7 @@ export function AddMealModal({
                 <PenLine className="text-c2b-green" />
                 <div>
                   <p className="font-bold text-c2b-green">Saisie manuelle</p>
-                  <p className="text-xs text-c2b-muted">Recherche parmi des milliers d'aliments</p>
+                  <p className="text-xs text-c2b-muted">Recherche, favoris et aliments récents</p>
                 </div>
               </button>
             </div>
@@ -461,6 +523,46 @@ export function AddMealModal({
                 <p className="text-[11px] text-c2b-green/50 -mt-2">
                   Astuce : ajoutez le poids à la recherche (« compote 45g ») pour le pré-remplir.
                 </p>
+              )}
+
+              {!rechercheActive && favoris.length > 0 && (
+                <div className="space-y-2">
+                  <p className="lbl flex items-center gap-1.5">
+                    <Star size={12} fill="currentColor" /> Favoris
+                  </p>
+                  <div className="carte overflow-hidden divide-y divide-black/5">
+                    {favoris.map((f) => (
+                      <LigneMemorisee
+                        key={f.id}
+                        nom={f.nom}
+                        detail={`${libelleQuantiteMemo(f.unite, Number(f.quantite))} · ${Math.round(
+                          Number(f.calories) * Number(f.quantite)
+                        )} kcal`}
+                        onClick={() => choisirMemorise(f)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!rechercheActive && recents.length > 0 && (
+                <div className="space-y-2">
+                  <p className="lbl flex items-center gap-1.5">
+                    <History size={12} /> Récents
+                  </p>
+                  <div className="carte overflow-hidden divide-y divide-black/5">
+                    {recents.map((r) => (
+                      <LigneMemorisee
+                        key={r.id}
+                        nom={r.nom}
+                        detail={`${libelleQuantiteMemo(r.unite, Number(r.quantite))} · ${Math.round(
+                          Number(r.calories) * Number(r.quantite)
+                        )} kcal`}
+                        onClick={() => choisirMemorise(r)}
+                      />
+                    ))}
+                  </div>
+                </div>
               )}
 
               {!rechercheActive && (
@@ -636,12 +738,27 @@ export function AddMealModal({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom</label>
-                <input
-                  value={nomAffiche}
-                  onChange={(e) => setNomAffiche(e.target.value)}
-                  placeholder={trouve.nom}
-                  className="champ font-semibold"
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={nomAffiche}
+                    onChange={(e) => setNomAffiche(e.target.value)}
+                    placeholder={trouve.nom}
+                    className="champ font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFavoriCoche(!favoriCoche)}
+                    className={`flex-shrink-0 w-12 rounded-xl border flex items-center justify-center ${
+                      favoriCoche
+                        ? "bg-c2b-gold/15 border-c2b-gold text-c2b-gold"
+                        : "bg-white border-c2b-cream-2 text-c2b-muted"
+                    }`}
+                    aria-label={favoriCoche ? "Retirer des favoris" : "Ajouter aux favoris"}
+                    aria-pressed={favoriCoche}
+                  >
+                    <Star size={20} fill={favoriCoche ? "currentColor" : "none"} />
+                  </button>
+                </div>
                 <p className="text-xs text-c2b-muted mt-1.5">
                   {trouve.calories} kcal · {trouve.proteines}g P · {trouve.glucides}g G · {trouve.lipides}g L
                   {trouve.paGrammes ? " pour 100 g" : " par portion"}
@@ -751,30 +868,17 @@ export function AddMealModal({
   );
 }
 
-function Pastille({
-  active,
-  onClick,
-  large = false,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  large?: boolean;
-  children: React.ReactNode;
-}) {
+function libelleQuantiteMemo(unite: "g" | "portion" | null, quantite: number) {
+  if (unite === "g") return `${Math.round(quantite * 100)} g`;
+  const q = Math.round(quantite * 100) / 100;
+  return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
+}
+
+function LigneMemorisee({ nom, detail, onClick }: { nom: string; detail: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border-[1.5px] font-semibold transition ${
-        large ? "py-2.5 text-sm" : "px-3.5 py-1.5 text-[13px]"
-      } ${
-        active
-          ? "bg-c2b-green border-c2b-green text-white"
-          : "bg-white border-c2b-green/15 text-c2b-green hover:border-c2b-gold/60"
-      }`}
-    >
-      {children}
+    <button onClick={onClick} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-c2b-cream/60">
+      <span className="text-sm font-medium text-c2b-green truncate">{nom}</span>
+      <span className="text-[11px] text-c2b-muted flex-shrink-0">{detail}</span>
     </button>
   );
 }

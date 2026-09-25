@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/Nav";
 import { AdminClient } from "@/app/admin/AdminClient";
 import type { Client, Commande, Plat } from "@/lib/types";
+import { dateDuJour } from "@/lib/dates";
 
 export default async function AdminPage() {
   const supabase = createClient();
@@ -14,7 +15,7 @@ export default async function AdminPage() {
   const { data: moi } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
   if (!moi?.est_admin) redirect("/dashboard");
 
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const aujourdhui = dateDuJour();
 
   const [{ data: clients }, { data: plats }, { data: commandes }] = await Promise.all([
     supabase.from("application_clients").select("*").eq("est_admin", false).order("nom").returns<Client[]>(),
