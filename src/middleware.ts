@@ -47,6 +47,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Compte créé par l'admin avec un code provisoire : le client choisit
+  // son propre mot de passe avant d'aller plus loin.
+  const chemin = request.nextUrl.pathname;
+  if (user?.user_metadata?.doit_choisir_mdp && !isPublic && !chemin.startsWith("/bienvenue") && !chemin.startsWith("/api")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/bienvenue";
+    url.search = "";
+    const suite = chemin + request.nextUrl.search;
+    if (suite !== "/") url.searchParams.set("suite", suite);
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 

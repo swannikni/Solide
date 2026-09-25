@@ -32,7 +32,9 @@ function entier(valeur: unknown, min: number, max: number) {
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
-// Créer un compte client (POST) ou lui donner un nouveau mot de passe (PATCH).
+// Créer un compte client (POST) ou lui redonner un code provisoire (PATCH).
+// Le code ne sert qu'à la première connexion : le client choisit ensuite
+// son propre mot de passe (page /bienvenue), que l'admin ne connaît pas.
 export async function POST(request: Request) {
   if (!(await verifierAdmin())) return erreur("Réservé à l'admin.", 403);
   const admin = createAdminClient();
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
     email,
     password: mdp,
     email_confirm: true,
-    user_metadata: { nom },
+    user_metadata: { nom, doit_choisir_mdp: true },
   });
   if (erreurAuth || !cree.user) {
     const existe = /already|registered|exists/i.test(erreurAuth?.message ?? "");
@@ -96,8 +98,12 @@ export async function PATCH(request: Request) {
   const { data: fiche } = await admin.from("application_clients").select("est_admin").eq("id", id).maybeSingle();
   if (!fiche || fiche.est_admin) return erreur("Client inconnu.", 404);
 
+  const { data: existant } = await admin.auth.admin.getUserById(id);
   const mdp = motDePasse();
-  const { data, error } = await admin.auth.admin.updateUserById(id, { password: mdp });
+  const { data, error } = await admin.auth.admin.updateUserById(id, {
+    password: mdp,
+    user_metadata: { ...(existant?.user?.user_metadata ?? {}), doit_choisir_mdp: true },
+  });
   if (error || !data.user) return erreur("Changement de mot de passe impossible.", 500);
   return NextResponse.json({ id, email: data.user.email, motDePasse: mdp });
 }

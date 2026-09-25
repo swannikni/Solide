@@ -167,7 +167,7 @@ export function ClientsClient({
   }
 
   async function nouveauMotDePasse(c: Client) {
-    if (!confirm(`Générer un nouveau mot de passe pour ${c.nom} ? L'ancien ne fonctionnera plus.`)) return;
+    if (!confirm(`Envoyer un nouveau code provisoire à ${c.nom} ? Son mot de passe actuel ne fonctionnera plus et il en choisira un nouveau.`)) return;
     const reponse = await fetch("/api/admin/clients", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -189,7 +189,8 @@ export function ClientsClient({
   const texteAcces = acces
     ? `Bonjour ${acces.nom.split(" ")[0]} ! Voici votre accès à l'appli Chef2Box pour suivre vos repas et vos macros :\n` +
       `${typeof window !== "undefined" ? window.location.origin : ""}\n\n` +
-      `Email : ${acces.email}\nMot de passe : ${acces.motDePasse}\n\n` +
+      `Email : ${acces.email}\nCode provisoire : ${acces.motDePasse}\n\n` +
+      `À la première connexion, vous choisirez votre propre mot de passe.\n` +
       `Astuce : ajoutez l'appli à l'écran d'accueil de votre téléphone.`
     : "";
 
@@ -212,7 +213,7 @@ export function ClientsClient({
         <div className="rounded-2xl border border-c2b-gold/40 bg-c2b-gold/[0.08] p-4 text-sm text-c2b-green space-y-1.5">
           <p className="font-bold">Une dernière étape pour créer les comptes depuis l&apos;appli</p>
           <p>
-            Vous pouvez déjà modifier les objectifs. Pour créer des comptes et générer des mots de passe, ajoutez la clé
+            Vous pouvez déjà modifier les objectifs. Pour créer des comptes et envoyer les codes provisoires, ajoutez la clé
             secrète Supabase sur Netlify : variable <code className="font-bold">SUPABASE_SERVICE_ROLE_KEY</code>.
           </p>
         </div>
@@ -223,7 +224,10 @@ export function ClientsClient({
           <div className="flex items-start justify-between gap-3">
             <div>
               <span className="lbl mb-1">Accès de {acces.nom}</span>
-              <p className="text-sm text-white/70">À envoyer au client. Le mot de passe ne sera plus affiché ensuite.</p>
+              <p className="text-sm text-white/70">
+                À envoyer au client. Ce code ne sert qu&apos;une fois : à sa première connexion, il choisit son
+                propre mot de passe (que vous ne connaîtrez pas).
+              </p>
             </div>
             <button onClick={() => setAcces(null)} className="text-white/60" aria-label="Fermer">
               <X size={18} />
@@ -234,7 +238,7 @@ export function ClientsClient({
               Email : <span className="font-bold">{acces.email}</span>
             </p>
             <p>
-              Mot de passe : <span className="font-bold tracking-wide">{acces.motDePasse}</span>
+              Code provisoire : <span className="font-bold tracking-wide">{acces.motDePasse}</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -281,8 +285,8 @@ export function ClientsClient({
                   <button
                     onClick={() => nouveauMotDePasse(c)}
                     className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-muted hover:text-c2b-green hover:bg-c2b-green/[0.06]"
-                    aria-label="Nouveau mot de passe"
-                    title="Nouveau mot de passe"
+                    aria-label="Mot de passe oublié : nouveau code provisoire"
+                    title="Mot de passe oublié : nouveau code provisoire"
                   >
                     <KeyRound size={17} />
                   </button>

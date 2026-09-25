@@ -78,8 +78,10 @@ affiche « L'assistant n'est pas encore activé ».
 
 ### 2 quater. Créer les comptes clients depuis l'appli
 
-L'onglet **Admin → Clients** crée le compte (email + mot de passe généré) et la
-fiche objectifs en une fois, puis propose d'envoyer les accès par WhatsApp. Il
+L'onglet **Admin → Clients** crée le compte (email + code provisoire) et la
+fiche objectifs en une fois, puis propose d'envoyer les accès par WhatsApp. À
+sa première connexion, le client choisit son propre mot de passe (page
+`/bienvenue`) ; en cas d'oubli, l'admin lui renvoie un code provisoire. Il
 utilise la clé secrète Supabase, à déclarer uniquement côté serveur dans
 Netlify : `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Project Settings → API Keys →
 clé *secret*). Sans elle, on peut modifier les objectifs mais pas créer de compte.
