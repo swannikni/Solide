@@ -94,6 +94,14 @@ export function AddMealModal({
   const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
   const [nomAffiche, setNomAffiche] = useState(prefillTrouve?.nom ?? "");
+  const [ajoutes, setAjoutes] = useState<{ nom: string; kcal: number }[]>([]);
+  const [commandeLiee, setCommandeLiee] = useState(commandeId);
+  const [origine, setOrigine] = useState<Etape>("choix");
+
+  // Écran où revenir après un ajout ou un "Retour" depuis la confirmation.
+  useEffect(() => {
+    if (etape === "choix" || etape === "manuel") setOrigine(etape);
+  }, [etape]);
   const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
   const [filtreGras, setFiltreGras] = useState<string | null>(null);
 
@@ -293,14 +301,26 @@ export function AddMealModal({
       lipides: trouve.lipides,
       photo_url: photoUrl,
       plat_id: trouve.plat_id ?? null,
-      commande_id: commandeId ?? null,
+      commande_id: commandeLiee ?? null,
       cree_par: "client",
     });
 
     setEnregistrement(false);
     if (!error) {
+      // On reste dans la fenêtre pour enchaîner les aliments du même repas.
       onAjoute();
-      onClose();
+      setAjoutes((prev) => [
+        ...prev,
+        { nom: nomAffiche.trim() || trouve.nom, kcal: Math.round(trouve.calories * quantiteFinale) },
+      ]);
+      setCommandeLiee(undefined);
+      setTrouve(null);
+      setPhoto(null);
+      setPreviewPhoto(null);
+      setQuantite(1);
+      setGrammes(100);
+      setRechercheManuelle("");
+      setEtape(origine);
     } else {
       setMessageErreur("Erreur lors de l'enregistrement, réessayez.");
       setEtape("erreur");
@@ -316,12 +336,31 @@ export function AddMealModal({
       <div className="bg-c2b-cream w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-[24px] md:max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 sticky top-0 z-10 bg-c2b-cream">
           <h2 className="titre text-2xl">Ajouter un <em>repas</em></h2>
-          <button onClick={onClose} className="text-c2b-green/60">
-            <X size={20} />
-          </button>
+          {ajoutes.length > 0 ? (
+            <button onClick={onClose} className="btn-primary px-5 py-2 text-sm">
+              Terminer
+            </button>
+          ) : (
+            <button onClick={onClose} className="text-c2b-green/60" aria-label="Fermer">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         <div className="p-5">
+          {ajoutes.length > 0 && etape !== "confirmation" && (
+            <div className="mb-4 rounded-2xl bg-c2b-green/[0.06] px-4 py-3">
+              <p className="text-sm font-bold text-c2b-green">
+                ✓ {ajoutes.length} aliment{ajoutes.length > 1 ? "s" : ""} ajouté{ajoutes.length > 1 ? "s" : ""} au{" "}
+                {REPAS_TYPE_LABELS[repasType].toLowerCase()} ·{" "}
+                <span className="text-c2b-gold">{ajoutes.reduce((t, a) => t + a.kcal, 0)} kcal</span>
+              </p>
+              <p className="text-xs text-c2b-muted mt-0.5 line-clamp-2">{ajoutes.map((a) => a.nom).join(" · ")}</p>
+              <p className="text-xs text-c2b-green/70 mt-1.5">
+                Ajoutez l&apos;aliment suivant, ou touchez « Terminer ».
+              </p>
+            </div>
+          )}
           {etape === "choix" && (
             <div className="space-y-3">
               <button
@@ -669,7 +708,16 @@ export function AddMealModal({
                 disabled={enregistrement}
                 className="btn-primary w-full py-4"
               >
-                {enregistrement ? "Enregistrement..." : "Ajouter au journal"}
+                {enregistrement ? "Enregistrement..." : "Ajouter"}
+              </button>
+              <button
+                onClick={() => {
+                  setTrouve(null);
+                  setEtape(origine);
+                }}
+                className="w-full py-2 text-sm font-semibold text-c2b-muted"
+              >
+                ← Retour
               </button>
             </div>
           )}
