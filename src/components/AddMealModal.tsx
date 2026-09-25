@@ -54,6 +54,12 @@ function analyserRecherche(texte: string): { termes: string; grammes: number | n
   return { termes: mots.join(" "), grammes: null };
 }
 
+// Mots qui montrent qu'on cherche un plat de fast-food (texte sans accents).
+const MOTS_ENSEIGNES = [
+  "mcdo", "macdo", "mc do", "mcdonald", "burger king", " bk ", "big mac", "mcflurry", "mcmuffin",
+  "mcchicken", "big tasty", "whopper", "kingbox", "king nuggets", "sundae", "happy meal",
+];
+
 interface Trouve {
   nom: string;
   calories: number;
@@ -116,6 +122,7 @@ export function AddMealModal({
   const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
   const [filtreGras, setFiltreGras] = useState<string | null>(null);
   const [tousLesAliments, setTousLesAliments] = useState(false);
+  const [tousLesRestaurants, setTousLesRestaurants] = useState(false);
 
   const { termes: termesRecherche, grammes: grammesSaisis } = analyserRecherche(rechercheManuelle);
   const rechercheActive = termesRecherche.length >= 2;
@@ -149,6 +156,7 @@ export function AddMealModal({
     setFiltreGras(null);
     setResultatsMarques(null);
     setTousLesAliments(false);
+    setTousLesRestaurants(false);
     if (!rechercheActive) {
       setResultatsAliments([]);
       setResultatsRestaurants([]);
@@ -462,6 +470,49 @@ export function AddMealModal({
 
   const facteur = trouve ? (trouve.paGrammes ? grammes / 100 : quantite) : 0;
 
+  // Restaurants en tête seulement si la recherche vise une enseigne (« mcdo »,
+  // « big mac »…) ; sinon après les aliments et produits de marque, réduits à 3.
+  const rechercheNormalisee = ` ${termesRecherche.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")} `;
+  const visUneEnseigne = MOTS_ENSEIGNES.some((m) => rechercheNormalisee.includes(m));
+  const restaurantsEnPremier =
+    visUneEnseigne || (!rechercheEnCours && resultatsAliments.length === 0 && resultatsRestaurants.length > 0);
+  const restaurantsAffiches =
+    restaurantsEnPremier || tousLesRestaurants ? resultatsRestaurants : resultatsRestaurants.slice(0, 3);
+  const blocRestaurants = rechercheActive && !rechercheEnCours && resultatsRestaurants.length > 0 && (
+    <div className="space-y-2">
+      <p className="lbl pt-1">Restaurants &amp; fast-food</p>
+      <ul className="carte overflow-hidden divide-y divide-black/5">
+        {restaurantsAffiches.map((r) => (
+          <li key={r.id}>
+            <button onClick={() => choisirRestaurant(r)} className="w-full text-left px-4 py-3">
+              <p className="text-[15px] font-semibold text-c2b-green">
+                {r.nom}
+                <span className="font-medium text-c2b-muted"> · {r.enseigne}</span>
+              </p>
+              <p className="text-[11px] text-c2b-muted">
+                1 portion{r.portion_g ? ` (${Math.round(Number(r.portion_g))} g)` : ""} ·{" "}
+                {Math.round(Number(r.calories))} kcal · {Number(r.proteines)}g P · {Number(r.glucides)}g G ·{" "}
+                {Number(r.lipides)}g L
+              </p>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {restaurantsAffiches.length < resultatsRestaurants.length && (
+        <button
+          onClick={() => setTousLesRestaurants(true)}
+          className="w-full py-1.5 text-sm font-semibold text-c2b-green"
+        >
+          Voir les {resultatsRestaurants.length} plats de restaurant
+        </button>
+      )}
+      <p className="text-[11px] text-c2b-muted">
+        Valeurs officielles publiées par l&apos;enseigne ({sourcesRestaurants(resultatsRestaurants)}). Les
+        recettes au Maroc peuvent légèrement varier.
+      </p>
+    </div>
+  );
+
   return (
     // Plein écran sur mobile : ancrée en haut, la barre de recherche reste
     // visible au-dessus du clavier iOS.
@@ -710,32 +761,7 @@ export function AddMealModal({
                 </>
               )}
 
-              {rechercheActive && !rechercheEnCours && resultatsRestaurants.length > 0 && (
-                <div className="space-y-2">
-                  <p className="lbl pt-1">Restaurants &amp; fast-food</p>
-                  <ul className="carte overflow-hidden divide-y divide-black/5">
-                    {resultatsRestaurants.map((r) => (
-                      <li key={r.id}>
-                        <button onClick={() => choisirRestaurant(r)} className="w-full text-left px-4 py-3">
-                          <p className="text-[15px] font-semibold text-c2b-green">
-                            {r.nom}
-                            <span className="font-medium text-c2b-muted"> · {r.enseigne}</span>
-                          </p>
-                          <p className="text-[11px] text-c2b-muted">
-                            1 portion{r.portion_g ? ` (${Math.round(Number(r.portion_g))} g)` : ""} ·{" "}
-                            {Math.round(Number(r.calories))} kcal · {Number(r.proteines)}g P · {Number(r.glucides)}g G ·{" "}
-                            {Number(r.lipides)}g L
-                          </p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[11px] text-c2b-muted">
-                    Valeurs officielles publiées par l&apos;enseigne ({sourcesRestaurants(resultatsRestaurants)}). Les
-                    recettes au Maroc peuvent légèrement varier.
-                  </p>
-                </div>
-              )}
+              {restaurantsEnPremier && blocRestaurants}
 
               {rechercheActive && (
                 <div className="space-y-2">
@@ -833,6 +859,8 @@ export function AddMealModal({
                   )}
                 </div>
               )}
+
+              {!restaurantsEnPremier && blocRestaurants}
 
               <details className="carte p-4">
                 <summary className="text-sm font-medium text-c2b-green cursor-pointer">

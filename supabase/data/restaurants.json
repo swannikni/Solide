@@ -617,17 +617,6 @@
 },
 {
 "enseigne": "Burger King",
-"nom": "Cookie Duo Chocolat.",
-"calories": 400,
-"proteines": 5.2,
-"glucides": 51,
-"lipides": 19,
-"portion_g": 85,
-"pays": "FR",
-"source_url": "https://www.burgerking.fr/carte"
-},
-{
-"enseigne": "Burger King",
 "nom": "Cookie Fondant Choco",
 "calories": 448,
 "proteines": 6.2,
@@ -706,17 +695,6 @@
 {
 "enseigne": "Burger King",
 "nom": "Donut Chocolat Noisette",
-"calories": 313,
-"proteines": 4.8,
-"glucides": 27,
-"lipides": 20,
-"portion_g": 72,
-"pays": "FR",
-"source_url": "https://www.burgerking.fr/carte"
-},
-{
-"enseigne": "Burger King",
-"nom": "Donut Chocolat Noisette.",
 "calories": 313,
 "proteines": 4.8,
 "glucides": 27,
@@ -1849,17 +1827,6 @@
 },
 {
 "enseigne": "Burger King",
-"nom": "KINGBOX 10 King Nuggets + 10 Chili Cheese",
-"calories": 1089,
-"proteines": 47,
-"glucides": 93,
-"lipides": 60,
-"portion_g": 395,
-"pays": "FR",
-"source_url": "https://www.burgerking.fr/carte"
-},
-{
-"enseigne": "Burger King",
 "nom": "KINGBOX 10 Onion Rings + 10 Chili Cheese",
 "calories": 1009,
 "proteines": 25,
@@ -2433,17 +2400,6 @@
 {
 "enseigne": "Burger King",
 "nom": "Muffin Chocolat Noisette",
-"calories": 391,
-"proteines": 3.7,
-"glucides": 44,
-"lipides": 22,
-"portion_g": 85,
-"pays": "FR",
-"source_url": "https://www.burgerking.fr/carte"
-},
-{
-"enseigne": "Burger King",
-"nom": "Muffin Chocolat Noisette.",
 "calories": 391,
 "proteines": 3.7,
 "glucides": 44,
