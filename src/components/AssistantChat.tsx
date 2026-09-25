@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 ];
 
 // Mise en forme légère des réponses (gras, titres, listes) sans injecter de HTML.
-function TexteFormate({ texte }: { texte: string }) {
+export function TexteFormate({ texte }: { texte: string }) {
   const enGras = (ligne: string) =>
     ligne.split(/(\*\*[^*]+\*\*)/g).map((morceau, i) =>
       morceau.startsWith("**") && morceau.endsWith("**") ? (

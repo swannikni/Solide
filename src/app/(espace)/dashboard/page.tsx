@@ -107,6 +107,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         recents={recents}
         serie={serieActuelle(new Set(jours.keys()), aujourdhui)}
         statsSemaine={statsSemaine}
+        assistantActif={!!process.env.ANTHROPIC_API_KEY}
         points={points?.solde ?? null}
         defiEnCours={(defis ?? []).find((d) => d.date_debut <= aujourdhui && d.date_fin >= aujourdhui) ?? null}
         platScanne={platScanne}

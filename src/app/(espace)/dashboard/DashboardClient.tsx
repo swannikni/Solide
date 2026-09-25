@@ -32,6 +32,7 @@ export function DashboardClient({
   recents,
   serie,
   statsSemaine,
+  assistantActif,
   points,
   defiEnCours,
   platScanne,
@@ -46,6 +47,7 @@ export function DashboardClient({
   recents: RepasJournal[];
   serie: number;
   statsSemaine: StatsSemaine | null;
+  assistantActif: boolean;
   points: number | null;
   defiEnCours: Defi | null;
   platScanne: Plat | null;
@@ -416,6 +418,7 @@ export function DashboardClient({
           }}
           initial={detail}
           onClose={() => setDetail(null)}
+          assistantActif={assistantActif && estAujourdhui}
         />
       )}
 

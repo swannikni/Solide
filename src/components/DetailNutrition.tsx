@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { Send, Sparkles, X } from "lucide-react";
+import { TexteFormate } from "@/components/AssistantChat";
 import { Portail } from "@/components/Portail";
 import { libelleQuantite } from "@/components/MealCard";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
@@ -35,11 +37,14 @@ export function DetailNutrition({
   objectifs,
   initial,
   onClose,
+  assistantActif = false,
 }: {
   repas: RepasJournal[];
   objectifs: Record<Nutriment, number>;
   initial: Nutriment;
   onClose: () => void;
+  // Seulement pour la journée en cours : l'assistant connaît les repas d'aujourd'hui.
+  assistantActif?: boolean;
 }) {
   const [n, setN] = useState<Nutriment>(initial);
   const info = INFOS[n];
@@ -69,6 +74,59 @@ export function DetailNutrition({
   const totalKcalMacros = kcal.proteines + kcal.glucides + kcal.lipides;
   const kcalObjectif = objectifs.proteines * 4 + objectifs.glucides * 4 + objectifs.lipides * 9;
   const part = (v: number, t: number) => (t > 0 ? Math.round((v / t) * 100) : 0);
+
+  // Assistant : questions prêtes selon l'onglet et la situation, ou question libre.
+  const [question, setQuestion] = useState("");
+  const [reponse, setReponse] = useState<{ question: string; texte: string } | null>(null);
+  const [enCours, setEnCours] = useState(false);
+  const depasse = total > objectif * 1.1;
+  const suggestions: Record<Nutriment, string[]> = {
+    calories: depasse
+      ? ["J'ai dépassé mes calories, comment équilibrer demain ?", "Qu'est-ce qui m'a fait dépasser aujourd'hui ?"]
+      : ["Avec quoi je peux compléter mes kcal ?", "Une idée de dîner pour finir ma journée ?"],
+    proteines:
+      reste > 0
+        ? ["Que manger pour finir mes protéines ?", "Une collation riche en protéines ?"]
+        : ["Est-ce grave de dépasser mes protéines ?", "Quelles protéines privilégier demain ?"],
+    glucides: depasse
+      ? ["Pourquoi j'ai trop de glucides aujourd'hui ?", "Comment réduire mes glucides demain ?"]
+      : ["Quels bons glucides pour compléter ?", "Glucides avant ou après le sport ?"],
+    lipides: depasse
+      ? ["Pourquoi j'ai trop de lipides aujourd'hui ?", "Comment alléger mes lipides demain ?"]
+      : ["Quelles bonnes sources de lipides ?", "Comment compléter mes lipides sainement ?"],
+  };
+
+  async function demander(q: string) {
+    const texteQuestion = q.trim();
+    if (!texteQuestion || enCours) return;
+    setQuestion("");
+    setEnCours(true);
+    setReponse({ question: texteQuestion, texte: "" });
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: texteQuestion }),
+      });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        setReponse({ question: texteQuestion, texte: data?.erreur ?? "L'assistant ne répond pas, réessayez." });
+        return;
+      }
+      const lecteur = res.body.getReader();
+      const decodeur = new TextDecoder();
+      for (;;) {
+        const { done, value } = await lecteur.read();
+        if (done) break;
+        const morceau = decodeur.decode(value, { stream: true });
+        setReponse((r) => (r ? { ...r, texte: r.texte + morceau } : r));
+      }
+    } catch {
+      setReponse((r) => (r ? { ...r, texte: r.texte + "\n\n(Connexion perdue, réessayez.)" } : r));
+    } finally {
+      setEnCours(false);
+    }
+  }
 
   const statut =
     reste > 0
@@ -132,6 +190,73 @@ export function DetailNutrition({
               </div>
               <p className="text-sm font-semibold text-c2b-green mt-2">{statut}</p>
             </section>
+
+            {assistantActif && (
+              <section className="rounded-[20px] border border-c2b-gold/40 bg-white p-4">
+                <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-c2b-gold mb-3">
+                  <Sparkles size={14} /> Demander à l&apos;assistant
+                </h3>
+                {!reponse && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions[n].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => demander(s)}
+                        className="rounded-full bg-c2b-gold/[0.12] px-3 py-1.5 text-left text-[13px] font-semibold text-c2b-green hover:bg-c2b-gold/20"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {reponse && (
+                  <div className="space-y-2">
+                    <p className="text-[13px] font-semibold text-c2b-green">« {reponse.question} »</p>
+                    <div className="rounded-2xl bg-c2b-cream px-3.5 py-3 text-sm text-c2b-text">
+                      {reponse.texte ? (
+                        <TexteFormate texte={reponse.texte} />
+                      ) : (
+                        <span className="text-c2b-muted">L&apos;assistant réfléchit…</span>
+                      )}
+                    </div>
+                    {!enCours && (
+                      <div className="flex items-center justify-between gap-2 text-[13px] font-semibold">
+                        <button onClick={() => setReponse(null)} className="text-c2b-muted">
+                          ← Autre question
+                        </button>
+                        <Link href="/assistant" className="text-c2b-gold">
+                          Continuer la discussion →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    demander(question);
+                  }}
+                  className="mt-3 flex gap-2"
+                >
+                  <input
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="Votre question…"
+                    maxLength={500}
+                    className="champ rounded-full px-4 py-2.5 text-sm"
+                    aria-label="Question pour l'assistant"
+                  />
+                  <button
+                    type="submit"
+                    disabled={enCours || !question.trim()}
+                    className="w-11 h-11 flex-shrink-0 rounded-full bg-c2b-green text-c2b-cream flex items-center justify-center disabled:opacity-50"
+                    aria-label="Envoyer la question"
+                  >
+                    <Send size={16} />
+                  </button>
+                </form>
+              </section>
+            )}
 
             <section className="carte p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-3">Par repas</h3>
