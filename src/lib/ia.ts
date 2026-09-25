@@ -1,4 +1,5 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -34,10 +35,16 @@ export async function reserverIA(supabase: SupabaseClient, type: TypeIA): Promis
   return { ok: true, id: r.id, restant: r.restant };
 }
 
-// L'appel à l'IA a échoué de notre côté : on rend l'essai au client (seulement
-// si la clé de service est configurée ; le client ne peut pas le faire lui-même).
-export async function rembourserIA(id: number) {
-  await createAdminClient()?.from("application_usage_ia").delete().eq("id", id);
+// L'appel à l'IA a échoué de notre côté : l'essai est rendu au client (la
+// ligne, marquée en erreur, ne compte plus) et la cause reste pour le
+// diagnostic. Seulement avec la clé de service : le client ne peut pas le faire.
+export async function signalerEchecIA(id: number, e: unknown) {
+  const cause =
+    e instanceof Anthropic.APIError ? `${e.status ?? "?"} ${e.message}` : e instanceof Error ? e.message : String(e);
+  await createAdminClient()
+    ?.from("application_usage_ia")
+    .update({ erreur: cause.slice(0, 500) })
+    .eq("id", id);
 }
 
 // Photo envoyée par le navigateur (déjà réduite à ~1024 px) en data URL.

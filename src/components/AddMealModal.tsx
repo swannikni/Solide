@@ -710,7 +710,8 @@ export function AddMealModal({
       body: JSON.stringify({ image }),
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok || !data) throw new Error(data?.erreur ?? "L'analyse n'a pas marché, réessayez.");
+    // Le code HTTP aide au diagnostic quand la réponse n'est pas celle de l'appli (délai dépassé...).
+    if (!res.ok || !data) throw new Error(data?.erreur ?? `L'analyse n'a pas marché (code ${res.status}), réessayez.`);
     if (typeof data.restant === "number") setRestantIA(data.restant);
     return data;
   }
@@ -1508,7 +1509,7 @@ export function AddMealModal({
               {iaActive && (
                 <label className="btn-primary w-full cursor-pointer py-4">
                   <Camera size={18} /> Photographier l&apos;étiquette
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={surPhotoEtiquette} />
+                  <input type="file" accept="image/*" className="hidden" onChange={surPhotoEtiquette} />
                 </label>
               )}
               {messageIA && <p className="text-sm text-center font-semibold text-red-700">{messageIA}</p>}

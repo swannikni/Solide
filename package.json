@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "copier-zxing": "node -e \"require('fs').mkdirSync('public/zxing',{recursive:true});require('fs').copyFileSync('node_modules/zxing-wasm/dist/reader/zxing_reader.wasm','public/zxing/zxing_reader.wasm')\"",
+    "predev": "npm run copier-zxing",
     "dev": "next dev",
+    "prebuild": "npm run copier-zxing",
     "build": "next build",
     "start": "next start"
   },
@@ -11,8 +14,8 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
+    "barcode-detector": "^3.2.2",
     "clsx": "^2.1.1",
-    "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.446.0",
     "next": "^16.3.6",
     "qrcode": "^1.5.4",

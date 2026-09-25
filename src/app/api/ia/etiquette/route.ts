@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { MODELE_VISION, lireImage, nombre, rembourserIA, reserverIA } from "@/lib/ia";
+import { MODELE_VISION, lireImage, nombre, signalerEchecIA, reserverIA } from "@/lib/ia";
 
 // Lecture du tableau des valeurs nutritionnelles d'un produit introuvable :
 // l'IA recopie les chiffres imprimés, le client vérifie avant d'enregistrer.
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) {
     console.error("Étiquette :", e);
-    await rembourserIA(reservation.id);
+    await signalerEchecIA(reservation.id, e);
     return erreur("L'analyse n'a pas marché, réessayez ou tapez les valeurs.", 502);
   }
 }

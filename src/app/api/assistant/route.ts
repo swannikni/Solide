@@ -10,7 +10,7 @@ import {
 } from "@/lib/assistant";
 import type { Client, RepasJournal } from "@/lib/types";
 import { dateDuJour } from "@/lib/dates";
-import { rembourserIA, reserverIA } from "@/lib/ia";
+import { signalerEchecIA, reserverIA } from "@/lib/ia";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         console.error("Assistant :", e);
-        if (!reponse) await rembourserIA(reservation.id);
+        if (!reponse) await signalerEchecIA(reservation.id, e);
         envoyer(
           reponse
             ? "\n\n(Réponse interrompue, réessayez.)"

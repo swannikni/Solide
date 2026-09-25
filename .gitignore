@@ -6,3 +6,6 @@ out
 *.log
 .DS_Store
 *.tsbuildinfo
+
+# Copié depuis node_modules au build (lecteur de codes-barres)
+public/zxing

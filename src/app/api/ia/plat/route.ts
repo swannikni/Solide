@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { MODELE_VISION, lireImage, nombre, rembourserIA, reserverIA } from "@/lib/ia";
+import { MODELE_VISION, lireImage, nombre, signalerEchecIA, reserverIA } from "@/lib/ia";
 import { nomSimple } from "@/lib/noms-aliments";
 import type { Aliment } from "@/lib/types";
 
@@ -108,11 +108,20 @@ export async function POST(request: NextRequest) {
     resultat = bloc.input as typeof resultat;
   } catch (e) {
     console.error("Photo du plat :", e);
-    await rembourserIA(reservation.id);
+    await signalerEchecIA(reservation.id, e);
     return erreur("L'analyse n'a pas marché, réessayez.", 502);
   }
 
-  const detectes = (Array.isArray(resultat.aliments) ? resultat.aliments : []).slice(0, 10);
+  // Le modèle renvoie parfois la liste sous forme de texte JSON.
+  let liste: unknown = resultat.aliments;
+  if (typeof liste === "string") {
+    try {
+      liste = JSON.parse(liste);
+    } catch {
+      liste = [];
+    }
+  }
+  const detectes = (Array.isArray(liste) ? (liste as AlimentIA[]) : []).slice(0, 10);
   if (resultat.est_un_repas === false || detectes.length === 0) {
     return NextResponse.json({ aliments: [], conseil: "", restant: reservation.restant });
   }

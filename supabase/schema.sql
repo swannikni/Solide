@@ -1033,8 +1033,11 @@ create table if not exists public.application_usage_ia (
   id bigint generated always as identity primary key,
   client_id uuid not null references public.application_clients (id) on delete cascade,
   type text not null check (type in ('assistant', 'etiquette', 'plat')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Appel raté côté IA : gardé pour le diagnostic, mais non compté dans les limites.
+  erreur text check (erreur is null or char_length(erreur) <= 500)
 );
+alter table public.application_usage_ia add column if not exists erreur text check (erreur is null or char_length(erreur) <= 500);
 create index if not exists application_usage_ia_client_idx
   on public.application_usage_ia (client_id, type, created_at);
 create index if not exists application_usage_ia_date_idx
@@ -1080,16 +1083,16 @@ begin
   -- Anti-rafale : une analyse de photo toutes les 5 secondes au plus.
   if p_type <> 'assistant' and exists (
     select 1 from public.application_usage_ia
-    where client_id = v_client and type <> 'assistant' and created_at > now() - interval '5 seconds'
+    where client_id = v_client and type <> 'assistant' and erreur is null and created_at > now() - interval '5 seconds'
   ) then
     raise exception 'trop_rapide';
   end if;
 
   select count(*) into v_utilises from public.application_usage_ia
-  where client_id = v_client and type = p_type and created_at >= v_debut;
+  where client_id = v_client and type = p_type and erreur is null and created_at >= v_debut;
   if v_utilises >= v_limite then raise exception 'limite_jour'; end if;
 
-  if (select count(*) from public.application_usage_ia where created_at >= v_debut) >= v_total then
+  if (select count(*) from public.application_usage_ia where erreur is null and created_at >= v_debut) >= v_total then
     raise exception 'limite_globale';
   end if;
 
