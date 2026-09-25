@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, MessageCircle, LogOut, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, MessageCircle, ShieldCheck, Sparkles, TrendingUp, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 // racine : partie de l'adresse qui allume l'onglet (Admin couvre /admin/...).
@@ -21,8 +20,6 @@ function estActif(pathname: string, racine: string) {
 
 export function Nav({ estAdmin }: { estAdmin: boolean }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
   // Onglet touché : il s'allume tout de suite, sans attendre la fin du chargement.
   // Oublié dès que la page change.
   const [touche, setTouche] = useState<{ href: string; depuis: string } | null>(null);
@@ -32,12 +29,6 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
   const liens = estAdmin
     ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...LIENS_CLIENT]
     : LIENS_CLIENT;
-
-  async function deconnexion() {
-    await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
-  }
 
   // Planche d'étiquettes à imprimer : pas de barres.
   if (pathname.includes("/etiquettes")) return null;
@@ -64,17 +55,26 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
                 {label}
               </Link>
             ))}
-            <button onClick={deconnexion} className="text-[13px] font-medium text-[#555] hover:text-c2b-green">
-              Déconnexion
-            </button>
+            <Link
+              href="/profil"
+              onClick={() => setCible("/profil")}
+              className={`text-[13px] font-medium transition ${
+                actifSur("/profil", "/profil") ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
+              }`}
+            >
+              Mon profil
+            </Link>
           </nav>
-          <button
-            onClick={deconnexion}
-            className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-c2b-muted"
-            aria-label="Déconnexion"
+          <Link
+            href="/profil"
+            onClick={() => setCible("/profil")}
+            className={`md:hidden w-10 h-10 -mr-1.5 rounded-full flex items-center justify-center transition ${
+              actifSur("/profil", "/profil") ? "bg-c2b-green text-c2b-cream" : "bg-c2b-green/[0.06] text-c2b-green"
+            }`}
+            aria-label="Mon profil"
           >
-            <LogOut size={16} />
-          </button>
+            <UserRound size={20} />
+          </Link>
         </div>
       </header>
 

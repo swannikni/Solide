@@ -780,6 +780,60 @@ $$;
 revoke execute on function public.application_reclamer_recompense(text) from public, anon;
 grant execute on function public.application_reclamer_recompense(text) to authenticated;
 
+-- ============ MON PROFIL (modifié par le client) ============
+-- Le client met à jour son profil et ses objectifs du jour, dans des bornes
+-- raisonnables ; Chef2Box est prévenu dans la messagerie si les kcal changent.
+create or replace function public.application_maj_mon_profil(
+  p_nom text,
+  p_profil jsonb,
+  p_calories int,
+  p_proteines int,
+  p_glucides int,
+  p_lipides int,
+  p_palier text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_client uuid := auth.uid();
+  v_avant int;
+begin
+  if v_client is null then raise exception 'non connecté'; end if;
+  if coalesce(length(trim(p_nom)), 0) not between 1 and 80 then raise exception 'nom invalide'; end if;
+  if p_calories not between 1200 and 5000 then raise exception 'calories hors limites'; end if;
+  if p_proteines not between 30 and 350 or p_glucides not between 30 and 700 or p_lipides not between 20 and 250 then
+    raise exception 'macros hors limites';
+  end if;
+  if p_palier is not null and p_palier not in ('P1', 'P2', 'P3', 'P4', 'P5', 'P6') then raise exception 'palier invalide'; end if;
+  if p_profil is not null and (jsonb_typeof(p_profil) <> 'object' or length(p_profil::text) > 2000) then
+    raise exception 'profil invalide';
+  end if;
+
+  select objectif_calories into v_avant from public.application_clients where id = v_client;
+  update public.application_clients
+  set nom = trim(p_nom),
+      profil = coalesce(p_profil, profil),
+      objectif_calories = p_calories,
+      objectif_proteines = p_proteines,
+      objectif_glucides = p_glucides,
+      objectif_lipides = p_lipides,
+      palier = coalesce(p_palier, palier)
+  where id = v_client;
+
+  if v_avant is distinct from p_calories then
+    insert into public.application_messages (client_id, expediteur, contenu)
+    values (v_client, 'client',
+      '✏️ J''ai mis à jour mon profil : objectif ' || coalesce(v_avant::text, '?') || ' → ' || p_calories
+      || ' kcal/jour (P ' || p_proteines || ' g · G ' || p_glucides || ' g · L ' || p_lipides || ' g).');
+  end if;
+end;
+$$;
+revoke execute on function public.application_maj_mon_profil(text, jsonb, int, int, int, int, text) from public, anon;
+grant execute on function public.application_maj_mon_profil(text, jsonb, int, int, int, int, text) to authenticated;
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$
