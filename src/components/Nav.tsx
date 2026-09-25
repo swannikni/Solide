@@ -18,7 +18,16 @@ function estActif(pathname: string, racine: string) {
   return pathname === racine || pathname.startsWith(`${racine}/`);
 }
 
-export function Nav({ estAdmin }: { estAdmin: boolean }) {
+export function Nav({
+  estAdmin,
+  pastilles = { messages: 0, admin: 0 },
+  assistantActif = true,
+}: {
+  estAdmin: boolean;
+  // Nombre d'éléments en attente affiché sur l'onglet (messages non lus, etc.).
+  pastilles?: { messages: number; admin: number };
+  assistantActif?: boolean;
+}) {
   const pathname = usePathname();
   // Onglet touché : il s'allume tout de suite, sans attendre la fin du chargement.
   // Oublié dès que la page change.
@@ -26,9 +35,12 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
   const cible = touche?.depuis === pathname ? touche.href : null;
   const setCible = (href: string) => setTouche({ href, depuis: pathname });
 
+  const liensClient = LIENS_CLIENT.filter((l) => assistantActif || l.href !== "/assistant");
   const liens = estAdmin
-    ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...LIENS_CLIENT]
-    : LIENS_CLIENT;
+    ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...liensClient]
+    : liensClient;
+  const pastille = (href: string) =>
+    href === "/messages" ? pastilles.messages : href === "/admin/clients" ? pastilles.admin : 0;
 
   // Planche d'étiquettes à imprimer : pas de barres.
   if (pathname.includes("/etiquettes")) return null;
@@ -53,6 +65,11 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
                 }`}
               >
                 {label}
+                {pastille(href) > 0 && (
+                  <span className="ml-1.5 rounded-full bg-c2b-gold px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">
+                    {pastille(href)}
+                  </span>
+                )}
               </Link>
             ))}
             <Link
@@ -91,7 +108,17 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
                   actif ? "text-c2b-green" : "text-c2b-muted"
                 }`}
               >
-                <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
+                <span className="relative">
+                  <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
+                  {pastille(href) > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] rounded-full bg-c2b-gold px-1 text-[10px] font-bold leading-[17px] text-c2b-green text-center"
+                      aria-label={`${pastille(href)} en attente`}
+                    >
+                      {pastille(href) > 9 ? "9+" : pastille(href)}
+                    </span>
+                  )}
+                </span>
                 <span>{label}</span>
                 <span className={`h-1 w-1 rounded-full ${actif ? "bg-c2b-gold" : "bg-transparent"}`} />
               </Link>

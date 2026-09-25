@@ -1,49 +1,43 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { exigerSession } from "@/lib/session";
 import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
-import type { Client, Defi, Favori, Plat, Points, RepasJournal } from "@/lib/types";
+import type { Defi, Favori, Plat, Points, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
 import { bilanSemaine, semaineAResumer, serieActuelle, totauxParJour } from "@/lib/progres";
 
 export default async function DashboardPage(props: { searchParams: Promise<{ date?: string; plat?: string }> }) {
   const searchParams = await props.searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, userId, client } = await exigerSession();
 
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: pointsBruts }, { data: defisBruts }, { data: parametre }] =
+  const [{ data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: defisBruts }, { data: parametre }] =
     await Promise.all([
-    supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
       .from("application_repas_journal")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .eq("date", date)
       .order("created_at", { ascending: true })
       .returns<RepasJournal[]>(),
     supabase
       .from("application_repas_journal")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .eq("date", decalerDate(date, -1))
       .order("created_at", { ascending: true })
       .returns<RepasJournal[]>(),
     supabase
       .from("application_favoris")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .order("nom")
       .returns<Favori[]>(),
     supabase
       .from("application_repas_journal")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .order("created_at", { ascending: false })
       .limit(80)
       .returns<RepasJournal[]>(),
@@ -51,18 +45,17 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
     supabase
       .from("application_repas_journal")
       .select("date, calories, proteines, quantite")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .gte("date", decalerDate(aujourdhui, -90))
       .order("date", { ascending: false })
       .returns<{ date: string; calories: number; proteines: number; quantite: number }[]>(),
     supabase
       .from("application_poids")
       .select("date, poids_kg")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .gte("date", decalerDate(aujourdhui, -45))
       .order("date", { ascending: true })
       .returns<{ date: string; poids_kg: number }[]>(),
-    supabase.rpc("application_points"),
     supabase.rpc("application_defis_client"),
     supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
   ]);
@@ -78,9 +71,9 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
     if (recents.length >= 12) break;
   }
 
-  if (!client) redirect("/login");
-  // Fonctions SQL (application_points / application_defis_client) : types déclarés ici.
-  const points = pointsBruts as Points | null;
+  // Points : calculés seulement si les récompenses sont activées par l'admin.
+  const recompensesActives = parametre?.valeur === true;
+  const points = recompensesActives ? ((await supabase.rpc("application_points")).data as Points | null) : null;
   const defis = defisBruts as Defi[] | null;
 
   const jours = totauxParJour(journalRecent ?? []);
@@ -114,7 +107,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         recents={recents}
         serie={serieActuelle(new Set(jours.keys()), aujourdhui)}
         statsSemaine={statsSemaine}
-        points={parametre?.valeur === true ? (points?.solde ?? null) : null}
+        points={points?.solde ?? null}
         defiEnCours={(defis ?? []).find((d) => d.date_debut <= aujourdhui && d.date_fin >= aujourdhui) ?? null}
         platScanne={platScanne}
         codePlatInconnu={codePlat && !platScanne ? codePlat : null}

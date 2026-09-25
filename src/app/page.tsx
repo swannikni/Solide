@@ -1,19 +1,8 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { lireSession } from "@/lib/session";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: client } = await supabase
-    .from("application_clients")
-    .select("est_admin")
-    .eq("id", user.id)
-    .single();
-
-  redirect(client?.est_admin ? "/admin" : "/dashboard");
+  const session = await lireSession();
+  if (!session?.client) redirect("/login");
+  redirect(session.client.est_admin ? "/admin/clients" : "/dashboard");
 }

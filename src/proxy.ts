@@ -32,9 +32,12 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims : vérifie le jeton sur place (clés asymétriques) au lieu d'un
+  // aller-retour vers Supabase à chaque page ; rafraîchit la session si besoin.
+  // En cas d'échec de cette vérification, on retombe sur getUser (aller-retour Auth).
+  const { data, error } = await supabase.auth.getClaims();
+  let user: { user_metadata?: Record<string, unknown> } | null = data?.claims ?? null;
+  if (!user && error) user = (await supabase.auth.getUser()).data.user;
 
   const isPublic = PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
 

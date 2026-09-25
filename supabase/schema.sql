@@ -966,6 +966,33 @@ begin
 end;
 $$;
 
+-- ============ MESSAGES LUS ============
+-- Marque comme lus les messages reçus : le client lit ceux de Chef2Box,
+-- l'admin lit ceux d'un client donné.
+create or replace function public.application_marquer_lus(p_client uuid default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then raise exception 'non connecté'; end if;
+  if p_client is not null and p_client <> auth.uid() then
+    if not public.application_is_admin() then raise exception 'accès refusé'; end if;
+    update public.application_messages set lu = true
+    where client_id = p_client and expediteur = 'client' and not lu;
+  else
+    update public.application_messages set lu = true
+    where client_id = auth.uid() and expediteur = 'admin' and not lu;
+  end if;
+end;
+$$;
+revoke execute on function public.application_marquer_lus(uuid) from public, anon;
+grant execute on function public.application_marquer_lus(uuid) to authenticated;
+
+create index if not exists application_messages_non_lus_idx
+  on public.application_messages (client_id, expediteur) where not lu;
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$

@@ -37,6 +37,8 @@ export default function BienvenuePage() {
       );
       return;
     }
+    // Nouveau jeton : l'ancien indique encore « doit choisir son mot de passe ».
+    await supabase.auth.refreshSession();
     const suite = new URLSearchParams(window.location.search).get("suite");
     router.replace(suite && /^\/(?![\/\\])/.test(suite) ? suite : "/dashboard");
     router.refresh();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Copy, Plus, Star } from "lucide-react";
@@ -76,6 +76,24 @@ export function DashboardClient({
     router.replace(lienJour(date, aujourdhui));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platScanne, codePlatInconnu]);
+
+  // Glisser le doigt vers la gauche / la droite : jour suivant / précédent.
+  const depart = useRef<{ x: number; y: number } | null>(null);
+  function debutGlisse(e: React.TouchEvent) {
+    const t = e.touches[0];
+    depart.current = modalOuverte || repasEnEdition ? null : { x: t.clientX, y: t.clientY };
+  }
+  function finGlisse(e: React.TouchEvent) {
+    const d = depart.current;
+    depart.current = null;
+    if (!d) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - d.x;
+    const dy = t.clientY - d.y;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    if (dx > 0) router.push(lienJour(decalerDate(date, -1), aujourdhui));
+    else if (!estAujourdhui) router.push(lienJour(decalerDate(date, 1), aujourdhui));
+  }
 
   const totaux = totauxDuJour(repasDuJour);
   const estAujourdhui = date === aujourdhui;
@@ -160,7 +178,7 @@ export function DashboardClient({
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-7 pb-20 space-y-6">
+    <main className="max-w-2xl mx-auto px-4 pt-7 pb-20 space-y-6" onTouchStart={debutGlisse} onTouchEnd={finGlisse}>
       <header>
         <div className="flex items-center justify-between mb-2">
           <Link
@@ -230,9 +248,17 @@ export function DashboardClient({
         )}
       </header>
 
-      {statsSemaine && statsSemaine.joursNotes > 0 && <BilanSemaine stats={statsSemaine} />}
-      {estAujourdhui && <InstallerAppli />}
-      {estAujourdhui && <RappelSoir clientId={client.id} compact />}
+      {/* Une seule carte d'info à la fois : bilan du lundi, sinon installation, sinon rappel. */}
+      {statsSemaine && statsSemaine.joursNotes > 0 ? (
+        <BilanSemaine stats={statsSemaine} />
+      ) : (
+        estAujourdhui && (
+          <>
+            <InstallerAppli />
+            <RappelSoir clientId={client.id} compact />
+          </>
+        )
+      )}
 
       {alerteQr && (
         <button

@@ -24,6 +24,7 @@ export function RappelSoir({ clientId, compact = false }: { clientId: string; co
   const [enCours, setEnCours] = useState(false);
   const [message, setMessage] = useState("");
   const [masque, setMasque] = useState(false);
+  const [installee, setInstallee] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -35,6 +36,7 @@ export function RappelSoir({ clientId, compact = false }: { clientId: string; co
       const installee =
         window.matchMedia("(display-mode: standalone)").matches ||
         (navigator as Navigator & { standalone?: boolean }).standalone === true;
+      setInstallee(installee);
       const supporte = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
       if (!supporte) return setEtat(estIos && !installee ? "installer_ios" : "non_supporte");
       if (Notification.permission === "denied") return setEtat("refuse");
@@ -99,7 +101,8 @@ export function RappelSoir({ clientId, compact = false }: { clientId: string; co
   }
 
   if (compact) {
-    if (etat !== "inactif" || masque) return message ? <p className="text-sm font-semibold text-c2b-green">{message}</p> : null;
+    // Sur Aujourd'hui : proposé une fois l'appli installée (avant, c'est l'encart d'installation qui s'affiche).
+    if (etat !== "inactif" || masque || !installee) return message ? <p className="text-sm font-semibold text-c2b-green">{message}</p> : null;
     return (
       <div className="carte flex items-center gap-3 p-4 border-c2b-gold/30">
         <Bell size={22} className="text-c2b-gold flex-shrink-0" />

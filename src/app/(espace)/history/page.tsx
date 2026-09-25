@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { exigerSession } from "@/lib/session";
 import { totauxDuJour } from "@/lib/macros";
-import type { Client, Defi, DemandeRecompense, Points, Poids, Recompense, RepasJournal } from "@/lib/types";
+import type { Defi, DemandeRecompense, Points, Poids, Recompense, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
 import { Motivation } from "@/components/Motivation";
-import { RappelSoir } from "@/components/RappelSoir";
 import { Recompenses } from "@/components/Recompenses";
 import { calculerBadges, meilleureSerie, serieActuelle, totauxParJour } from "@/lib/progres";
 import { dateDuJour, decalerDate } from "@/lib/dates";
@@ -14,33 +12,27 @@ import Link from "next/link";
 import { UtensilsCrossed } from "lucide-react";
 
 export default async function HistoryPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: client } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
-  if (!client) redirect("/login");
+  const { supabase, userId, client } = await exigerSession();
 
   const aujourdhui = dateDuJour();
   const debutSemaine = decalerDate(aujourdhui, -6);
 
-  const [{ data: repas }, { data: lignes }, { data: poids }, { data: pointsBruts }, { data: defisBruts }, { data: catalogue }, { data: demandes }, { data: parametre }] =
+  const [{ data: repas }, { data: lignes }, { data: poids }, { data: defisBruts }, { data: catalogue }, { data: demandes }, { data: parametre }] =
     await Promise.all([
     supabase
       .from("application_repas_journal")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
+      // Journal détaillé : les 14 derniers jours (le reste se consulte jour par jour).
+      .gte("date", decalerDate(aujourdhui, -13))
       .order("date", { ascending: false })
       .order("created_at", { ascending: true })
-      .limit(300)
       .returns<RepasJournal[]>(),
     // Une année de journal (colonnes minimales) pour la série et les badges.
     supabase
       .from("application_repas_journal")
       .select("date, calories, proteines, quantite")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .gte("date", decalerDate(aujourdhui, -365))
       .lte("date", aujourdhui)
       .order("date", { ascending: false }) // si la limite du serveur coupe, on garde le plus récent
@@ -49,25 +41,25 @@ export default async function HistoryPage() {
     supabase
       .from("application_poids")
       .select("date, poids_kg")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .gte("date", decalerDate(aujourdhui, -365))
       .order("date", { ascending: true })
       .returns<Pick<Poids, "date" | "poids_kg">[]>(),
-    supabase.rpc("application_points"),
     supabase.rpc("application_defis_client"),
     supabase.from("application_recompenses").select("*").eq("actif", true).order("cout").returns<Recompense[]>(),
     supabase
       .from("application_recompenses_demandes")
       .select("*")
-      .eq("client_id", user.id)
+      .eq("client_id", userId)
       .order("created_at", { ascending: false })
       .limit(10)
       .returns<DemandeRecompense[]>(),
     supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
   ]);
 
-  // Fonctions SQL (application_points / application_defis_client) : types déclarés ici.
-  const points = pointsBruts as Points | null;
+  // Points : calculés seulement si les récompenses sont activées par l'admin.
+  const recompensesActives = parametre?.valeur === true;
+  const points = recompensesActives ? ((await supabase.rpc("application_points")).data as Points | null) : null;
   const defis = defisBruts as Defi[] | null;
   const jours = totauxParJour(lignes ?? []);
   const caloriesSemaine = Array.from({ length: 7 }, (_, i) => {
@@ -131,18 +123,16 @@ export default async function HistoryPage() {
           badges={badges}
         />
 
-        {points && (
+        {(defis?.length || recompensesActives) && (
           <Recompenses
-            points={points}
+            points={points ?? { jours: 0, jours_calories: 0, jours_proteines: 0, bonus_series: 0, defis: 0, gagnes: 0, depenses: 0, solde: 0 }}
             defis={defis ?? []}
             catalogue={catalogue ?? []}
             demandes={demandes ?? []}
             aujourdhui={aujourdhui}
-            recompensesActives={parametre?.valeur === true}
+            recompensesActives={recompensesActives && !!points}
           />
         )}
-
-        <RappelSoir clientId={client.id} />
 
         <Progres
           clientId={client.id}
@@ -154,7 +144,9 @@ export default async function HistoryPage() {
           poidsDepart={poidsDepart}
         />
 
-        <h2 className="font-serif text-[26px] text-c2b-green pt-2">Journal des repas</h2>
+        <h2 className="font-serif text-[26px] text-c2b-green pt-2">
+          Journal <span className="text-base text-c2b-muted">· 14 derniers jours</span>
+        </h2>
 
         {parJour.size === 0 && (
           <p className="text-sm text-c2b-muted italic text-center py-8">Aucun repas enregistré pour le moment.</p>

@@ -38,3 +38,30 @@
     @apply inline-flex items-center gap-2 rounded-full bg-c2b-gold/[0.12] px-3.5 py-1.5 text-xs font-bold tracking-wide text-c2b-gold;
   }
 }
+
+/* Arrivée d'une page : fondu court (désactivé si l'utilisateur limite les animations). */
+/* Opacité seule : un transform déplacerait les éléments fixes (bouton +, fenêtres). */
+@keyframes apparition {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@layer utilities {
+  .animate-apparition {
+    animation: apparition 0.18s ease-out both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-apparition {
+    animation: none;
+  }
+}
+
+/* Supprime le flash gris au toucher sur iPhone. */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
