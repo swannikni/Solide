@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { GRIGNOTAGE, METIERS, PLAISIR, SEANCES, calculerObjectifs, profilComplet, type Profil } from "@/lib/objectifs";
+import { GRIGNOTAGE, LIMITES, METIERS, PLAISIR, SEANCES, calculerObjectifs, profilComplet, type Profil } from "@/lib/objectifs";
 
 // Réception des questionnaires remplis sur chef2box.com. Route publique
 // (appelée depuis le site) : on valide tout, on recalcule les objectifs
@@ -52,9 +52,9 @@ export async function POST(request: Request) {
   const objectifs = (texte(d.objectif, 300) ?? "").split(",").map((o) => o.trim()).filter(Boolean);
   const profil: Partial<Profil> = {
     sexe: d.sexe === "Femme" ? "Femme" : d.sexe === "Homme" ? "Homme" : undefined,
-    age: entier(d.age, 10, 100) ?? 0,
-    taille: entier(d.taille, 100, 250) ?? 0,
-    poids: entier(d.poids, 25, 300) ?? 0,
+    age: entier(d.age, LIMITES.age.min, LIMITES.age.max) ?? 0,
+    taille: entier(d.taille, LIMITES.taille.min, LIMITES.taille.max) ?? 0,
+    poids: entier(d.poids, LIMITES.poids.min, LIMITES.poids.max) ?? 0,
     objectifs,
     seances: (SEANCES as readonly string[]).includes(String(d.seances)) ? (String(d.seances) as Profil["seances"]) : "0",
     job: (METIERS as readonly string[]).includes(String(d.job)) ? (String(d.job) as Profil["job"]) : "Principalement assis",

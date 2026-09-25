@@ -130,15 +130,33 @@ export function calculerObjectifs(p: Profil) {
   return { calories: kcal, proteines, glucides, lipides, palier: `P${palier.n}` as (typeof PALIERS)[number] };
 }
 
+// Bornes identiques au questionnaire du site : une taille de 18 cm au lieu
+// de 180 rendrait le bilan faux.
+export const LIMITES = {
+  age: { min: 16, max: 80 },
+  taille: { min: 130, max: 220 },
+  poids: { min: 35, max: 250 },
+} as const;
+
+// Un repas Chef2Box : jamais moins de 550 kcal ni plus de 850 kcal.
+export const REPAS_KCAL = { min: 550, max: 850 } as const;
+
+export function horsLimites(p: Partial<Profil>): string[] {
+  const erreurs: string[] = [];
+  if (p.age && (p.age < LIMITES.age.min || p.age > LIMITES.age.max)) erreurs.push("âge entre 16 et 80 ans");
+  if (p.taille && (p.taille < LIMITES.taille.min || p.taille > LIMITES.taille.max))
+    erreurs.push("taille en cm entre 130 et 220 (ex. 175)");
+  if (p.poids && (p.poids < LIMITES.poids.min || p.poids > LIMITES.poids.max)) erreurs.push("poids en kg entre 35 et 250");
+  return erreurs;
+}
+
 export function profilComplet(p: Partial<Profil>): p is Profil {
   return (
     (p.sexe === "Homme" || p.sexe === "Femme") &&
     !!p.age &&
-    p.age > 0 &&
     !!p.taille &&
-    p.taille > 0 &&
     !!p.poids &&
-    p.poids > 0 &&
+    horsLimites(p).length === 0 &&
     Array.isArray(p.objectifs) &&
     p.objectifs.length > 0 &&
     !!p.seances &&

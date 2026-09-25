@@ -8,6 +8,7 @@ import { AdminOnglets } from "@/app/admin/AdminOnglets";
 import { QrCode } from "@/components/QrCode";
 import { genererCodePlat, lienPlat } from "@/lib/qr";
 import type { Plat } from "@/lib/types";
+import { REPAS_KCAL } from "@/lib/objectifs";
 
 type Brouillon = {
   id?: string;
@@ -53,6 +54,11 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
   async function enregistrer() {
     if (!brouillon || !brouillon.nom.trim() || !brouillon.calories) {
       setErreur("Le nom et les calories sont obligatoires.");
+      return;
+    }
+    const kcal = nombre(brouillon.calories);
+    if (kcal < REPAS_KCAL.min || kcal > REPAS_KCAL.max) {
+      setErreur(`Un repas Chef2Box doit faire entre ${REPAS_KCAL.min} et ${REPAS_KCAL.max} kcal.`);
       return;
     }
     setEnregistrement(true);
@@ -224,6 +230,12 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
                   </Champ>
                 ))}
               </div>
+              {brouillon.calories &&
+                (nombre(brouillon.calories) < REPAS_KCAL.min || nombre(brouillon.calories) > REPAS_KCAL.max) && (
+                  <p className="text-xs font-semibold text-red-600">
+                    Un repas Chef2Box doit faire entre {REPAS_KCAL.min} et {REPAS_KCAL.max} kcal.
+                  </p>
+                )}
               {brouillon.id && (
                 <label className="flex items-center gap-2.5 text-sm font-semibold text-c2b-green pt-1 cursor-pointer">
                   <input

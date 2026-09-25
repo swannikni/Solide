@@ -1004,9 +1004,9 @@ HA
       <div class="q-field"><label>Prénom & Nom *</label><input type="text" id="q-nom" placeholder=""></div>
       <div class="q-field"><label>Email *</label><input type="email" id="q-email" placeholder="" autocomplete="off"></div>
       <div class="q-field q-full"><label>WhatsApp</label><input type="tel" id="q-tel" placeholder="+212 6XX XXX XXX"></div>
-      <div class="q-field"><label>Âge *</label><input type="number" id="q-age" placeholder="" min="16" max="80"></div>
-      <div class="q-field"><label>Taille (cm) *</label><input type="number" id="q-taille" placeholder=""></div>
-      <div class="q-field"><label>Poids (kg) *</label><input type="number" id="q-poids" placeholder=""></div>
+      <div class="q-field"><label>Âge *</label><input type="number" id="q-age" placeholder="ex. 32" min="16" max="80" inputmode="numeric"></div>
+      <div class="q-field"><label>Taille (cm) *</label><input type="number" id="q-taille" placeholder="ex. 175" min="130" max="220" inputmode="numeric"></div>
+      <div class="q-field"><label>Poids (kg) *</label><input type="number" id="q-poids" placeholder="ex. 72" min="35" max="250" inputmode="numeric"></div>
       <div class="q-field q-full"><label>Sexe *</label><div class="q-pills">
         <label class="q-pill"><input type="radio" name="sexe" value="Homme"><span>Homme</span></label>
         <label class="q-pill"><input type="radio" name="sexe" value="Femme"><span>Femme</span></label>
@@ -1314,10 +1314,25 @@ function genererBilan() {
   var preferes = getV('q-preferes');
 
   var errEl = document.getElementById('q-error');
-
-  if (!nom || nom === '—' || !sexe || !age || !taille || !poids || !objectif || objectif === '—') {
+  var MSG_OBLIGATOIRE = '⚠️ Merci de remplir tous les champs obligatoires (nom, email, profil, objectif, séances, travail, repas/jour).';
+  var afficherErreur = function(msg) {
+    errEl.textContent = msg;
     errEl.style.display = 'block';
     errEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+  };
+
+  if (!nom || nom === '—' || !sexe || !age || !taille || !poids || !objectif || objectif === '—') {
+    afficherErreur(MSG_OBLIGATOIRE);
+    return;
+  }
+
+  // Valeurs impossibles (ex. 18 cm au lieu de 180) : le bilan serait faux.
+  var horsLimites = [];
+  if (age < 16 || age > 80) horsLimites.push('âge entre 16 et 80 ans');
+  if (taille < 130 || taille > 220) horsLimites.push('taille en centimètres entre 130 et 220 (ex. 175)');
+  if (poids < 35 || poids > 250) horsLimites.push('poids en kilos entre 35 et 250');
+  if (horsLimites.length) {
+    afficherErreur('⚠️ Vérifiez votre ' + horsLimites.join(', votre ') + '.');
     return;
   }
   errEl.style.display = 'none';
@@ -1392,6 +1407,16 @@ function genererBilan() {
     { n:6, min:0,    kcal:450,  prot:30, lip:17, gluc:44  }
   ];
   var palier = C2B_PALIERS.find(function(p){ return kcal >= p.min; }) || C2B_PALIERS[C2B_PALIERS.length-1];
+
+  // Un repas Chef2Box : jamais moins de 550 kcal ni plus de 850 kcal.
+  // Les macros du repas suivent la même proportion.
+  var REPAS_MIN = 550, REPAS_MAX = 850;
+  var kcalRepas = Math.min(REPAS_MAX, Math.max(REPAS_MIN, palier.kcal));
+  if (kcalRepas !== palier.kcal) {
+    var f = kcalRepas / palier.kcal;
+    palier = { n: palier.n, min: palier.min, kcal: kcalRepas,
+      prot: Math.round(palier.prot * f), lip: Math.round(palier.lip * f), gluc: Math.round(palier.gluc * f) };
+  }
 
   var deuxRepas = (repartition && repartition.indexOf('+') !== -1) || nbRepas >= 2;
   var repasKcal  = palier.kcal;

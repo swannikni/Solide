@@ -13,6 +13,7 @@ import {
   PALIERS,
   SEANCES,
   calculerObjectifs,
+  horsLimites,
   profilComplet,
   type Profil,
 } from "@/lib/objectifs";
@@ -624,6 +625,11 @@ export function ClientsClient({
                     </Champ>
                   ))}
                 </div>
+                {horsLimites(versProfil(fiche.profil)).length > 0 && (
+                  <p className="text-xs font-semibold text-red-600">
+                    Vérifiez : {horsLimites(versProfil(fiche.profil)).join(", ")}.
+                  </p>
+                )}
                 <div>
                   <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
                     Objectif (plusieurs possibles)
