@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RecompensesAdminPage() {
   const { supabase } = await exigerAdmin();
-  const [{ data: demandes }, { data: defis }, { data: catalogue }] = await Promise.all([
+  const [{ data: demandes }, { data: defis }, { data: catalogue }, { data: parametre }] = await Promise.all([
     supabase
       .from("application_recompenses_demandes")
       .select("*, client:application_clients(nom)")
@@ -16,6 +16,7 @@ export default async function RecompensesAdminPage() {
       .returns<(DemandeRecompense & { client: { nom: string } | null })[]>(),
     supabase.from("application_defis").select("*").order("date_debut", { ascending: false }).limit(30).returns<Defi[]>(),
     supabase.from("application_recompenses").select("*").order("cout").returns<Recompense[]>(),
+    supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
   ]);
 
   return (
@@ -25,6 +26,7 @@ export default async function RecompensesAdminPage() {
         defisInitiaux={defis ?? []}
         catalogueInitial={catalogue ?? []}
         aujourdhui={dateDuJour()}
+        activesInitial={parametre?.valeur === true}
       />
     </div>
   );

@@ -26,7 +26,7 @@ export default async function HistoryPage() {
   const aujourdhui = dateDuJour();
   const debutSemaine = decalerDate(aujourdhui, -6);
 
-  const [{ data: repas }, { data: lignes }, { data: poids }, { data: pointsBruts }, { data: defisBruts }, { data: catalogue }, { data: demandes }] =
+  const [{ data: repas }, { data: lignes }, { data: poids }, { data: pointsBruts }, { data: defisBruts }, { data: catalogue }, { data: demandes }, { data: parametre }] =
     await Promise.all([
     supabase
       .from("application_repas_journal")
@@ -63,6 +63,7 @@ export default async function HistoryPage() {
       .order("created_at", { ascending: false })
       .limit(10)
       .returns<DemandeRecompense[]>(),
+    supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
   ]);
 
   // Fonctions SQL (application_points / application_defis_client) : types déclarés ici.
@@ -137,6 +138,7 @@ export default async function HistoryPage() {
             catalogue={catalogue ?? []}
             demandes={demandes ?? []}
             aujourdhui={aujourdhui}
+            recompensesActives={parametre?.valeur === true}
           />
         )}
 

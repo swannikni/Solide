@@ -17,7 +17,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: pointsBruts }, { data: defisBruts }] =
+  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: pointsBruts }, { data: defisBruts }, { data: parametre }] =
     await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
@@ -64,6 +64,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       .returns<{ date: string; poids_kg: number }[]>(),
     supabase.rpc("application_points"),
     supabase.rpc("application_defis_client"),
+    supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
   ]);
 
   // Récents : derniers aliments distincts (par nom), hors box Chef2Box du jour.
@@ -113,7 +114,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         recents={recents}
         serie={serieActuelle(new Set(jours.keys()), aujourdhui)}
         statsSemaine={statsSemaine}
-        points={points?.solde ?? null}
+        points={parametre?.valeur === true ? (points?.solde ?? null) : null}
         defiEnCours={(defis ?? []).find((d) => d.date_debut <= aujourdhui && d.date_fin >= aujourdhui) ?? null}
         platScanne={platScanne}
         codePlatInconnu={codePlat && !platScanne ? codePlat : null}

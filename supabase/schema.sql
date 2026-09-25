@@ -834,6 +834,138 @@ $$;
 revoke execute on function public.application_maj_mon_profil(text, jsonb, int, int, int, int, text) from public, anon;
 grant execute on function public.application_maj_mon_profil(text, jsonb, int, int, int, int, text) to authenticated;
 
+-- ============ PARAMÈTRES GÉNÉRAUX ============
+-- Réglages de l'appli modifiables par l'admin (ex. récompenses activées ou non).
+create table if not exists public.application_parametres (
+  cle text primary key,
+  valeur jsonb not null
+);
+alter table public.application_parametres enable row level security;
+drop policy if exists "parametres_lecture" on public.application_parametres;
+create policy "parametres_lecture" on public.application_parametres
+  for select to authenticated using (true);
+drop policy if exists "parametres_admin" on public.application_parametres;
+create policy "parametres_admin" on public.application_parametres
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Récompenses désactivées par défaut : l'admin les active quand il est prêt.
+insert into public.application_parametres (cle, valeur) values ('recompenses_actives', 'false')
+on conflict (cle) do nothing;
+
+-- Garde-fou : une journée ne compte (points, séries, défis) que si elle est
+-- réaliste, c'est-à-dire au moins 40 % de l'objectif calories noté.
+create or replace function public.application_defis_client(p_client uuid default auth.uid())
+returns table (id uuid, titre text, type text, cible int, date_debut date, date_fin date, points int, fait int)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if p_client is distinct from auth.uid() and not public.application_is_admin() then
+    raise exception 'accès refusé';
+  end if;
+  return query
+  with c as (
+    select objectif_calories as cal, objectif_proteines as prot from public.application_clients where application_clients.id = p_client
+  ), j as (
+    select jc.* from public.application_jours_client(p_client) jc, c where c.cal > 0 and jc.calories >= c.cal * 0.4
+  )
+  select d.id, d.titre, d.type, d.cible, d.date_debut, d.date_fin, d.points,
+    (select count(*)::int from j, c
+      where j.jour between d.date_debut and d.date_fin
+        and case d.type
+          when 'jours_notes' then true
+          when 'jours_calories' then abs(j.calories - c.cal) <= c.cal * 0.1
+          else c.prot > 0 and j.proteines >= c.prot * 0.9
+        end)
+  from public.application_defis d
+  order by d.date_debut desc;
+end;
+$$;
+
+create or replace function public.application_points(p_client uuid default auth.uid())
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_jours int; v_cal int; v_prot int; v_series int; v_defis int; v_depenses int;
+  c record;
+begin
+  if p_client is distinct from auth.uid() and not public.application_is_admin() then
+    raise exception 'accès refusé';
+  end if;
+  select objectif_calories as cal, objectif_proteines as prot into c
+  from public.application_clients where id = p_client;
+
+  select count(*),
+         count(*) filter (where abs(v.calories - c.cal) <= c.cal * 0.1),
+         count(*) filter (where c.prot > 0 and v.proteines >= c.prot * 0.9)
+  into v_jours, v_cal, v_prot
+  from public.application_jours_client(p_client) v
+  where c.cal > 0 and v.calories >= c.cal * 0.4;
+
+  select coalesce(sum(floor(n / 7.0)), 0) into v_series
+  from (
+    select count(*) as n
+    from (select v.jour, v.jour - (row_number() over (order by v.jour))::int as ilot
+          from public.application_jours_client(p_client) v
+          where c.cal > 0 and v.calories >= c.cal * 0.4) t
+    group by ilot
+  ) s;
+
+  select coalesce(sum(points), 0) into v_defis
+  from public.application_defis_client(p_client) where fait >= cible;
+
+  select coalesce(sum(cout), 0) into v_depenses
+  from public.application_recompenses_demandes where client_id = p_client and statut <> 'refusee';
+
+  return jsonb_build_object(
+    'jours', v_jours, 'jours_calories', v_cal, 'jours_proteines', v_prot,
+    'bonus_series', v_series * 50, 'defis', v_defis,
+    'gagnes', v_jours * 10 + v_cal * 10 + v_prot * 10 + v_series * 50 + v_defis,
+    'depenses', v_depenses,
+    'solde', v_jours * 10 + v_cal * 10 + v_prot * 10 + v_series * 50 + v_defis - v_depenses
+  );
+end;
+$$;
+
+create or replace function public.application_reclamer_recompense(p_recompense text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_client uuid := auth.uid();
+  r record;
+  v_solde int;
+  v_id uuid;
+begin
+  if v_client is null then raise exception 'non connecté'; end if;
+  if coalesce((select valeur = 'true'::jsonb from public.application_parametres where cle = 'recompenses_actives'), false) is not true then
+    raise exception 'récompenses désactivées';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('recompense:' || v_client::text));
+  select * into r from public.application_recompenses where id = p_recompense and actif;
+  if not found then raise exception 'récompense indisponible'; end if;
+  v_solde := (public.application_points(v_client) ->> 'solde')::int;
+  if v_solde < r.cout then raise exception 'points insuffisants'; end if;
+
+  insert into public.application_recompenses_demandes (client_id, recompense_id, titre, cout)
+  values (v_client, r.id, r.emoji || ' ' || r.titre, r.cout)
+  returning id into v_id;
+
+  insert into public.application_messages (client_id, expediteur, contenu)
+  values (v_client, 'client',
+    '🎁 J''ai débloqué une récompense : ' || r.emoji || ' ' || r.titre || ' (' || r.cout || ' points). Merci de me la réserver !');
+  return v_id;
+end;
+$$;
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$

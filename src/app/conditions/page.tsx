@@ -34,7 +34,8 @@ export default function ConditionsPage() {
       <section className="space-y-2">
         <h2>Points et récompenses</h2>
         <p>
-          Les points récompensent votre régularité. Ils n&apos;ont pas de valeur en argent, ne sont ni échangeables ni
+          Lorsque Chef2Box propose des points et des récompenses, ils récompensent votre régularité. Seules les
+          journées réalistes comptent. Les points n&apos;ont pas de valeur en argent, ne sont ni échangeables ni
           remboursables, et Chef2Box peut adapter le catalogue des récompenses. Une récompense débloquée est remise avec
           une prochaine livraison. En cas d&apos;abus (repas fictifs pour gagner des points), Chef2Box peut annuler les
           points concernés.

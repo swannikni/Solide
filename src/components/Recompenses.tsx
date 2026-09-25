@@ -27,12 +27,15 @@ export function Recompenses({
   catalogue,
   demandes,
   aujourdhui,
+  recompensesActives,
 }: {
   points: Points;
   defis: Defi[];
   catalogue: Recompense[];
   demandes: DemandeRecompense[];
   aujourdhui: string;
+  // Réglage admin : sans récompenses, seuls les défis en cours s'affichent (sans points).
+  recompensesActives: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -57,8 +60,11 @@ export function Recompenses({
     router.refresh();
   }
 
+  if (!recompensesActives && defisEnCours.length === 0) return null;
+
   return (
     <div className="space-y-4">
+      {recompensesActives && (
       <section className="rounded-[20px] bg-c2b-gold p-5 text-c2b-green">
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -90,6 +96,7 @@ export function Recompenses({
           </ul>
         </details>
       </section>
+      )}
 
       {defisEnCours.map((d) => {
         const fait = Math.min(d.fait ?? 0, d.cible);
@@ -104,9 +111,11 @@ export function Recompenses({
                   {d.cible} {LIBELLE_DEFI[d.type]}
                 </p>
               </div>
-              <span className="rounded-full bg-c2b-gold/15 px-2.5 py-1 text-xs font-bold text-c2b-green whitespace-nowrap">
-                +{d.points} pts
-              </span>
+              {recompensesActives && (
+                <span className="rounded-full bg-c2b-gold/15 px-2.5 py-1 text-xs font-bold text-c2b-green whitespace-nowrap">
+                  +{d.points} pts
+                </span>
+              )}
             </div>
             <div className="mt-3 flex items-center gap-2.5">
               <div className="flex-1 h-2.5 rounded-full bg-c2b-green/10 overflow-hidden">
@@ -119,11 +128,16 @@ export function Recompenses({
                 {fait}/{d.cible}
               </span>
             </div>
-            {reussi && <p className="text-sm font-bold text-c2b-green mt-2">🏆 Défi réussi, points gagnés !</p>}
+            {reussi && (
+              <p className="text-sm font-bold text-c2b-green mt-2">
+                🏆 Défi réussi{recompensesActives ? ", points gagnés !" : ", bravo !"}
+              </p>
+            )}
           </section>
         );
       })}
 
+      {recompensesActives && (
       <section className="carte p-5">
         <h2 className="font-serif text-xl text-c2b-green">Récompenses</h2>
         <p className="text-xs text-c2b-muted mt-0.5 mb-4">Échangez vos points contre de vrais cadeaux Chef2Box.</p>
@@ -200,6 +214,7 @@ export function Recompenses({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

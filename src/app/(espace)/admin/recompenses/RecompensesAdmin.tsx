@@ -31,11 +31,13 @@ export function RecompensesAdmin({
   defisInitiaux,
   catalogueInitial,
   aujourdhui,
+  activesInitial,
 }: {
   demandesInitiales: Demande[];
   defisInitiaux: Defi[];
   catalogueInitial: Recompense[];
   aujourdhui: string;
+  activesInitial: boolean;
 }) {
   const supabase = createClient();
   const [demandes, setDemandes] = useState(demandesInitiales);
@@ -51,6 +53,17 @@ export function RecompensesAdmin({
     points: "150",
   });
   const [message, setMessage] = useState("");
+  const [actives, setActives] = useState(activesInitial);
+
+  async function basculerRecompenses() {
+    const valeur = !actives;
+    const { error } = await supabase
+      .from("application_parametres")
+      .upsert({ cle: "recompenses_actives", valeur }, { onConflict: "cle" });
+    if (error) return setMessage("Changement impossible, réessayez.");
+    setActives(valeur);
+    setMessage(valeur ? "Récompenses activées : les clients voient leurs points et les cadeaux." : "Récompenses désactivées.");
+  }
 
   const enAttente = demandes.filter((d) => d.statut === "en_attente");
   const traitees = demandes.filter((d) => d.statut !== "en_attente").slice(0, 15);
@@ -132,6 +145,34 @@ export function RecompensesAdmin({
           récompenses ci-dessous. Chaque demande arrive aussi dans leurs Messages.
         </p>
       </div>
+
+      <section className={`carte p-5 ${actives ? "border-c2b-gold/50" : ""}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-bold text-c2b-green">Points et cadeaux pour les clients</p>
+            <p className="text-xs text-c2b-muted mt-0.5">
+              {actives
+                ? "Activés : les clients voient leurs points et peuvent débloquer les cadeaux."
+                : "Désactivés : les clients ne voient ni points ni cadeaux. Les défis restent visibles, sans points."}
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={actives}
+            aria-label="Activer les récompenses"
+            onClick={basculerRecompenses}
+            className={`relative h-8 w-14 flex-shrink-0 rounded-full transition ${actives ? "bg-c2b-green" : "bg-c2b-green/20"}`}
+          >
+            <span
+              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all ${actives ? "left-7" : "left-1"}`}
+            />
+          </button>
+        </div>
+        <p className="text-[11px] text-c2b-muted mt-3">
+          Garde-fou : une journée ne rapporte des points (et ne compte pour les défis) que si au moins 40 % de
+          l&apos;objectif calories est noté. Remplir quelques aliments au hasard ne sert à rien.
+        </p>
+      </section>
 
       {message && (
         <button onClick={() => setMessage("")} className="w-full carte px-4 py-3 text-left text-sm font-semibold text-c2b-green">
