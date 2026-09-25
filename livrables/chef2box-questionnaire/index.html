@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chef2Box — Bilan Objectifs & Macros</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+:root {
+  --green: #1c2e1e;
+  --green-mid: #2d4a2d;
+  --gold: #c9973a;
+  --cream: #f5f0e8;
+  --cream-dark: #e8e0cc;
+  --white: #ffffff;
+  --text: #1c2e1e;
+  --muted: #6b7c6b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+
+/* NAV */
+.topbar {
+  background: var(--green);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; height: 58px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+}
+.logo-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 24px; color: var(--cream); letter-spacing: 1px;
+  display: flex; align-items: center;
+}
+.logo-text .two { color: var(--gold); }
+.logo-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--gold); margin: 0 3px; margin-bottom: 2px;
+}
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  background: transparent; border: none;
+  color: rgba(245,240,232,0.5);
+  font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 7px 13px; border-radius: 8px; cursor: pointer; transition: all 0.2s;
+}
+.nav-tab.active { background: var(--gold); color: var(--green); }
+.nav-tab:hover:not(.active) { background: rgba(255,255,255,0.1); color: var(--cream); }
+.badge {
+  background: var(--gold); color: var(--green);
+  font-size: 10px; font-weight: 900; border-radius: 10px; padding: 1px 6px; margin-left: 4px;
+}
+
+/* PAGES */
+.page { display: none; }
+.page.active { display: block; }
+
+/* HERO */
+.form-hero {
+  background: var(--green);
+  padding: 40px 24px 56px;
+  position: relative; overflow: hidden;
+}
+.form-hero::before {
+  content: '';
+  position: absolute; top: -60px; right: -60px;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: rgba(201,151,58,0.08);
+  pointer-events: none;
+}
+.form-hero::after {
+  content: ''; position: absolute; bottom: -24px; left: 0; right: 0;
+  height: 48px; background: var(--cream);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+.hero-eyebrow {
+  font-size: 10px; font-weight: 900; letter-spacing: 3px;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before {
+  content: ''; display: inline-block;
+  width: 24px; height: 2px; background: var(--gold);
+}
+.hero-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 48px; color: var(--cream);
+  line-height: 0.95; margin-bottom: 14px; letter-spacing: 1px;
+}
+.hero-title em {
+  color: var(--gold); font-style: normal;
+}
+.hero-sub {
+  font-size: 13px; color: rgba(245,240,232,0.55);
+  font-weight: 600; max-width: 420px; line-height: 1.6;
+}
+.hero-badges {
+  display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap;
+}
+.hero-badge {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px; padding: 5px 12px;
+  font-size: 11px; font-weight: 800;
+  color: rgba(245,240,232,0.6);
+  letter-spacing: 0.5px;
+}
+
+/* FORM */
+.form-wrap { max-width: 680px; margin: 0 auto; padding: 36px 20px 80px; }
+.section { margin-bottom: 32px; animation: fadeUp 0.4s ease both; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+.section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid var(--cream-dark); }
+.section-icon { font-size: 18px; }
+.section-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--green); letter-spacing: 1px; }
+
+/* CHAMPS */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+.field input[type="text"], .field input[type="number"], .field input[type="email"], .field input[type="tel"], .field textarea {
+  width: 100%; background: var(--white); border: 2px solid var(--cream-dark);
+  border-radius: 10px; padding: 11px 13px;
+  font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700; color: var(--green);
+  outline: none; transition: border-color 0.2s;
+}
+.field input:focus, .field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,58,0.12); }
+.field textarea { min-height: 80px; resize: vertical; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* PILLS — checkbox (multi) et radio (single) */
+.options-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.option-pill input { display: none; }
+.option-pill label {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--white); border: 2px solid var(--cream-dark);
+  border-radius: 24px; padding: 8px 14px;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  cursor: pointer; transition: all 0.15s; user-select: none;
+}
+.option-pill label:hover { border-color: var(--gold); background: rgba(201,151,58,0.06); }
+.option-pill input:checked + label { background: var(--green); border-color: var(--green); color: var(--cream); }
+.pill-check { display: none; font-size: 11px; }
+.option-pill input:checked + label .pill-check { display: inline; }
+
+/* SUBMIT */
+.submit-wrap { margin-top: 36px; text-align: center; }
+.btn-submit {
+  background: var(--gold); border: none; border-radius: 14px;
+  padding: 15px 44px; font-family: 'Bebas Neue', sans-serif;
+  font-size: 21px; letter-spacing: 2px; color: var(--green);
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 20px rgba(201,151,58,0.35);
+}
+.btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(201,151,58,0.45); }
+
+/* SUCCESS */
+.success-screen { display: none; }
+.success-screen.show { display: block; }
+
+.success-hero {
+  background: var(--green);
+  padding: 48px 24px 64px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.success-hero::before {
+  content: '';
+  position: absolute; top: -80px; right: -80px;
+  width: 260px; height: 260px; border-radius: 50%;
+  background: rgba(201,151,58,0.07);
+  pointer-events: none;
+}
+.success-hero::after {
+  content: ''; position: absolute; bottom: -24px; left: 0; right: 0;
+  height: 48px; background: var(--cream);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+.success-check {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  font-size: 28px;
+}
+.success-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 42px; color: var(--cream); line-height: 1;
+  margin-bottom: 10px; letter-spacing: 1px;
+}
+.success-title span { color: var(--gold); }
+.success-sub {
+  font-size: 14px; color: rgba(245,240,232,0.6);
+  font-weight: 600; max-width: 360px; margin: 0 auto;
+  line-height: 1.6;
+}
+
+.success-body {
+  max-width: 520px; margin: 0 auto;
+  padding: 36px 24px 60px;
+}
+
+.success-steps {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-bottom: 32px;
+}
+.success-step {
+  display: flex; align-items: flex-start; gap: 14px;
+  background: white; border-radius: 14px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--cream-dark);
+}
+.success-step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--green); color: var(--cream);
+  font-family: 'Bebas Neue', sans-serif; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.success-step-text strong {
+  display: block; font-size: 13px; font-weight: 800;
+  color: var(--green); margin-bottom: 2px;
+}
+.success-step-text span {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+}
+
+.success-contact {
+  background: var(--green); border-radius: 16px;
+  padding: 20px; text-align: center; margin-bottom: 24px;
+}
+.success-contact p {
+  font-size: 12px; color: rgba(245,240,232,0.55);
+  font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 12px;
+}
+.success-contact-links {
+  display: flex; justify-content: center;
+  gap: 16px; flex-wrap: wrap;
+}
+.success-contact-link {
+  font-size: 12px; font-weight: 800;
+  color: var(--gold); text-decoration: none;
+}
+
+.success-new {
+  text-align: center;
+}
+.btn-new {
+  background: transparent; border: 2px solid var(--cream-dark);
+  border-radius: 12px; padding: 12px 28px;
+  font-family: 'Nunito', sans-serif; font-size: 13px;
+  font-weight: 800; color: var(--muted); cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-new:hover { border-color: var(--green); color: var(--green); }
+
+/* DASHBOARD */
+.dash-wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+.dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.dash-title { font-family: 'Bebas Neue', sans-serif; font-size: 30px; color: var(--green); letter-spacing: 1px; }
+.btn-clear { background: transparent; border: 2px solid #e0d8c8; border-radius: 8px; padding: 6px 12px; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+.btn-clear:hover { border-color: #c44; color: #c44; }
+.empty-state { text-align: center; padding: 80px 24px; color: var(--muted); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-text { font-size: 15px; font-weight: 700; }
+
+/* RESPONSE CARD */
+.response-card { background: var(--white); border-radius: 16px; border: 2px solid var(--cream-dark); margin-bottom: 14px; overflow: hidden; }
+.response-card:hover { box-shadow: 0 4px 24px rgba(28,46,30,0.1); }
+.card-head { background: var(--green); padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.card-name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--cream); letter-spacing: 1px; }
+.card-meta { font-size: 11px; font-weight: 700; color: rgba(245,240,232,0.5); letter-spacing: 0.5px; margin-top: 2px; }
+.card-actions { display: flex; align-items: center; gap: 10px; }
+.card-chevron { color: var(--gold); font-size: 14px; transition: transform 0.2s; }
+.card-head.open .card-chevron { transform: rotate(180deg); }
+.btn-copy {
+  background: var(--gold); border: none; border-radius: 8px;
+  padding: 5px 12px; font-family: 'Nunito', sans-serif;
+  font-size: 10px; font-weight: 900; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--green);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn-copy:hover { background: #e5b04a; }
+.btn-copy.copied { background: #4ade80; color: #1a2e1a; }
+.card-body { display: none; padding: 18px; }
+.card-body.open { display: block; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap: 10px; margin-bottom: 14px; }
+.card-field { background: var(--cream); border-radius: 10px; padding: 9px 11px; }
+.card-field-label { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 3px; }
+.card-field-value { font-size: 13px; font-weight: 800; color: var(--green); }
+.card-section-title { font-size: 10px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--cream-dark); }
+.tag { display: inline-block; background: var(--green); color: var(--cream); font-size: 11px; font-weight: 800; border-radius: 16px; padding: 3px 10px; margin: 2px; }
+.tag.gold { background: var(--gold); color: var(--green); }
+.card-text-value { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.5; background: var(--cream); border-radius: 10px; padding: 10px 12px; }
+
+/* VALIDATION */
+.field input.error, .field textarea.error {
+  border-color: #e53e3e !important;
+  box-shadow: 0 0 0 3px rgba(229,62,62,0.12) !important;
+}
+.field-error {
+  font-size: 11px; font-weight: 700; color: #e53e3e;
+  margin-top: 4px; display: none;
+}
+.field-error.show { display: block; }
+.options-grid.error .option-pill label {
+  border-color: #e53e3e;
+}
+.error-banner {
+  background: #fff5f5; border: 2px solid #e53e3e;
+  border-radius: 12px; padding: 12px 16px;
+  font-size: 13px; font-weight: 700; color: #e53e3e;
+  margin-bottom: 20px; display: none; text-align: center;
+}
+.error-banner.show { display: block; }
+
+@media print {
+  /* Masquer tout sauf le bilan */
+  .topbar, .ed-sidebar, .page:not(#page-editor), #page-form, #page-dashboard { display: none !important; }
+  .page#page-editor { display: block !important; }
+  .editor-wrap { display: block !important; height: auto !important; overflow: visible !important; }
+  .ed-sidebar { display: none !important; }
+  .ed-preview { display: block !important; padding: 0 !important; background: white !important; overflow: visible !important; width: 100% !important; }
+
+  /* Couleurs forcées */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Bilan */
+  .bl { max-width: 100% !important; box-shadow: none !important; margin: 0 !important; }
+
+  /* Chaque page = exactement A4, overflow caché */
+  .bl-page {
+    width: 210mm !important;
+    height: 277mm !important;
+    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: block !important;
+  }
+
+  /* Le saut de page explicite masqué */
+  .bl-pagebreak { display: none !important; }
+
+  /* Marges page */
+  @page { margin: 10mm 12mm; size: A4; }
+}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="https://chef2box.netlify.app" style="display:flex;align-items:center;text-decoration:none">
+    <svg viewBox="0 0 2506.31 1953.3" style="height:40px;width:auto" aria-label="Chef2Box">
+      <path fill="#f5f0e8" d="M593.89,1026c-76.05,0-150.07,32.77-209.36,80.65l-1.1-43.09-193.71,7.74c3.5,98.14,2.39,194.45,2.39,292.4,0,190.21,10.13,380.24,11.23,571.55h193.71c35.35,0,69.42-8.29,101.09-18.41,137-39.04,249.32-123.92,249.32-277.49,0-55.61-19.15-111.77-59.11-151.36,47.14-41.8,89.67-95.01,114.16-154.67,14.91-35.35,23.2-72.37,23.2-110.67,0-29.28-5.89-55.61-17.31-78.26-35.91-76.6-125.58-118.4-214.52-118.4ZM393.55,1739.16l-2.39-80.65,32.78-16.21,1.29,2.4c31.12-14.36,63.9-26.88,99.25-26.88,19.15,0,29.28,1.84,29.28,23.94,0,70.53-106.98,92.07-160.2,97.41ZM385.81,1448.04v-48.98c39.41-67.02,124.84-180.08,210.47-180.08,12.52,0,25.04,2.39,36.46,8.47-8.47,99.8-165.17,182.84-246.93,220.59Z"/>
+      <path fill="#f5f0e8" d="M1458.4,1310.49c-19.89,19.7-43.64,35.91-69.97,47.87-14.91,6.63-31.12,11.42-46.77,13.81,31.85,44.75,40.69,118.95,40.69,163.15,0,48.98-9.57,99.25-31.12,144.73-26.15,56.71-55.61,79.54-119.5,79.54-127.42,0-160.2-132.21-160.2-235.69,0-79.55,41.8-140.49,104.59-170.32-12.52-4.23-25.04-8.29-37.01-12.52-20.99-7.73-41.25-14.92-60.95-20.99-13.81-4.78-26.33-7.18-38.3-7.18-7.73,0-15.65,1.29-23.94,4.79-2.95,1.84-11.97,7.18-25.78,23.94l-4.79,6.63-5.89,4.78c-17.31,14.36-38.85,22.1-65.18,23.94-2.95.55-5.34.55-8.47.55-18.41,43.64-27.99,92.07-27.99,143.99,0,217.65,109.38,431.79,352.62,431.79,49.16,0,98.14-8.47,143.63-27.62,138.65-60.4,201.44-250.42,201.44-390.36,0-95.01-25.04-200.34-79.55-278.05-9.58,19.7-22.1,37.75-37.56,53.22Z"/>
+      <path fill="#f5f0e8" d="M2256.44,1091.18l-188.37-44.37c-22.65,93.36-60.4,247.66-129.08,314.5-68.13-53.22-132.03-270.86-157.8-356.86l-185.42,54.87c39.59,134.05,91.51,311.56,184.13,417.44-76.42,106.43-111.22,239.19-122.45,368.82l193.16,18.6c8.29-106.43,35.17-218.2,108.64-300.14,71.26,31.12,118.4,219.49,135.16,291.12l188.37-47.14c-29.83-125.58-70.52-268.47-162.04-363.67,72.36-104.59,105.88-232.56,135.71-353.17Z"/>
+      <path fill="#f5f0e8" d="M527.41,758.09c-130.92-18.6-322.24-77.7-333.65-271.97-7.73-141.78,79.55-206.23,193.71-212.31,54.5-2.95,109.56,2.94,164.43,7.73l14.36-192.42c-63.34-5.34-126.13-11.97-188.92-8.47C156.2,92.62-13.02,245.08.79,497.35c16.76,292.96,266.63,417.98,494.95,452.05l31.67-191.31Z"/>
+      <polygon fill="#f5f0e8" points="852.6 102.75 659.62 105.88 643.97 301.25 849.1 316.35 852.6 102.75"/>
+      <path fill="#f5f0e8" d="M411.96,385.03l-80.1,4.79,15.65,192.42,85.44-4.79c73.65-4.05,148.97-7,222.43-11.23,0,91.52.55,183.59,3.5,275.65l193.16-10.87c-2.95-90.78-3.5-182.3-2.95-273.26l166.83-14.36,1.84,44.38c13.07-16.76,27.99-32.96,45.3-47.88,32.41-28.17,72.36-50.82,118.4-68.13,35.91-13.81,77.15-21.54,121.34-23.39l-6.44-121.35-95.2,6.63L1188.09,1.84l-193.16,10.68,13.26,337.88-596.23,34.62Z"/>
+      <path fill="#f5f0e8" d="M1563.54,874.64c13.07,0,26.33,0,39.41.55,80.83,3.68,160.2,9.58,241.03,13.26l9.02-193.16c-77.15-4.79-153.2-10.68-229.62-13.07,1.1,7.18,1.1,14.92,1.1,22.65-1.84,47.32-16.76,95.75-44.74,144.18-5.52,8.84-10.86,17.31-16.2,25.59Z"/>
+      <path fill="#f5f0e8" d="M1556.91,528.47l2.39-50.09c88.57-1.84,178.24-9.02,266.63-7.92l-.55-193.71c-83.04-1.1-165.54,5.52-248.76,7.92,4.79-27.62,10.86-55.61,15.1-82.67,48.98,4.23,99.25,4.23,147.68,6.07,52.48,2.4,103.3,13.81,155.41,17.31l8.29-193.16c-50.82-3.5-101.64-14.92-153.57-17.31-66.47-2.94-132.21-6.63-197.94-9.58-47.87-2.39-94.46-4.23-142.34-5.34l-7.18,163.88c-1.66,41.25-14.91,80.1-20.81,120.06-9.02,53.95-11.97,110.11-14.36,164.43,44.74,2.39,85.99,13.26,121.34,30.56,26.88,13.63,50.27,29.83,68.68,49.54Z"/>
+      <path fill="#f5f0e8" d="M2505.76,276.2l.55-193.16c-168.48-1.1-335.86-8.29-502.14-19.7l-16.76,191.87,15.47,1.29-30.38,623.48,192.42,8.47,15.1-290.56c52.48,7.18,105.14,9.58,158.36,16.2l25.04-192.05c-58-7.18-117.11-8.29-173.82-17.31l5.89-136.26c103.48,4.23,206.78,6.63,310.27,7.73Z"/>
+      <path fill="#c9973a" d="M908.94,1303.31c10.68-1.1,18.41-3.5,23.2-7.18,17.31-22.1,34.8-37.56,53.21-45.3,3.13-1.29,5.34-2.4,8.47-3.69l.55-.55c14.92-5.34,31.12-8.47,47.14-7.74,19.15.55,39.04,4.05,59.29,10.68,20.99,6.63,41.8,13.81,63.34,21.54,21.54,7.74,43.64,14.92,67.03,21.55,22.65,5.89,46.03,9.58,70.52,9.58,19.7,0,38.85-4.23,56.71-11.97,18.04-7.73,34.07-18.6,47.32-31.67,13.81-13.81,23.2-30.01,29.83-48.43,1.84-4.79,2.95-9.58,3.68-14.37,2.95-13.81,2.95-28.72.55-43.64-1.29-7.18-5.34-12.52-11.97-16.21-6.63-3.5-16.76-3.5-30.57-.55-11.23,2.94-27.99,4.79-50.08,5.34-21.54.55-43.64,0-66.47-1.84-23.2-1.66-44.74-4.05-65.18-8.29-20.25-3.68-35.72-8.47-46.03-14.36-7.73-3.5-11.97-9.58-12.52-17.31,0-7.74,4.79-14.92,16.2-21.55,29.83-16.75,61.5-34.06,94.46-53.21,32.78-18.6,65.18-38.85,96.3-60.95,30.93-21.54,59.66-44.93,85.99-69.42,6.63-5.89,13.26-12.52,19.15-19.15,17.86-19.7,33.51-40.69,46.59-62.79,22.1-38.3,33.51-74.76,34.8-109.37,1.1-35.17-6.08-65.74-22.28-92.62-16.02-26.88-40.51-48.43-72.92-64.63-26.33-13.07-56.71-20.81-91.33-22.65-7.92-1.29-16.2-1.29-25.23-1.29-48.98-1.11-92.62,5.52-129.63,19.15-.74,0-1.29.55-1.84.55-37.75,14.36-69.42,32.41-95.75,55.06-25.59,22.83-46.03,47.88-59.66,75.31-13.81,28.18-21.54,55.61-22.83,81.94-1.66,26.33,3.13,50.82,14.36,72.92,10.86,22.83,28.72,39.4,52.66,51.37,14.36,7.18,29.28,10.86,45.48,10.31,15.47-.74,30.38-3.69,44.19-10.31,13.81-5.89,25.78-14.92,35.91-26.15,10.13-11.42,16.76-25.23,20.25-40.7,4.24-19.15-3.5-32.41-23.94-40.69-19.15-7.73-30.38-21.54-35.17-41.8-4.79-19.7-2.39-40.69,7.18-60.95,5.34-11.97,12.52-23.39,22.65-33.51,7.18-7.92,15.65-15.65,25.78-22.1,22.65-16.21,51.37-24.68,87.28-24.68,14.36,0,25.59,1.84,35.17,6.63,9.02,3.68,16.2,9.02,20.99,16.75,9.58,14.91,14.36,33.51,13.07,55.06-.55,20.81-5.34,43.08-13.63,65.18-8.47,21.54-16.76,38.85-25.78,52.48-.55.74-1.1,1.84-1.84,2.4-18.41,29.46-42.9,55.06-72.36,78.44-29.83,22.65-61.5,44.19-95.57,64.45-34.62,20.44-69.42,41.25-104.59,62.24-35.91,20.99-68.87,43.64-99.8,68.13-31.12,23.94-58.74,51.56-82.68,81.39-23.2,29.83-39.96,65.18-48.98,105.14-4.23,13.81-2.95,25.78,3.68,34.06,7.18,9.03,14.91,15.1,25.04,19.15,9.58,3.69,19.7,5.34,30.57,4.79Z"/>
+    </svg>
+  </a>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('form', this)">Formulaire</button>
+    <button class="nav-tab" onclick="switchTab('dashboard', this)" id="dashboard-tab" style="display:none">Réponses <span class="badge" id="count-badge">0</span></button>
+    <button class="nav-tab" onclick="switchTab('editor', this)" id="editor-tab" style="display:none">✏️ Bilan</button>
+  </div>
+</div>
+
+<!-- ══════════════ PAGE FORMULAIRE ══════════════ -->
+<div class="page active" id="page-form">
+  <div class="form-hero">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="flex:1">
+        <div class="hero-eyebrow">Nutrition personnalisée</div>
+        <div class="hero-title">CALCUL DE<br>VOS <em>BESOINS</em></div>
+        <div class="hero-sub">Remplissez ce questionnaire pour recevoir un plan nutritionnel adapté à vos objectifs et votre mode de vie.</div>
+        <div class="hero-badges">
+          <span class="hero-badge">Confidentiel</span>
+          <span class="hero-badge">5 min</span>
+          <span class="hero-badge">Prêt · Sain · Maîtrisé</span>
+        </div>
+      </div>
+      <!-- MASCOTTE CHEF -->
+      <div style="flex-shrink:0;margin-left:16px;margin-top:-8px">
+        <img src="data:image/png;base64,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" style="width:120px;height:auto;filter:invert(1) sepia(1) saturate(0) brightness(2) opacity(0.85)" alt="Chef2Box mascotte">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-wrap" id="form-content">
+    <div class="error-banner" id="error-banner">⚠️ Merci de remplir tous les champs obligatoires avant de continuer.</div>
+
+    <!-- INFOS GÉNÉRALES -->
+    <div class="section" style="animation-delay:.05s">
+      <div class="section-header"><span class="section-icon">👤</span><span class="section-title">Informations générales</span></div>
+      <div class="field">
+        <label>Nom complet <span style="color:var(--gold)">*</span></label>
+        <input type="text" id="f-nom" placeholder="Prénom Nom">
+        <div class="field-error" id="err-nom">Ce champ est obligatoire</div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Email</label><input type="email" id="f-email" placeholder="votre@email.com" autocomplete="off"></div>
+        <div class="field"><label>WhatsApp</label><input type="tel" id="f-tel" placeholder="ex. +212 6 00 00 00 00" style="width:100%"></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Âge <span style="color:var(--gold)">*</span></label>
+          <input type="number" id="f-age" placeholder="ex. 28" min="16" max="80" inputmode="numeric">
+          <div class="field-error" id="err-age">Ce champ est obligatoire</div>
+        </div>
+        <div class="field">
+          <label>Sexe <span style="color:var(--gold)">*</span></label>
+          <div class="options-grid" style="margin-top:6px">
+            <div class="option-pill"><input type="radio" name="sexe" id="sexe-h" value="Homme"><label for="sexe-h"><span class="pill-check">✓</span> Homme</label></div>
+            <div class="option-pill"><input type="radio" name="sexe" id="sexe-f" value="Femme"><label for="sexe-f"><span class="pill-check">✓</span> Femme</label></div>
+          </div>
+          <div class="field-error" id="err-sexe">Veuillez sélectionner une option</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Taille (cm) <span style="color:var(--gold)">*</span></label>
+          <input type="number" id="f-taille" placeholder="ex. 175" min="130" max="220" inputmode="numeric">
+          <div class="field-error" id="err-taille">Ce champ est obligatoire</div>
+        </div>
+        <div class="field">
+          <label>Poids actuel (kg) <span style="color:var(--gold)">*</span></label>
+          <input type="number" id="f-poids" placeholder="ex. 72" min="35" max="250" inputmode="decimal">
+          <div class="field-error" id="err-poids">Ce champ est obligatoire</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBJECTIF PRINCIPAL — checkbox multi -->
+    <div class="section" style="animation-delay:.1s">
+      <div class="section-header"><span class="section-icon">🎯</span><span class="section-title">Objectif principal <span style="color:var(--gold)">*</span></span></div>
+      <div class="options-grid">
+        <div class="option-pill"><input type="checkbox" name="obj" id="obj1" value="Perte de poids"><label for="obj1"><span class="pill-check">✓</span> Perte de poids</label></div>
+        <div class="option-pill"><input type="checkbox" name="obj" id="obj2" value="Prise de muscle"><label for="obj2"><span class="pill-check">✓</span> Prise de muscle</label></div>
+        <div class="option-pill"><input type="checkbox" name="obj" id="obj3" value="Performance sportive"><label for="obj3"><span class="pill-check">✓</span> Performance sportive</label></div>
+        <div class="option-pill"><input type="checkbox" name="obj" id="obj4" value="Maintien du poids"><label for="obj4"><span class="pill-check">✓</span> Maintien du poids</label></div>
+        <div class="option-pill"><input type="checkbox" name="obj" id="obj5" value="Manger plus sainement"><label for="obj5"><span class="pill-check">✓</span> Manger plus sainement</label></div>
+      </div>
+      <div class="field-error" id="err-obj">Veuillez sélectionner au moins un objectif</div>
+    </div>
+
+    <!-- OBJECTIF PRÉCIS -->
+    <div class="section" style="animation-delay:.15s">
+      <div class="section-header"><span class="section-icon">✍️</span><span class="section-title">Objectif précis</span></div>
+      <div class="field"><label>Décrivez votre objectif</label><textarea id="f-obj-texte" placeholder="Ex : Je veux perdre 5 kg avant l'été..."></textarea></div>
+    </div>
+
+    <!-- ACTIVITÉ PHYSIQUE -->
+    <div class="section" style="animation-delay:.2s">
+      <div class="section-header"><span class="section-icon">🏃</span><span class="section-title">Activité physique</span></div>
+      <div class="field">
+        <label>Séances de sport par semaine <span style="color:var(--gold)">*</span></label>
+        <div class="options-grid" id="grid-seances">
+          <div class="option-pill"><input type="radio" name="seances" id="s0" value="0"><label for="s0"><span class="pill-check">✓</span> 0</label></div>
+          <div class="option-pill"><input type="radio" name="seances" id="s12" value="1-2"><label for="s12"><span class="pill-check">✓</span> 1-2</label></div>
+          <div class="option-pill"><input type="radio" name="seances" id="s34" value="3-4"><label for="s34"><span class="pill-check">✓</span> 3-4</label></div>
+          <div class="option-pill"><input type="radio" name="seances" id="s5" value="5+"><label for="s5"><span class="pill-check">✓</span> 5+</label></div>
+        </div>
+        <div class="field-error" id="err-seances">Veuillez sélectionner une option</div>
+      </div>
+      <div class="field">
+        <label>Sport(s) pratiqué(s)</label>
+        <input type="text" id="f-sport" placeholder="Ex : musculation, course à pied...">
+      </div>
+      <div class="field">
+        <label>Durée moyenne d'une séance</label>
+        <div class="options-grid">
+          <div class="option-pill"><input type="radio" name="duree" id="d1" value="< 45 min"><label for="d1"><span class="pill-check">✓</span> &lt; 45 min</label></div>
+          <div class="option-pill"><input type="radio" name="duree" id="d2" value="45-60 min"><label for="d2"><span class="pill-check">✓</span> 45–60 min</label></div>
+          <div class="option-pill"><input type="radio" name="duree" id="d3" value="60-90 min"><label for="d3"><span class="pill-check">✓</span> 60–90 min</label></div>
+          <div class="option-pill"><input type="radio" name="duree" id="d4" value="+90 min"><label for="d4"><span class="pill-check">✓</span> +90 min</label></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIVITÉ PRO -->
+    <div class="section" style="animation-delay:.25s">
+      <div class="section-header"><span class="section-icon">💼</span><span class="section-title">Activité professionnelle <span style="color:var(--gold)">*</span></span></div>
+      <div class="options-grid">
+        <div class="option-pill"><input type="radio" name="job" id="j1" value="Principalement assis"><label for="j1"><span class="pill-check">✓</span> Principalement assis</label></div>
+        <div class="option-pill"><input type="radio" name="job" id="j2" value="Debout une partie"><label for="j2"><span class="pill-check">✓</span> Debout une partie</label></div>
+        <div class="option-pill"><input type="radio" name="job" id="j3" value="Physiquement actif"><label for="j3"><span class="pill-check">✓</span> Physiquement actif</label></div>
+        <div class="option-pill"><input type="radio" name="job" id="j4" value="Travail très physique"><label for="j4"><span class="pill-check">✓</span> Travail très physique</label></div>
+      </div>
+      <div class="field-error" id="err-job">Veuillez sélectionner une option</div>
+    </div>
+
+    <!-- ALIMENTATION -->
+    <div class="section" style="animation-delay:.3s">
+      <div class="section-header"><span class="section-icon">🍽️</span><span class="section-title">Structure de votre alimentation</span></div>
+      <div class="field">
+        <label>Nombre de repas par jour <span style="color:var(--gold)">*</span></label>
+        <div class="options-grid">
+          <div class="option-pill"><input type="radio" name="repas" id="r1" value="1"><label for="r1"><span class="pill-check">✓</span> 1</label></div>
+          <div class="option-pill"><input type="radio" name="repas" id="r2" value="2"><label for="r2"><span class="pill-check">✓</span> 2</label></div>
+          <div class="option-pill"><input type="radio" name="repas" id="r3" value="3"><label for="r3"><span class="pill-check">✓</span> 3</label></div>
+          <div class="option-pill"><input type="radio" name="repas" id="r4" value="4"><label for="r4"><span class="pill-check">✓</span> 4</label></div>
+          <div class="option-pill"><input type="radio" name="repas" id="r5" value="5+"><label for="r5"><span class="pill-check">✓</span> 5+</label></div>
+        </div>
+        <div class="field-error" id="err-repas">Veuillez sélectionner une option</div>
+      </div>
+      <div class="field">
+        <label>Répartition habituelle</label>
+        <div class="options-grid">
+          <div class="option-pill"><input type="checkbox" name="repartition" id="rp1" value="PDJ + Déjeuner + Dîner"><label for="rp1"><span class="pill-check">✓</span> PDJ + Déj + Dîner</label></div>
+          <div class="option-pill"><input type="checkbox" name="repartition" id="rp2" value="PDJ + Déjeuner + Dîner + Collation"><label for="rp2"><span class="pill-check">✓</span> PDJ + Déj + Dîner + Collation</label></div>
+          <div class="option-pill"><input type="checkbox" name="repartition" id="rp3" value="Déjeuner + Dîner"><label for="rp3"><span class="pill-check">✓</span> Déj + Dîner</label></div>
+          <div class="option-pill"><input type="checkbox" name="repartition" id="rp4" value="Déjeuner + Dîner + Collation"><label for="rp4"><span class="pill-check">✓</span> Déj + Dîner + Collation</label></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RAPPORT ALIM -->
+    <div class="section" style="animation-delay:.35s">
+      <div class="section-header"><span class="section-icon">🧠</span><span class="section-title">Rapport à l'alimentation</span></div>
+      <div class="field">
+        <label>Face à un aliment que vous aimez beaucoup</label>
+        <div class="options-grid">
+          <div class="option-pill"><input type="radio" name="plaisir" id="p1" value="Je peux me limiter facilement"><label for="p1"><span class="pill-check">✓</span> Je peux me limiter facilement</label></div>
+          <div class="option-pill"><input type="radio" name="plaisir" id="p2" value="Plaisir de temps en temps"><label for="p2"><span class="pill-check">✓</span> Plaisir de temps en temps</label></div>
+          <div class="option-pill"><input type="radio" name="plaisir" id="p3" value="J'ai du mal à m'arrêter"><label for="p3"><span class="pill-check">✓</span> J'ai du mal à m'arrêter</label></div>
+          <div class="option-pill"><input type="radio" name="plaisir" id="p4" value="Selon humeur / fatigue"><label for="p4"><span class="pill-check">✓</span> Selon humeur / fatigue</label></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Grignotage en dehors des repas</label>
+        <div class="options-grid">
+          <div class="option-pill"><input type="radio" name="grigno" id="g1" value="Rarement / jamais"><label for="g1"><span class="pill-check">✓</span> Rarement / jamais</label></div>
+          <div class="option-pill"><input type="radio" name="grigno" id="g2" value="Occasionnellement"><label for="g2"><span class="pill-check">✓</span> Occasionnellement</label></div>
+          <div class="option-pill"><input type="radio" name="grigno" id="g3" value="Plusieurs fois/semaine"><label for="g3"><span class="pill-check">✓</span> Plusieurs fois/semaine</label></div>
+          <div class="option-pill"><input type="radio" name="grigno" id="g4" value="Presque tous les jours"><label for="g4"><span class="pill-check">✓</span> Presque tous les jours</label></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTRAINTES -->
+    <div class="section" style="animation-delay:.4s">
+      <div class="section-header"><span class="section-icon">🍴</span><span class="section-title">Contraintes alimentaires</span></div>
+      <div class="field"><label>Allergies ou intolérances</label><textarea id="f-allergies" placeholder="Ex : intolérance au lactose, allergie aux fruits à coque..." style="min-height:70px"></textarea></div>
+      <div class="field"><label>Aliments refusés</label><textarea id="f-refuses" placeholder="Ex : poisson, abats..." style="min-height:70px"></textarea></div>
+      <div class="field"><label>Aliments préférés</label><textarea id="f-preferes" placeholder="Ex : poulet, riz, œufs..." style="min-height:70px"></textarea></div>
+    </div>
+
+    <!-- FORMULE -->
+    <div class="section" style="animation-delay:.45s">
+      <div class="section-header"><span class="section-icon">📦</span><span class="section-title">Votre formule Chef2Box</span></div>
+      <div class="options-grid">
+        <div class="option-pill"><input type="radio" name="formule" id="f1" value="1 repas par jour"><label for="f1"><span class="pill-check">✓</span> 1 repas par jour</label></div>
+        <div class="option-pill"><input type="radio" name="formule" id="f2" value="2 repas par jour"><label for="f2"><span class="pill-check">✓</span> 2 repas par jour</label></div>
+        <div class="option-pill"><input type="radio" name="formule" id="f3" value="Je ne sais pas encore"><label for="f3"><span class="pill-check">✓</span> Je ne sais pas encore</label></div>
+      </div>
+    </div>
+
+    <div class="submit-wrap">
+      <button class="btn-submit" onclick="submitForm()">ENVOYER MON BILAN →</button>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="success-screen" id="success-screen">
+
+    <div class="success-hero">
+      <div class="success-check">✓</div>
+      <div class="success-title">MERCI <span id="success-prenom"></span> !</div>
+      <div class="success-sub">Votre bilan a bien été reçu. Notre équipe va l'analyser et revenir vers vous très rapidement.</div>
+    </div>
+
+    <div class="success-body">
+
+      <div class="success-steps">
+        <div class="success-step">
+          <div class="success-step-num">1</div>
+          <div class="success-step-text">
+            <strong>Bilan reçu ✓</strong>
+            <span>Vos informations ont bien été enregistrées.</span>
+          </div>
+        </div>
+        <div class="success-step">
+          <div class="success-step-num">2</div>
+          <div class="success-step-text">
+            <strong>Analyse personnalisée</strong>
+            <span>Nous calculons vos besoins nutritionnels sur mesure.</span>
+          </div>
+        </div>
+        <div class="success-step">
+          <div class="success-step-num">3</div>
+          <div class="success-step-text">
+            <strong>Retour sous 24h</strong>
+            <span>Vous recevrez votre plan Chef2Box personnalisé.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="success-contact">
+        <p>Une question ? Contactez-nous</p>
+        <div class="success-contact-links">
+          <a class="success-contact-link" href="https://instagram.com/chef2box_">@chef2box_</a>
+          <a class="success-contact-link" href="mailto:hello@chef2box.com">hello@chef2box.com</a>
+          <a class="success-contact-link" href="tel:+212660831640">+212 660-831640</a>
+        </div>
+      </div>
+
+      <div class="success-new">
+        <button class="btn-new" onclick="resetForm()">Remplir un nouveau bilan</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ PAGE DASHBOARD ══════════════ -->
+<div class="page" id="page-dashboard">
+  <div class="dash-wrap">
+    <div class="dash-header">
+      <div class="dash-title">📊 Réponses clients</div>
+      <button class="btn-clear" onclick="clearAll()">🗑 Tout effacer</button>
+    </div>
+    <div id="responses-list">
+      <div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Aucune réponse pour l'instant.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ PAGE ÉDITEUR BILAN ══════════════ -->
+<style>
+.editor-wrap { display:flex; height:calc(100vh - 58px); overflow:hidden; font-family:'Nunito',sans-serif; }
+.ed-sidebar { width:300px; background:#111d12; border-right:1px solid rgba(201,151,58,0.15); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; }
+.ed-sidebar-top { padding:16px 20px 12px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+.ed-title { font-family:'Bebas Neue',sans-serif; font-size:16px; color:#f5f0e6; letter-spacing:2px; }
+.ed-sub { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.25); }
+#prefill-banner { display:none; background:rgba(201,151,58,0.15); border-bottom:1px solid rgba(201,151,58,0.3); padding:8px 20px; align-items:center; gap:8px; flex-shrink:0; }
+.ed-fields { flex:1; overflow-y:auto; padding:16px 20px; }
+.ed-fields::-webkit-scrollbar { width:3px; }
+.ed-fields::-webkit-scrollbar-thumb { background:rgba(201,151,58,0.3); }
+.ed-group { margin-bottom:18px; }
+.ed-group-title { font-size:8px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:#c9973a; margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid rgba(201,151,58,0.2); }
+.ed-field { margin-bottom:8px; }
+.ed-field label { display:block; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.3); margin-bottom:4px; }
+.ed-field input,.ed-field textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:7px; padding:8px 10px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:600; color:#f5f0e6; outline:none; transition:border-color .2s; }
+.ed-field input:focus,.ed-field textarea:focus { border-color:rgba(201,151,58,0.5); }
+.ed-field textarea { min-height:60px; resize:vertical; }
+.ed-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.ed-footer { padding:12px 20px; border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+.btn-gen { width:100%; background:#c9973a; border:none; border-radius:9px; padding:12px; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:2px; color:#1c2e1e; cursor:pointer; transition:all .2s; }
+.btn-gen:hover { background:#e0aa48; }
+.ed-preview { flex:1; overflow-y:auto; background:#e8e2d8; padding:24px 16px; }
+.ed-preview::-webkit-scrollbar { width:4px; }
+.ed-preview::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.2); }
+/* Bilan styles — identique bilan_eric_kakuta.html */
+.bl { max-width:680px; margin:0 auto; background:#fff; box-shadow:0 20px 60px rgba(0,0,0,0.18); font-size:16px; font-family:'DM Sans',sans-serif; }
+.bl-hdr { background:#1c2e1e; padding:24px 40px 20px; display:flex; align-items:flex-start; justify-content:space-between; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-logo { font-family:'Bebas Neue',sans-serif; font-size:28px; color:#f5f0e6; letter-spacing:2px; line-height:1; margin-bottom:4px; }
+.bl-logo span { color:#c9973a; }
+.bl-tag { font-size:8px; font-weight:500; letter-spacing:3px; text-transform:uppercase; color:rgba(245,240,230,0.35); }
+.bl-hdr-r { text-align:right; }
+.bl-doc { font-size:8px; font-weight:700; letter-spacing:2.5px; text-transform:uppercase; color:#c9973a; margin-bottom:5px; }
+.bl-name { font-family:'Bebas Neue',sans-serif; font-size:22px; color:#f5f0e6; letter-spacing:1px; line-height:1; margin-bottom:3px; }
+.bl-date { font-size:11px; color:rgba(245,240,230,0.35); font-weight:400; }
+.bl-body { padding:20px 40px 28px; }
+.bl-st { font-size:12px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:#c9973a; margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+.bl-st::after { content:''; flex:1; height:1px; background:#ede5d4; }
+.bl-st.bl-st-badge::after { display:none; }
+.bl-st.bl-st-badge { justify-content:space-between; }
+.bl-badge { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:2px; color:#1c2e1e; background:#c9973a; border-radius:20px; padding:3px 14px; line-height:1.4; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-gap { height:14px; }
+.bl-profil { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; border:1px solid #ede5d4; border-radius:8px; overflow:hidden; }
+.bl-pc { padding:8px 12px; border-right:1px solid #ede5d4; }
+.bl-pc:last-child { border-right:none; }
+.bl-pk { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:#7a8c7a; margin-bottom:4px; }
+.bl-pv { font-size:19px; font-weight:700; color:#1c2e1e; }
+.bl-obj { background:#f5f0e6; border-radius:8px; padding:12px 18px; border-left:4px solid #c9973a; }
+.bl-ot { font-size:17px; font-weight:700; color:#1c2e1e; margin-bottom:7px; }
+.bl-od { font-size:13px; color:#7a8c7a; line-height:1.6; font-weight:400; }
+.bl-macros { display:grid; grid-template-columns:auto 1fr 1fr 1fr; gap:8px; }
+.bl-kcal { background:#1c2e1e; border-radius:8px; padding:12px 16px; min-width:105px; display:flex; flex-direction:column; justify-content:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-kn { font-family:'Bebas Neue',sans-serif; font-size:34px; color:#c9973a; line-height:1; }
+.bl-ku { font-size:8px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:rgba(245,240,230,0.4); margin-top:2px; }
+.bl-mb { background:#f5f0e6; border-radius:8px; padding:12px 10px; display:flex; flex-direction:column; justify-content:center; }
+.bl-ml { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:#7a8c7a; margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+.bl-mn { font-family:'Bebas Neue',sans-serif; font-size:28px; color:#1c2e1e; line-height:1; }
+.bl-mg { font-size:12px; font-weight:600; color:#c9973a; margin-left:2px; }
+.bl-sport { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.bl-stag { background:#1c2e1e; border-radius:8px; padding:10px 14px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-stagl { font-size:7px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#c9973a; margin-bottom:6px; }
+.bl-stagv { font-size:15px; font-weight:700; color:#f5f0e6; line-height:1.3; }
+.bl-sstat { background:#f5f0e6; border-radius:8px; padding:10px 14px; display:flex; flex-direction:column; justify-content:center; }
+.bl-ssn { font-family:'Bebas Neue',sans-serif; font-size:32px; color:#c9973a; line-height:1; }
+.bl-ssl { font-size:8px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:#7a8c7a; margin-top:2px; }
+.bl-repas { display:grid; grid-template-columns:1fr 1fr; gap:8px; page-break-inside:avoid; break-inside:avoid; }
+.bl-rl { background:#f5f0e6; border-radius:8px; padding:14px 18px; }
+.bl-rk { font-family:'Bebas Neue',sans-serif; font-size:40px; color:#c9973a; line-height:1; }
+.bl-rku { font-size:9px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:#7a8c7a; margin-bottom:12px; }
+.bl-rm { display:flex; flex-direction:column; gap:6px; padding-top:5px; border-top:1px solid #ede5d4; }
+.bl-rml { display:flex; justify-content:space-between; font-size:14px; }
+.bl-rml span:first-child { color:#7a8c7a; }
+.bl-rml span:last-child { font-weight:700; color:#1c2e1e; }
+.bl-rr { display:flex; flex-direction:column; gap:6px; }
+.bl-ck { background:#fff; border:1px solid #ede5d4; border-radius:8px; padding:12px 14px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:500; color:#1c2e1e; flex:1; }
+.bl-ckb { width:20px; height:20px; border-radius:50%; background:#1c2e1e; color:#c9973a; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:900; flex-shrink:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-org { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.bl-ol { border:1px solid #ede5d4; border-radius:8px; overflow:hidden; }
+.bl-oline { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #ede5d4; gap:10px; }
+.bl-oline:last-child { border-bottom:none; }
+.bl-ok { font-size:11px; font-weight:600; color:#7a8c7a; text-transform:uppercase; }
+.bl-ov { font-size:14px; font-weight:700; color:#1c2e1e; text-align:right; }
+.bl-ovb { font-family:'Bebas Neue',sans-serif; font-size:20px; color:#1c2e1e; line-height:1; text-align:right; }
+.bl-ovb small { display:block; font-family:'DM Sans',sans-serif; font-size:9px; color:#7a8c7a; font-weight:500; }
+.bl-rep { background:#f5f0e6; border-radius:8px; padding:14px 16px; }
+.bl-rept { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:#7a8c7a; margin-bottom:10px; }
+.bl-repi { display:flex; align-items:center; gap:8px; font-size:14px; color:#1c2e1e; font-weight:500; margin-bottom:5px; }
+.bl-repc { width:16px; height:16px; border-radius:3px; background:rgba(28,46,30,0.1); display:flex; align-items:center; justify-content:center; font-size:8px; color:#1c2e1e; font-weight:900; flex-shrink:0; }
+.bl-reco { background:#f5f0e6; border-radius:8px; padding:14px 18px; border-left:4px solid #c9973a; }
+.bl-rect { font-size:14px; color:#1c2e1e; line-height:1.65; font-weight:400; }
+.bl-rect strong { font-weight:700; }
+.bl-mission { background:#1c2e1e; padding:20px 40px; display:flex; align-items:center; justify-content:space-between; gap:24px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bl-mt { font-family:'Bebas Neue',sans-serif; font-size:18px; color:#f5f0e6; letter-spacing:1px; margin-bottom:6px; }
+.bl-mb2 { font-size:14px; color:rgba(245,240,232,0.7); line-height:1.6; max-width:420px; }
+.bl-mlogo { font-family:'Bebas Neue',sans-serif; font-size:16px; color:rgba(245,240,232,0.12); letter-spacing:3px; white-space:nowrap; }
+.bl-mlogo span { color:rgba(201,151,58,0.3); }
+.bl-footer { padding:10px 40px; display:flex; justify-content:space-between; border-top:1px solid #ede5d4; }
+.bl-fi { font-size:9px; color:#7a8c7a; font-weight:500; }
+@media print {
+  @page { size:A4 portrait; margin:0; }
+  html,body { margin:0; padding:0; background:none !important; }
+  .topbar,.editor-wrap>*:not(.ed-preview),.ed-preview>.preview-lbl { display:none !important; }
+  .editor-wrap { display:block; height:auto; }
+  .ed-preview { padding:0; background:none; overflow:visible; }
+  .bl { max-width:100%; box-shadow:none; }
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+}
+</style>
+
+<div class="page" id="page-editor">
+  <div class="editor-wrap">
+    <div class="ed-sidebar">
+      <div class="ed-sidebar-top">
+        <div class="ed-title">ÉDITEUR BILAN</div>
+        <div class="ed-sub">Modifie et génère le PDF</div>
+      </div>
+      <div id="prefill-banner">
+        <span style="font-size:13px">✅</span>
+        <div><div style="font-size:9px;font-weight:800;color:#c9973a;letter-spacing:1px">DONNÉES IMPORTÉES</div><div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px">Complète les macros et génère</div></div>
+      </div>
+      <div class="ed-fields">
+        <div class="ed-group">
+          <div class="ed-group-title">Profil</div>
+          <div class="ed-field"><label>Nom</label><input type="text" id="e-nom" value="Éric Kakuta" oninput="edUpdate()"></div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Âge</label><input type="text" id="e-age" value="38 ans" oninput="edUpdate()"></div>
+            <div class="ed-field"><label>Date</label><input type="text" id="e-date" value="3 juin 2026" oninput="edUpdate()"></div>
+          </div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Taille</label><input type="text" id="e-taille" value="185 cm" oninput="edUpdate()"></div>
+            <div class="ed-field"><label>Poids</label><input type="text" id="e-poids" value="103 kg" oninput="edUpdate()"></div>
+          </div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Objectif</div>
+          <div class="ed-field"><label>Titre</label><input type="text" id="e-obj-titre" value="Perte de poids &amp; recomposition corporelle" oninput="edUpdate()"></div>
+          <div class="ed-field"><label>Description</label><textarea id="e-obj-desc" oninput="edUpdate()">Réduire progressivement la masse grasse tout en développant ou conservant votre masse musculaire grâce à la reprise de l'entraînement et à une alimentation adaptée.</textarea></div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Besoins quotidiens</div>
+          <div class="ed-field"><label>Calories (kcal)</label><input type="text" id="e-kcal" value="2 400" oninput="edRecalc('e-kcal')"></div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Protéines (g)</label><input type="text" id="e-prot" value="190" oninput="edRecalc('e-prot')"></div>
+            <div class="ed-field"><label>Glucides (g)</label><input type="text" id="e-gluc" value="220" oninput="edRecalc('e-gluc')"></div>
+          </div>
+          <div class="ed-field"><label>Lipides (g)</label><input type="text" id="e-lip" value="80" oninput="edRecalc('e-lip')"></div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Profil sportif</div>
+          <div class="ed-field"><label>Activités</label><input type="text" id="e-sport" value="Musculation / Cardio léger" oninput="edUpdate()"></div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Séances/sem.</label><input type="text" id="e-seances" value="5" oninput="edUpdate()"></div>
+            <div class="ed-field"><label>Durée (min)</label><input type="text" id="e-duree" value="60–90" oninput="edUpdate()"></div>
+          </div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Repas Chef2Box</div>
+          <div class="ed-field"><label>Calories (kcal)</label><input type="text" id="e-r-kcal" value="800" oninput="edRecalc('e-r-kcal')"></div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Protéines (g)</label><input type="text" id="e-r-prot" value="60" oninput="edRecalc('e-r-prot')"></div>
+            <div class="ed-field"><label>Glucides (g)</label><input type="text" id="e-r-gluc" value="75" oninput="edRecalc('e-r-gluc')"></div>
+          </div>
+          <div class="ed-field"><label>Lipides (g)</label><input type="text" id="e-r-lip" value="25" oninput="edRecalc('e-r-lip')"></div>
+          <div class="ed-field"><label>% besoins couverts repas 1</label><input type="text" id="e-pct1" value="33%" oninput="edRecalc('e-pct1')"></div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Repas 2 — optionnel (laisser vide si 1 repas)</div>
+          <div class="ed-field"><label>Calories repas 2 (kcal)</label><input type="text" id="e-r2-kcal" value="" placeholder="ex: 650" oninput="edRecalc('e-r2-kcal')"></div>
+          <div class="ed-row">
+            <div class="ed-field"><label>Protéines (g)</label><input type="text" id="e-r2-prot" value="" placeholder="ex: 50" oninput="edRecalc('e-r2-prot')"></div>
+            <div class="ed-field"><label>Glucides (g)</label><input type="text" id="e-r2-gluc" value="" placeholder="ex: 65" oninput="edRecalc('e-r2-gluc')"></div>
+          </div>
+          <div class="ed-field"><label>Lipides (g)</label><input type="text" id="e-r2-lip" value="" placeholder="ex: 20" oninput="edRecalc('e-r2-lip')"></div>
+          <div class="ed-field"><label>% besoins couverts repas 2</label><input type="text" id="e-pct2" value="" placeholder="ex: 28%" oninput="edRecalc('e-pct2')"></div>
+          <div class="ed-field"><label>% total couvert (repas 1+2)</label><input type="text" id="e-pct-total" value="" placeholder="ex: 61%" oninput="edUpdate()"></div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Organisation</div>
+          <div class="ed-field"><label>Structure actuelle</label><input type="text" id="e-structure" value="1 repas / soir" oninput="edUpdate()"></div>
+          <div class="ed-field"><label>Calories restantes</label><input type="text" id="e-reste" value="1 600 kcal" oninput="edUpdate()"></div>
+        </div>
+        <div class="ed-group">
+          <div class="ed-group-title">Recommandation</div>
+          <div class="ed-field"><label>Texte</label><textarea id="e-reco" oninput="edUpdate()" style="min-height:80px">Compte tenu de votre objectif et de votre activité physique, nous vous recommandons de répartir vos apports sur plusieurs prises dans la journée. Cela facilite l'atteinte des besoins en protéines, améliore la récupération et favorise la satiété.
+
+Une collation riche en protéines (skyr, yaourt grec, fromage blanc, whey, etc.) peut également être une option intéressante.</textarea></div>
+        </div>
+      </div>
+      <div class="ed-footer">
+        <button class="btn-gen" onclick="genererPDF()" id="btn-gen">🖨 GÉNÉRER LE PDF</button>
+      </div>
+    </div>
+
+    <div class="ed-preview">
+      <div class="bl" id="bl">
+
+        <!-- ══ PAGE 1 ══ -->
+        <div class="bl-page">
+          <div class="bl-hdr">
+            <div><svg viewBox="0 0 2506.31 1953.3" style="height:32px;width:auto" aria-label="Chef2Box"><path fill="#f5f0e8" d="M593.89,1026c-76.05,0-150.07,32.77-209.36,80.65l-1.1-43.09-193.71,7.74c3.5,98.14,2.39,194.45,2.39,292.4,0,190.21,10.13,380.24,11.23,571.55h193.71c35.35,0,69.42-8.29,101.09-18.41,137-39.04,249.32-123.92,249.32-277.49,0-55.61-19.15-111.77-59.11-151.36,47.14-41.8,89.67-95.01,114.16-154.67,14.91-35.35,23.2-72.37,23.2-110.67,0-29.28-5.89-55.61-17.31-78.26-35.91-76.6-125.58-118.4-214.52-118.4ZM393.55,1739.16l-2.39-80.65,32.78-16.21,1.29,2.4c31.12-14.36,63.9-26.88,99.25-26.88,19.15,0,29.28,1.84,29.28,23.94,0,70.53-106.98,92.07-160.2,97.41ZM385.81,1448.04v-48.98c39.41-67.02,124.84-180.08,210.47-180.08,12.52,0,25.04,2.39,36.46,8.47-8.47,99.8-165.17,182.84-246.93,220.59Z"/><path fill="#f5f0e8" d="M1458.4,1310.49c-19.89,19.7-43.64,35.91-69.97,47.87-14.91,6.63-31.12,11.42-46.77,13.81,31.85,44.75,40.69,118.95,40.69,163.15,0,48.98-9.57,99.25-31.12,144.73-26.15,56.71-55.61,79.54-119.5,79.54-127.42,0-160.2-132.21-160.2-235.69,0-79.55,41.8-140.49,104.59-170.32-12.52-4.23-25.04-8.29-37.01-12.52-20.99-7.73-41.25-14.92-60.95-20.99-13.81-4.78-26.33-7.18-38.3-7.18-7.73,0-15.65,1.29-23.94,4.79-2.95,1.84-11.97,7.18-25.78,23.94l-4.79,6.63-5.89,4.78c-17.31,14.36-38.85,22.1-65.18,23.94-2.95.55-5.34.55-8.47.55-18.41,43.64-27.99,92.07-27.99,143.99,0,217.65,109.38,431.79,352.62,431.79,49.16,0,98.14-8.47,143.63-27.62,138.65-60.4,201.44-250.42,201.44-390.36,0-95.01-25.04-200.34-79.55-278.05-9.58,19.7-22.1,37.75-37.56,53.22Z"/><path fill="#f5f0e8" d="M2256.44,1091.18l-188.37-44.37c-22.65,93.36-60.4,247.66-129.08,314.5-68.13-53.22-132.03-270.86-157.8-356.86l-185.42,54.87c39.59,134.05,91.51,311.56,184.13,417.44-76.42,106.43-111.22,239.19-122.45,368.82l193.16,18.6c8.29-106.43,35.17-218.2,108.64-300.14,71.26,31.12,118.4,219.49,135.16,291.12l188.37-47.14c-29.83-125.58-70.52-268.47-162.04-363.67,72.36-104.59,105.88-232.56,135.71-353.17Z"/><path fill="#f5f0e8" d="M527.41,758.09c-130.92-18.6-322.24-77.7-333.65-271.97-7.73-141.78,79.55-206.23,193.71-212.31,54.5-2.95,109.56,2.94,164.43,7.73l14.36-192.42c-63.34-5.34-126.13-11.97-188.92-8.47C156.2,92.62-13.02,245.08.79,497.35c16.76,292.96,266.63,417.98,494.95,452.05l31.67-191.31Z"/><polygon fill="#f5f0e8" points="852.6 102.75 659.62 105.88 643.97 301.25 849.1 316.35 852.6 102.75"/><path fill="#f5f0e8" d="M411.96,385.03l-80.1,4.79,15.65,192.42,85.44-4.79c73.65-4.05,148.97-7,222.43-11.23,0,91.52.55,183.59,3.5,275.65l193.16-10.87c-2.95-90.78-3.5-182.3-2.95-273.26l166.83-14.36,1.84,44.38c13.07-16.76,27.99-32.96,45.3-47.88,32.41-28.17,72.36-50.82,118.4-68.13,35.91-13.81,77.15-21.54,121.34-23.39l-6.44-121.35-95.2,6.63L1188.09,1.84l-193.16,10.68,13.26,337.88-596.23,34.62Z"/><path fill="#f5f0e8" d="M1563.54,874.64c13.07,0,26.33,0,39.41.55,80.83,3.68,160.2,9.58,241.03,13.26l9.02-193.16c-77.15-4.79-153.2-10.68-229.62-13.07,1.1,7.18,1.1,14.92,1.1,22.65-1.84,47.32-16.76,95.75-44.74,144.18-5.52,8.84-10.86,17.31-16.2,25.59Z"/><path fill="#f5f0e8" d="M1556.91,528.47l2.39-50.09c88.57-1.84,178.24-9.02,266.63-7.92l-.55-193.71c-83.04-1.1-165.54,5.52-248.76,7.92,4.79-27.62,10.86-55.61,15.1-82.67,48.98,4.23,99.25,4.23,147.68,6.07,52.48,2.4,103.3,13.81,155.41,17.31l8.29-193.16c-50.82-3.5-101.64-14.92-153.57-17.31-66.47-2.94-132.21-6.63-197.94-9.58-47.87-2.39-94.46-4.23-142.34-5.34l-7.18,163.88c-1.66,41.25-14.91,80.1-20.81,120.06-9.02,53.95-11.97,110.11-14.36,164.43,44.74,2.39,85.99,13.26,121.34,30.56,26.88,13.63,50.27,29.83,68.68,49.54Z"/><path fill="#f5f0e8" d="M2505.76,276.2l.55-193.16c-168.48-1.1-335.86-8.29-502.14-19.7l-16.76,191.87,15.47,1.29-30.38,623.48,192.42,8.47,15.1-290.56c52.48,7.18,105.14,9.58,158.36,16.2l25.04-192.05c-58-7.18-117.11-8.29-173.82-17.31l5.89-136.26c103.48,4.23,206.78,6.63,310.27,7.73Z"/><path fill="#c9973a" d="M908.94,1303.31c10.68-1.1,18.41-3.5,23.2-7.18,17.31-22.1,34.8-37.56,53.21-45.3,3.13-1.29,5.34-2.4,8.47-3.69l.55-.55c14.92-5.34,31.12-8.47,47.14-7.74,19.15.55,39.04,4.05,59.29,10.68,20.99,6.63,41.8,13.81,63.34,21.54,21.54,7.74,43.64,14.92,67.03,21.55,22.65,5.89,46.03,9.58,70.52,9.58,19.7,0,38.85-4.23,56.71-11.97,18.04-7.73,34.07-18.6,47.32-31.67,13.81-13.81,23.2-30.01,29.83-48.43,1.84-4.79,2.95-9.58,3.68-14.37,2.95-13.81,2.95-28.72.55-43.64-1.29-7.18-5.34-12.52-11.97-16.21-6.63-3.5-16.76-3.5-30.57-.55-11.23,2.94-27.99,4.79-50.08,5.34-21.54.55-43.64,0-66.47-1.84-23.2-1.66-44.74-4.05-65.18-8.29-20.25-3.68-35.72-8.47-46.03-14.36-7.73-3.5-11.97-9.58-12.52-17.31,0-7.74,4.79-14.92,16.2-21.55,29.83-16.75,61.5-34.06,94.46-53.21,32.78-18.6,65.18-38.85,96.3-60.95,30.93-21.54,59.66-44.93,85.99-69.42,6.63-5.89,13.26-12.52,19.15-19.15,17.86-19.7,33.51-40.69,46.59-62.79,22.1-38.3,33.51-74.76,34.8-109.37,1.1-35.17-6.08-65.74-22.28-92.62-16.02-26.88-40.51-48.43-72.92-64.63-26.33-13.07-56.71-20.81-91.33-22.65-7.92-1.29-16.2-1.29-25.23-1.29-48.98-1.11-92.62,5.52-129.63,19.15-.74,0-1.29.55-1.84.55-37.75,14.36-69.42,32.41-95.75,55.06-25.59,22.83-46.03,47.88-59.66,75.31-13.81,28.18-21.54,55.61-22.83,81.94-1.66,26.33,3.13,50.82,14.36,72.92,10.86,22.83,28.72,39.4,52.66,51.37,14.36,7.18,29.28,10.86,45.48,10.31,15.47-.74,30.38-3.69,44.19-10.31,13.81-5.89,25.78-14.92,35.91-26.15,10.13-11.42,16.76-25.23,20.25-40.7,4.24-19.15-3.5-32.41-23.94-40.69-19.15-7.73-30.38-21.54-35.17-41.8-4.79-19.7-2.39-40.69,7.18-60.95,5.34-11.97,12.52-23.39,22.65-33.51,7.18-7.92,15.65-15.65,25.78-22.1,22.65-16.21,51.37-24.68,87.28-24.68,14.36,0,25.59,1.84,35.17,6.63,9.02,3.68,16.2,9.02,20.99,16.75,9.58,14.91,14.36,33.51,13.07,55.06-.55,20.81-5.34,43.08-13.63,65.18-8.47,21.54-16.76,38.85-25.78,52.48-.55.74-1.1,1.84-1.84,2.4-18.41,29.46-42.9,55.06-72.36,78.44-29.83,22.65-61.5,44.19-95.57,64.45-34.62,20.44-69.42,41.25-104.59,62.24-35.91,20.99-68.87,43.64-99.8,68.13-31.12,23.94-58.74,51.56-82.68,81.39-23.2,29.83-39.96,65.18-48.98,105.14-4.23,13.81-2.95,25.78,3.68,34.06,7.18,9.03,14.91,15.1,25.04,19.15,9.58,3.69,19.7,5.34,30.57,4.79Z"/></svg><div class="bl-tag" style="margin-top:4px">Prêt · Sain · Maîtrisé</div></div>
+            <div class="bl-hdr-r"><div class="bl-doc">Bilan nutritionnel personnalisé</div><div class="bl-name" id="bl-nom">Éric Kakuta</div><div class="bl-date" id="bl-date">3 juin 2026</div></div>
+          </div>
+          <div class="bl-body">
+            <div class="bl-st">Profil client</div>
+            <div class="bl-profil">
+              <div class="bl-pc"><div class="bl-pk">Nom</div><div class="bl-pv" id="bl-nom2">Éric Kakuta</div></div>
+              <div class="bl-pc"><div class="bl-pk">Âge</div><div class="bl-pv" id="bl-age">38 ans</div></div>
+              <div class="bl-pc"><div class="bl-pk">Taille</div><div class="bl-pv" id="bl-taille">185 cm</div></div>
+              <div class="bl-pc"><div class="bl-pk">Poids</div><div class="bl-pv" id="bl-poids">103 kg</div></div>
+            </div>
+            <div class="bl-gap"></div>
+            <div class="bl-st">Objectif</div>
+            <div class="bl-obj"><div class="bl-ot" id="bl-obj-titre">Perte de poids &amp; recomposition corporelle</div><div class="bl-od" id="bl-obj-desc">...</div></div>
+            <div class="bl-gap"></div>
+            <div class="bl-st">Vos besoins quotidiens</div>
+            <div class="bl-macros">
+              <div class="bl-kcal"><div class="bl-kn" id="bl-kcal">2 400</div><div class="bl-ku">kcal / jour</div></div>
+              <div class="bl-mb"><div class="bl-ml">🥩 Protéines</div><div class="bl-mn"><span id="bl-prot">190</span><span class="bl-mg">g</span></div></div>
+              <div class="bl-mb"><div class="bl-ml">🍚 Glucides</div><div class="bl-mn"><span id="bl-gluc">220</span><span class="bl-mg">g</span></div></div>
+              <div class="bl-mb"><div class="bl-ml">🥑 Lipides</div><div class="bl-mn"><span id="bl-lip">80</span><span class="bl-mg">g</span></div></div>
+            </div>
+            <div class="bl-gap"></div>
+            <div class="bl-st">Profil sportif</div>
+            <div class="bl-sport">
+              <div class="bl-stag"><div class="bl-stagl">Activités</div><div class="bl-stagv" id="bl-sport">Musculation<br>Cardio léger</div></div>
+              <div class="bl-sstat"><div class="bl-ssn" id="bl-seances">5</div><div class="bl-ssl">séances / semaine</div></div>
+              <div class="bl-sstat"><div class="bl-ssn" id="bl-duree">60–90</div><div class="bl-ssl">minutes / séance</div></div>
+            </div>
+            <div class="bl-gap"></div>
+            <div class="bl-st bl-st-badge">Votre déjeuner Chef2Box<span class="bl-badge" id="bl-palier" style="display:none"></span></div>
+            <div class="bl-repas">
+              <div class="bl-rl">
+                <div class="bl-rk" id="bl-r-kcal">800</div><div class="bl-rku">kcal / repas</div>
+                <div style="font-size:11px;color:#c9973a;font-weight:700;margin-top:4px" id="bl-pct1">couvre 33% de vos besoins</div>
+                <div class="bl-rm">
+                  <div class="bl-rml"><span>🥩 Protéines</span><span id="bl-r-prot">60 g</span></div>
+                  <div class="bl-rml"><span>🍚 Glucides</span><span id="bl-r-gluc">75 g</span></div>
+                  <div class="bl-rml"><span>🥑 Lipides</span><span id="bl-r-lip">25 g</span></div>
+                </div>
+              </div>
+              <div class="bl-rr">
+                <div class="bl-ck"><div class="bl-ckb">✓</div>Portions adaptées à votre objectif</div>
+                <div class="bl-ck"><div class="bl-ckb">✓</div>Calories maîtrisées</div>
+                <div class="bl-ck"><div class="bl-ckb">✓</div>Apport protéique élevé</div>
+              </div>
+            </div>
+            <div class="bl-gap"></div>
+            <!-- REPAS 2 optionnel -->
+            <div id="bl-repas2-section" style="display:none">
+              <div class="bl-st">Option 2ème repas Chef2Box</div>
+              <div class="bl-repas">
+                <div class="bl-rl">
+                  <div class="bl-rk" id="bl-r2-kcal">—</div><div class="bl-rku">kcal / repas</div>
+                  <div style="font-size:11px;color:#c9973a;font-weight:700;margin-top:4px" id="bl-pct2">couvre — de vos besoins</div>
+                  <div class="bl-rm">
+                    <div class="bl-rml"><span>🥩 Protéines</span><span id="bl-r2-prot">—</span></div>
+                    <div class="bl-rml"><span>🍚 Glucides</span><span id="bl-r2-gluc">—</span></div>
+                    <div class="bl-rml"><span>🥑 Lipides</span><span id="bl-r2-lip">—</span></div>
+                  </div>
+                </div>
+                <div class="bl-rr">
+                  <div class="bl-ck"><div class="bl-ckb">✓</div>Repas du soir adapté</div>
+                  <div class="bl-ck"><div class="bl-ckb">✓</div>Équilibre journalier</div>
+                  <div class="bl-ck"><div class="bl-ckb">✓</div>Objectif maintenu</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ SAUT DE PAGE EXPLICITE ══ -->
+        <div class="bl-pagebreak"></div>
+
+        <!-- ══ PAGE 2 ══ -->
+        <div class="bl-page">
+          <div class="bl-hdr">
+            <div><svg viewBox="0 0 2506.31 1953.3" style="height:32px;width:auto" aria-label="Chef2Box"><path fill="#f5f0e8" d="M593.89,1026c-76.05,0-150.07,32.77-209.36,80.65l-1.1-43.09-193.71,7.74c3.5,98.14,2.39,194.45,2.39,292.4,0,190.21,10.13,380.24,11.23,571.55h193.71c35.35,0,69.42-8.29,101.09-18.41,137-39.04,249.32-123.92,249.32-277.49,0-55.61-19.15-111.77-59.11-151.36,47.14-41.8,89.67-95.01,114.16-154.67,14.91-35.35,23.2-72.37,23.2-110.67,0-29.28-5.89-55.61-17.31-78.26-35.91-76.6-125.58-118.4-214.52-118.4ZM393.55,1739.16l-2.39-80.65,32.78-16.21,1.29,2.4c31.12-14.36,63.9-26.88,99.25-26.88,19.15,0,29.28,1.84,29.28,23.94,0,70.53-106.98,92.07-160.2,97.41ZM385.81,1448.04v-48.98c39.41-67.02,124.84-180.08,210.47-180.08,12.52,0,25.04,2.39,36.46,8.47-8.47,99.8-165.17,182.84-246.93,220.59Z"/><path fill="#f5f0e8" d="M1458.4,1310.49c-19.89,19.7-43.64,35.91-69.97,47.87-14.91,6.63-31.12,11.42-46.77,13.81,31.85,44.75,40.69,118.95,40.69,163.15,0,48.98-9.57,99.25-31.12,144.73-26.15,56.71-55.61,79.54-119.5,79.54-127.42,0-160.2-132.21-160.2-235.69,0-79.55,41.8-140.49,104.59-170.32-12.52-4.23-25.04-8.29-37.01-12.52-20.99-7.73-41.25-14.92-60.95-20.99-13.81-4.78-26.33-7.18-38.3-7.18-7.73,0-15.65,1.29-23.94,4.79-2.95,1.84-11.97,7.18-25.78,23.94l-4.79,6.63-5.89,4.78c-17.31,14.36-38.85,22.1-65.18,23.94-2.95.55-5.34.55-8.47.55-18.41,43.64-27.99,92.07-27.99,143.99,0,217.65,109.38,431.79,352.62,431.79,49.16,0,98.14-8.47,143.63-27.62,138.65-60.4,201.44-250.42,201.44-390.36,0-95.01-25.04-200.34-79.55-278.05-9.58,19.7-22.1,37.75-37.56,53.22Z"/><path fill="#f5f0e8" d="M2256.44,1091.18l-188.37-44.37c-22.65,93.36-60.4,247.66-129.08,314.5-68.13-53.22-132.03-270.86-157.8-356.86l-185.42,54.87c39.59,134.05,91.51,311.56,184.13,417.44-76.42,106.43-111.22,239.19-122.45,368.82l193.16,18.6c8.29-106.43,35.17-218.2,108.64-300.14,71.26,31.12,118.4,219.49,135.16,291.12l188.37-47.14c-29.83-125.58-70.52-268.47-162.04-363.67,72.36-104.59,105.88-232.56,135.71-353.17Z"/><path fill="#f5f0e8" d="M527.41,758.09c-130.92-18.6-322.24-77.7-333.65-271.97-7.73-141.78,79.55-206.23,193.71-212.31,54.5-2.95,109.56,2.94,164.43,7.73l14.36-192.42c-63.34-5.34-126.13-11.97-188.92-8.47C156.2,92.62-13.02,245.08.79,497.35c16.76,292.96,266.63,417.98,494.95,452.05l31.67-191.31Z"/><polygon fill="#f5f0e8" points="852.6 102.75 659.62 105.88 643.97 301.25 849.1 316.35 852.6 102.75"/><path fill="#f5f0e8" d="M411.96,385.03l-80.1,4.79,15.65,192.42,85.44-4.79c73.65-4.05,148.97-7,222.43-11.23,0,91.52.55,183.59,3.5,275.65l193.16-10.87c-2.95-90.78-3.5-182.3-2.95-273.26l166.83-14.36,1.84,44.38c13.07-16.76,27.99-32.96,45.3-47.88,32.41-28.17,72.36-50.82,118.4-68.13,35.91-13.81,77.15-21.54,121.34-23.39l-6.44-121.35-95.2,6.63L1188.09,1.84l-193.16,10.68,13.26,337.88-596.23,34.62Z"/><path fill="#f5f0e8" d="M1563.54,874.64c13.07,0,26.33,0,39.41.55,80.83,3.68,160.2,9.58,241.03,13.26l9.02-193.16c-77.15-4.79-153.2-10.68-229.62-13.07,1.1,7.18,1.1,14.92,1.1,22.65-1.84,47.32-16.76,95.75-44.74,144.18-5.52,8.84-10.86,17.31-16.2,25.59Z"/><path fill="#f5f0e8" d="M1556.91,528.47l2.39-50.09c88.57-1.84,178.24-9.02,266.63-7.92l-.55-193.71c-83.04-1.1-165.54,5.52-248.76,7.92,4.79-27.62,10.86-55.61,15.1-82.67,48.98,4.23,99.25,4.23,147.68,6.07,52.48,2.4,103.3,13.81,155.41,17.31l8.29-193.16c-50.82-3.5-101.64-14.92-153.57-17.31-66.47-2.94-132.21-6.63-197.94-9.58-47.87-2.39-94.46-4.23-142.34-5.34l-7.18,163.88c-1.66,41.25-14.91,80.1-20.81,120.06-9.02,53.95-11.97,110.11-14.36,164.43,44.74,2.39,85.99,13.26,121.34,30.56,26.88,13.63,50.27,29.83,68.68,49.54Z"/><path fill="#f5f0e8" d="M2505.76,276.2l.55-193.16c-168.48-1.1-335.86-8.29-502.14-19.7l-16.76,191.87,15.47,1.29-30.38,623.48,192.42,8.47,15.1-290.56c52.48,7.18,105.14,9.58,158.36,16.2l25.04-192.05c-58-7.18-117.11-8.29-173.82-17.31l5.89-136.26c103.48,4.23,206.78,6.63,310.27,7.73Z"/><path fill="#c9973a" d="M908.94,1303.31c10.68-1.1,18.41-3.5,23.2-7.18,17.31-22.1,34.8-37.56,53.21-45.3,3.13-1.29,5.34-2.4,8.47-3.69l.55-.55c14.92-5.34,31.12-8.47,47.14-7.74,19.15.55,39.04,4.05,59.29,10.68,20.99,6.63,41.8,13.81,63.34,21.54,21.54,7.74,43.64,14.92,67.03,21.55,22.65,5.89,46.03,9.58,70.52,9.58,19.7,0,38.85-4.23,56.71-11.97,18.04-7.73,34.07-18.6,47.32-31.67,13.81-13.81,23.2-30.01,29.83-48.43,1.84-4.79,2.95-9.58,3.68-14.37,2.95-13.81,2.95-28.72.55-43.64-1.29-7.18-5.34-12.52-11.97-16.21-6.63-3.5-16.76-3.5-30.57-.55-11.23,2.94-27.99,4.79-50.08,5.34-21.54.55-43.64,0-66.47-1.84-23.2-1.66-44.74-4.05-65.18-8.29-20.25-3.68-35.72-8.47-46.03-14.36-7.73-3.5-11.97-9.58-12.52-17.31,0-7.74,4.79-14.92,16.2-21.55,29.83-16.75,61.5-34.06,94.46-53.21,32.78-18.6,65.18-38.85,96.3-60.95,30.93-21.54,59.66-44.93,85.99-69.42,6.63-5.89,13.26-12.52,19.15-19.15,17.86-19.7,33.51-40.69,46.59-62.79,22.1-38.3,33.51-74.76,34.8-109.37,1.1-35.17-6.08-65.74-22.28-92.62-16.02-26.88-40.51-48.43-72.92-64.63-26.33-13.07-56.71-20.81-91.33-22.65-7.92-1.29-16.2-1.29-25.23-1.29-48.98-1.11-92.62,5.52-129.63,19.15-.74,0-1.29.55-1.84.55-37.75,14.36-69.42,32.41-95.75,55.06-25.59,22.83-46.03,47.88-59.66,75.31-13.81,28.18-21.54,55.61-22.83,81.94-1.66,26.33,3.13,50.82,14.36,72.92,10.86,22.83,28.72,39.4,52.66,51.37,14.36,7.18,29.28,10.86,45.48,10.31,15.47-.74,30.38-3.69,44.19-10.31,13.81-5.89,25.78-14.92,35.91-26.15,10.13-11.42,16.76-25.23,20.25-40.7,4.24-19.15-3.5-32.41-23.94-40.69-19.15-7.73-30.38-21.54-35.17-41.8-4.79-19.7-2.39-40.69,7.18-60.95,5.34-11.97,12.52-23.39,22.65-33.51,7.18-7.92,15.65-15.65,25.78-22.1,22.65-16.21,51.37-24.68,87.28-24.68,14.36,0,25.59,1.84,35.17,6.63,9.02,3.68,16.2,9.02,20.99,16.75,9.58,14.91,14.36,33.51,13.07,55.06-.55,20.81-5.34,43.08-13.63,65.18-8.47,21.54-16.76,38.85-25.78,52.48-.55.74-1.1,1.84-1.84,2.4-18.41,29.46-42.9,55.06-72.36,78.44-29.83,22.65-61.5,44.19-95.57,64.45-34.62,20.44-69.42,41.25-104.59,62.24-35.91,20.99-68.87,43.64-99.8,68.13-31.12,23.94-58.74,51.56-82.68,81.39-23.2,29.83-39.96,65.18-48.98,105.14-4.23,13.81-2.95,25.78,3.68,34.06,7.18,9.03,14.91,15.1,25.04,19.15,9.58,3.69,19.7,5.34,30.57,4.79Z"/></svg><div class="bl-tag" style="margin-top:4px">Prêt · Sain · Maîtrisé</div></div>
+            <div class="bl-hdr-r"><div class="bl-doc">Bilan nutritionnel personnalisé</div><div class="bl-name" id="bl-nom-p2">Éric Kakuta</div><div class="bl-date" id="bl-date-p2">3 juin 2026</div></div>
+          </div>
+          <div class="bl-body">
+            <div class="bl-st">Organisation alimentaire</div>
+            <div class="bl-org">
+              <div class="bl-ol">
+                <div class="bl-oline"><span class="bl-ok">Structure actuelle</span><span class="bl-ov" id="bl-structure">1 repas / soir</span></div>
+                <div class="bl-oline"><span class="bl-ok">Calories restantes après Chef2Box</span><span class="bl-ovb" id="bl-reste">1 600 kcal<small>sur le reste de la journée</small></span></div>
+              </div>
+              <div class="bl-rep">
+                <div class="bl-rept">Repères journaliers</div>
+                <div class="bl-repi"><div class="bl-repc">✓</div>Une source de protéines</div>
+                <div class="bl-repi"><div class="bl-repc">✓</div>Des légumes</div>
+                <div class="bl-repi"><div class="bl-repc">✓</div>Une source de glucides adaptée</div>
+                <div class="bl-repi"><div class="bl-repc">✓</div>Une source de bonnes graisses</div>
+              </div>
+            </div>
+            <div class="bl-gap"></div>
+            <div class="bl-st">Recommandation personnalisée</div>
+            <div class="bl-reco"><div class="bl-rect" id="bl-reco">...</div></div>
+          </div>
+          <div class="bl-mission">
+            <div><div class="bl-mt">Notre mission</div><div class="bl-mb2">Vous simplifier l'alimentation. Nous nous occupons des calculs, des portions et de la préparation. Vous n'avez plus qu'à profiter de votre repas et avancer vers votre objectif.</div></div>
+            <div class="bl-mlogo">CHEF<span>2</span>BOX</div>
+          </div>
+          <div class="bl-footer">
+            <span class="bl-fi">chef2box.com</span>
+            <span class="bl-fi">hello@chef2box.com</span>
+            <span class="bl-fi">@chef2box_</span>
+            <span class="bl-fi">+212 660-831640</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  ⚙️  EMAILJS — REMPLACE CES 3 VALEURS
+//  1. Va sur emailjs.com → ton compte
+//  2. Service ID  : Email Services → ton service
+//  3. Template ID : Email Templates → ton template
+//  4. Public Key  : Account → General
+// ══════════════════════════════════════
+const EMAILJS_SERVICE_ID  = 'service_3spccri';
+const EMAILJS_TEMPLATE_ID = 'template_prfgngi';
+const EMAILJS_PUBLIC_KEY  = 'amVY5PMXlv3v6JoNR';
+
+emailjs.init(EMAILJS_PUBLIC_KEY);
+
+// ══ MODE ADMIN ══
+// L'onglet "Réponses" est caché pour les clients.
+// Swann : ouvre une fois la page avec ?admin=1 → l'onglet apparaît et reste visible sur cet appareil.
+// Pour le re-cacher : ?admin=0
+(function initAdmin() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('admin') === '1') localStorage.setItem('c2b_admin', '1');
+  if (p.get('admin') === '0') localStorage.removeItem('c2b_admin');
+  if (localStorage.getItem('c2b_admin') === '1') {
+    document.getElementById('dashboard-tab').style.display = 'inline-flex';
+  }
+})();
+
+// NAV
+function switchTab(tab, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  btn.classList.add('active');
+  if (tab === 'dashboard') renderDashboard();
+}
+
+// HELPERS
+function getRadio(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : '—';
+}
+function getCheckboxes(name) {
+  const els = document.querySelectorAll(`input[name="${name}"]:checked`);
+  const vals = Array.from(els).map(e => e.value);
+  return vals.length ? vals.join(', ') : '—';
+}
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el && el.value.trim() ? el.value.trim() : '—';
+}
+
+// SUBMIT
+function submitForm() {
+  // Reset errors
+  document.querySelectorAll('.field input.error, .field textarea.error').forEach(el => el.classList.remove('error'));
+  document.querySelectorAll('.field-error.show').forEach(el => el.classList.remove('show'));
+  document.getElementById('error-banner').classList.remove('show');
+
+  let valid = true;
+
+  function requireField(id, errId) {
+    const el = document.getElementById(id);
+    const err = document.getElementById(errId);
+    if (!el || !el.value.trim()) {
+      if (el) el.classList.add('error');
+      if (err) err.classList.add('show');
+      valid = false;
+    }
+  }
+
+  function requireRadio(name, errId) {
+    const checked = document.querySelector(`input[name="${name}"]:checked`);
+    const err = document.getElementById(errId);
+    if (!checked) {
+      if (err) err.classList.add('show');
+      valid = false;
+    }
+  }
+
+  requireField('f-nom', 'err-nom');
+  requireField('f-age', 'err-age');
+  requireField('f-taille', 'err-taille');
+  requireField('f-poids', 'err-poids');
+  // Valeurs impossibles (ex. 18 cm au lieu de 180) : le bilan serait faux.
+  function requireBornes(id, errId, min, max, message) {
+    const el = document.getElementById(id);
+    const err = document.getElementById(errId);
+    const brut = el ? el.value.trim() : '';
+    const v = parseFloat(brut.replace(',', '.'));
+    if (brut && !(v >= min && v <= max)) {
+      el.classList.add('error');
+      if (err) { err.textContent = message; err.classList.add('show'); }
+      valid = false;
+    } else if (err) {
+      err.textContent = 'Ce champ est obligatoire';
+    }
+  }
+  requireBornes('f-age', 'err-age', 16, 80, 'Âge entre 16 et 80 ans');
+  requireBornes('f-taille', 'err-taille', 130, 220, 'Taille en centimètres entre 130 et 220 (ex. 175)');
+  requireBornes('f-poids', 'err-poids', 35, 250, 'Poids en kilos entre 35 et 250');
+
+  requireRadio('sexe', 'err-sexe');
+  requireRadio('seances', 'err-seances');
+  requireRadio('job', 'err-job');
+  requireRadio('repas', 'err-repas');
+
+  // Objectif principal — au moins 1 checkbox
+  const objChecked = document.querySelectorAll('input[name="obj"]:checked');
+  if (!objChecked.length) {
+    document.getElementById('err-obj').classList.add('show');
+    valid = false;
+  }
+
+  if (!valid) {
+    document.getElementById('error-banner').classList.add('show');
+    // Scroll to first error
+    const firstErr = document.querySelector('.field input.error, .field-error.show');
+    if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const nom = getVal('f-nom');
+
+  const data = {
+    nom,
+    email:       getVal('f-email'),
+    tel:         getVal('f-tel'),
+    age:         getVal('f-age'),
+    sexe:        getRadio('sexe'),
+    taille:      getVal('f-taille'),
+    poids:       getVal('f-poids'),
+    objectif:    getCheckboxes('obj'),
+    objTexte:    getVal('f-obj-texte'),
+    seances:     getRadio('seances'),
+    sport:       getVal('f-sport'),
+    duree:       getRadio('duree'),
+    job:         getRadio('job'),
+    repas:       getRadio('repas'),
+    repartition: getCheckboxes('repartition'),
+    plaisir:     getRadio('plaisir'),
+    grigno:      getRadio('grigno'),
+    allergies:   getVal('f-allergies'),
+    refuses:     getVal('f-refuses'),
+    preferes:    getVal('f-preferes'),
+    formule:     (document.querySelector('input[name="formule"]:checked') || {}).value || '',
+    date:        new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+  };
+
+  // Envoi vers l'appli Chef2Box (fiche prête à valider dans Admin > Clients)
+  try {
+    fetch('https://chef2box-appli.netlify.app/api/questionnaire', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify(data)
+    }).catch(function(){});
+  } catch(e) {}
+
+  // Sauvegarde locale (le client voit ses réponses)
+  const responses = JSON.parse(localStorage.getItem('c2b_responses') || '[]');
+  responses.unshift(data);
+  localStorage.setItem('c2b_responses', JSON.stringify(responses));
+  updateBadge();
+
+  // Affiche succès tout de suite sans attendre l'email
+  // Affiche le prénom sur la page de confirmation
+  const prenom = nom.split(' ')[0].toUpperCase();
+  document.getElementById('success-prenom').textContent = prenom;
+
+  document.getElementById('form-content').style.display = 'none';
+  document.getElementById('success-screen').classList.add('show');
+  window.scrollTo(0, 0);
+
+  // Génère le lien magique vers l'éditeur de bilan
+  const bilanParams = new URLSearchParams({
+    nom:     data.nom,
+    age:     data.age,
+    taille:  data.taille,
+    poids:   data.poids,
+    sexe:    data.sexe,
+    date:    data.date,
+    objectif: data.objectif,
+    obj_desc: data.objTexte !== '—' ? data.objTexte : '',
+    sport:   data.sport !== '—' ? data.sport : '',
+    seances: data.seances,
+    duree:   data.duree,
+    job:     data.job,
+    repas:   data.repas,
+    grigno:  data.grigno !== '—' ? data.grigno : '',
+    plaisir: data.plaisir !== '—' ? data.plaisir : '',
+    allergies: data.allergies !== '—' ? data.allergies : '',
+    refuses:   data.refuses !== '—' ? data.refuses : '',
+    preferes:  data.preferes !== '—' ? data.preferes : '',
+    formule:   data.formule || '',
+  });
+  const magicLink = `https://chef2box-questionnaire.netlify.app/?${bilanParams.toString()}`;
+
+  // Envoi email à Swann via EmailJS
+  const templateParams = {
+    client_nom:      data.nom,
+    client_email:    data.email,
+    client_tel:      data.tel,
+    client_date:     data.date,
+    magic_link:      magicLink,
+    client_age:      data.age,
+    client_sexe:     data.sexe,
+    client_taille:   data.taille,
+    client_poids:    data.poids,
+    objectif:        data.objectif,
+    objectif_texte:  data.objTexte,
+    seances:         data.seances,
+    sport:           data.sport,
+    duree:           data.duree,
+    job:             data.job,
+    repas:           data.repas,
+    repartition:     data.repartition,
+    plaisir:         data.plaisir,
+    grigno:          data.grigno,
+    allergies:       data.allergies,
+    refuses:         data.refuses,
+    preferes:        data.preferes,
+    bilan_complet: `
+BILAN CHEF2BOX — ${data.nom}
+Date : ${data.date}
+
+👤 PROFIL
+Âge : ${data.age} ans | Sexe : ${data.sexe} | Taille : ${data.taille} cm | Poids : ${data.poids} kg
+Email : ${data.email} | WhatsApp : ${data.tel}
+🔗 Ouvrir WhatsApp : https://wa.me/${data.tel.replace(/[^0-9+]/g, '')}
+
+🎯 OBJECTIFS
+${data.objectif}
+${data.objTexte !== '—' ? 'Détail : ' + data.objTexte : ''}
+
+🏃 ACTIVITÉ
+Séances/sem : ${data.seances} | Sport : ${data.sport} | Durée : ${data.duree} | Pro : ${data.job}
+
+🍽️ ALIMENTATION
+Repas/jour : ${data.repas} | Répartition : ${data.repartition}
+Rapport aliment : ${data.plaisir} | Grignotage : ${data.grigno}
+
+🍴 CONTRAINTES
+Allergies : ${data.allergies}
+Refusés : ${data.refuses}
+Préférés : ${data.preferes}
+
+📦 FORMULE SOUHAITÉE
+${data.formule}
+
+━━━━━━━━━━━━━━━━━━━━━━━
+🔗 GÉNÉRER LE BILAN PDF :
+${magicLink}
+━━━━━━━━━━━━━━━━━━━━━━━
+    `.trim()
+  };
+
+  emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams)
+    .then(() => console.log('✅ Email envoyé'))
+    .catch(err => console.warn('⚠️ Email non envoyé :', err));
+}
+
+function resetForm() {
+  document.getElementById('form-content').style.display = 'block';
+  document.getElementById('success-screen').classList.remove('show');
+  document.querySelectorAll('input[type=text], input[type=number], input[type=email], input[type=tel], textarea').forEach(el => el.value = '');
+  document.querySelectorAll('input[type=radio], input[type=checkbox]').forEach(el => el.checked = false);
+  window.scrollTo(0, 0);
+}
+
+function updateBadge() {
+  const n = JSON.parse(localStorage.getItem('c2b_responses') || '[]').length;
+  document.getElementById('count-badge').textContent = n;
+}
+
+// COPIER LES RÉPONSES
+function copyResponse(i, btn) {
+  const responses = JSON.parse(localStorage.getItem('c2b_responses') || '[]');
+  const r = responses[i];
+  if (!r) return;
+
+  const text = [
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    `📋 BILAN CHEF2BOX — ${r.nom}`,
+    `📅 ${r.date}`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    '👤 PROFIL',
+    `Âge : ${r.age} ans`,
+    `Sexe : ${r.sexe}`,
+    `Taille : ${r.taille} cm`,
+    `Poids : ${r.poids} kg`,
+    `Email : ${r.email}`,
+    `WhatsApp : ${r.tel}`,
+    '',
+    '🎯 OBJECTIFS',
+    `Objectif(s) : ${r.objectif}`,
+    r.objTexte !== '—' ? `Détail : ${r.objTexte}` : '',
+    '',
+    '🏃 ACTIVITÉ PHYSIQUE',
+    `Séances/semaine : ${r.seances}`,
+    `Sport(s) : ${r.sport}`,
+    `Durée séance : ${r.duree}`,
+    `Activité pro : ${r.job}`,
+    '',
+    '🍽️ ALIMENTATION',
+    `Repas/jour : ${r.repas}`,
+    `Répartition : ${r.repartition}`,
+    `Rapport aliment : ${r.plaisir}`,
+    `Grignotage : ${r.grigno}`,
+    '',
+    '🍴 CONTRAINTES',
+    `Allergies : ${r.allergies}`,
+    `Refusés : ${r.refuses}`,
+    `Préférés : ${r.preferes}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+  ].filter(l => l !== null && l !== undefined).join('\n');
+
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copié !';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 Copier'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✓ Copié !';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 Copier'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// DASHBOARD RENDER
+function renderDashboard() {
+  const responses = JSON.parse(localStorage.getItem('c2b_responses') || '[]');
+  const container = document.getElementById('responses-list');
+
+  if (!responses.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Aucune réponse pour l'instant.<br>Les bilans remplis apparaîtront ici.</div></div>`;
+    return;
+  }
+
+  container.innerHTML = responses.map((r, i) => {
+    const _b = c2bBesoins(r);
+    const palTxt = _b ? 'Palier ' + c2bPalier(_b.kcal).n : null;
+    return `
+    <div class="response-card">
+      <div class="card-head" id="head-${i}">
+        <div onclick="toggleCard(${i})" style="flex:1;cursor:pointer">
+          <div class="card-name">${r.nom}</div>
+          <div class="card-meta">${r.date} · ${r.poids !== '—' ? r.poids+'kg' : ''} ${r.taille !== '—' ? '· '+r.taille+'cm' : ''}</div>
+        </div>
+        <div class="card-actions">
+          ${palTxt ? `<span style="background:#c9973a;color:#1c2e1e;font-weight:700;font-size:12px;border-radius:12px;padding:3px 10px;white-space:nowrap">${palTxt}</span>` : ''}
+          <button class="btn-copy" onclick="copyResponse(${i}, this)">📋 Copier</button>
+          <span class="card-chevron" onclick="toggleCard(${i})" style="cursor:pointer">▼</span>
+        </div>
+      </div>
+      <div class="card-body" id="card-body-${i}">
+
+        <div class="card-section-title">👤 Profil</div>
+        <div class="card-grid">
+          <div class="card-field"><div class="card-field-label">Âge</div><div class="card-field-value">${r.age} ans</div></div>
+          <div class="card-field"><div class="card-field-label">Sexe</div><div class="card-field-value">${r.sexe}</div></div>
+          <div class="card-field"><div class="card-field-label">Taille</div><div class="card-field-value">${r.taille} cm</div></div>
+          <div class="card-field"><div class="card-field-label">Poids</div><div class="card-field-value">${r.poids} kg</div></div>
+          <div class="card-field"><div class="card-field-label">Email</div><div class="card-field-value">${r.email}</div></div>
+          <div class="card-field"><div class="card-field-label">WhatsApp</div><div class="card-field-value">${r.tel}</div></div>
+        </div>
+
+        <div class="card-section-title">🎯 Objectifs</div>
+        <div style="margin-bottom:8px">${r.objectif.split(', ').map(o => `<span class="tag gold">${o}</span>`).join('')}</div>
+        ${r.objTexte !== '—' ? `<div class="card-text-value">${r.objTexte}</div>` : ''}
+
+        <div class="card-section-title">🏃 Activité</div>
+        <div class="card-grid">
+          <div class="card-field"><div class="card-field-label">Séances/sem.</div><div class="card-field-value">${r.seances}</div></div>
+          <div class="card-field"><div class="card-field-label">Durée séance</div><div class="card-field-value">${r.duree}</div></div>
+          <div class="card-field"><div class="card-field-label">Sport(s)</div><div class="card-field-value">${r.sport}</div></div>
+          <div class="card-field"><div class="card-field-label">Activité pro</div><div class="card-field-value">${r.job}</div></div>
+        </div>
+
+        <div class="card-section-title">🍽️ Alimentation</div>
+        <div class="card-grid">
+          <div class="card-field"><div class="card-field-label">Repas/jour</div><div class="card-field-value">${r.repas}</div></div>
+          <div class="card-field"><div class="card-field-label">Répartition</div><div class="card-field-value">${r.repartition}</div></div>
+          <div class="card-field"><div class="card-field-label">Rapport aliment</div><div class="card-field-value">${r.plaisir}</div></div>
+          <div class="card-field"><div class="card-field-label">Grignotage</div><div class="card-field-value">${r.grigno}</div></div>
+        </div>
+
+        <div class="card-section-title">🍴 Contraintes</div>
+        <div class="card-grid">
+          <div class="card-field"><div class="card-field-label">Allergies</div><div class="card-field-value">${r.allergies}</div></div>
+          <div class="card-field"><div class="card-field-label">Refusés</div><div class="card-field-value">${r.refuses}</div></div>
+          <div class="card-field" style="grid-column:1/-1"><div class="card-field-label">Préférés</div><div class="card-field-value">${r.preferes}</div></div>
+        </div>
+
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCard(i) {
+  const body = document.getElementById('card-body-' + i);
+  const head = document.getElementById('head-' + i);
+  body.classList.toggle('open');
+  head.classList.toggle('open');
+}
+
+function clearAll() {
+  if (confirm('Effacer toutes les réponses ?')) {
+    localStorage.removeItem('c2b_responses');
+    updateBadge();
+    renderDashboard();
+  }
+}
+
+updateBadge();
+
+// ══ ÉDITEUR BILAN ══
+// ══ RECALCUL AUTOMATIQUE ══
+// Logique :
+// - kcal jour modifiées → P et L conservés (basés sur le poids), les GLUCIDES absorbent la différence
+// - macro jour modifiée → kcal jour recalculées
+// - tout changement journée → repas 1 (et 2) rescalés en gardant leur % de couverture
+// - kcal repas ou % modifiés → macros du repas recalculées proportionnellement aux macros jour
+// - macro repas modifiée → kcal repas + % recalculés
+// - "Calories restantes" et "% total" toujours mis à jour
+// ══ PALIERS CHEF2BOX ══
+// Repas standardisés pour la cuisine. Le client est rangé dans un palier selon
+// ses besoins journaliers et reçoit le repas FIXE du palier (même assiette pour
+// tous les clients d'un même palier). Modifie les valeurs ici, c'est le seul endroit.
+const C2B_PALIERS = [
+  { n: 1, min: 3800, kcal: 1000, prot: 50, lip: 30, gluc: 132 },
+  { n: 2, min: 3000, kcal: 950,  prot: 50, lip: 30, gluc: 120 },
+  { n: 3, min: 2500, kcal: 800,  prot: 45, lip: 27, gluc: 94  },
+  { n: 4, min: 2000, kcal: 680,  prot: 40, lip: 24, gluc: 76  },
+  { n: 5, min: 1500, kcal: 550,  prot: 35, lip: 20, gluc: 57  },
+  { n: 6, min: 0,    kcal: 450,  prot: 30, lip: 17, gluc: 44  },
+];
+function c2bPalier(kcal) {
+  let palier = C2B_PALIERS.find(p => kcal >= p.min) || C2B_PALIERS[C2B_PALIERS.length - 1];
+  // Repas Chef2Box entre 550 et 800 kcal quel que soit le résultat :
+  // au-dessus -> palier 3 (800 kcal), en dessous -> palier 5 (550 kcal).
+  if (palier.kcal > 800) palier = C2B_PALIERS.find(p => p.n === 3);
+  if (palier.kcal < 550) palier = C2B_PALIERS.find(p => p.n === 5);
+  return palier;
+}
+
+// Calcul des besoins journaliers (Mifflin-St Jeor → TDEE → ajustement objectif).
+// Source UNIQUE, partagée par le bilan (génération) et le dashboard (badge palier),
+// pour qu'un client tombe toujours dans le même palier des deux côtés.
+// Retourne { kcal, prot, gluc, lip } ou null si données insuffisantes.
+function c2bBesoins(d) {
+  const numDec = (s) => parseFloat((s || '').toString().replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
+  const age    = Math.round(numDec(d.age));
+  const taille = Math.round(numDec(d.taille));
+  let   poids  = numDec(d.poids);
+  if (poids > 250) poids = poids / 10; // garde-fou : décimale mal lue (82.6 → 826)
+  if (!(age && taille && poids)) return null;
+
+  const sexe     = d.sexe || 'Homme';
+  const objectif = d.objectif || '';
+  const job      = d.job || '';
+  const grigno   = d.grigno || '';
+  const plaisir  = d.plaisir || '';
+  const seances  = d.seances || '';
+
+  // 1. BMR Mifflin-St Jeor
+  let bmr = sexe === 'Femme'
+    ? 10*poids + 6.25*taille - 5*age - 161
+    : 10*poids + 6.25*taille - 5*age + 5;
+
+  // 2. Facteur d'activité combiné (sport + job)
+  const sportActif = ['3-4','5+'].includes(seances);
+  const sportEleve = seances === '5+';
+  const jobPhysique = job.includes('physique') || job.includes('Physiquement');
+  const jobTresPhysique = job.includes('très physique') || job.includes('Travail très');
+  const jobDebout = job.includes('Debout');
+  let facteur;
+  if (jobTresPhysique && sportEleve)       facteur = 1.78;
+  else if (jobTresPhysique)                facteur = 1.68;
+  else if (jobPhysique && sportEleve)      facteur = 1.62;
+  else if (jobPhysique && sportActif)      facteur = 1.58;
+  else if (sportEleve)                     facteur = 1.60;
+  else if (seances === '3-4')              facteur = 1.45;
+  else if (seances === '1-2' && jobDebout) facteur = 1.40;
+  else if (seances === '1-2')              facteur = 1.35;
+  else if (jobDebout)                      facteur = 1.35;
+  else                                     facteur = 1.25;
+  let tdee = Math.round(bmr * facteur);
+
+  // 3. Ajustement objectif
+  let ajustPct = 0;
+  if (objectif.includes('Perte')) {
+    if (grigno.toLowerCase().includes('tous les jours') || plaisir.includes("mal à m'arrêter") || plaisir.includes('humeur'))
+      ajustPct = -0.12;
+    else if (grigno.toLowerCase().includes('plusieurs') || plaisir.includes('temps en temps'))
+      ajustPct = -0.15;
+    else
+      ajustPct = -0.18;
+  } else if (objectif.includes('recomposition') || (objectif.includes('Perte') && objectif.includes('Performance'))) {
+    ajustPct = -0.07;
+  } else if (objectif.includes('Prise')) {
+    ajustPct = +0.08;
+  } else if (objectif.includes('Performance')) {
+    ajustPct = 0;
+  }
+  let kcalTotal = Math.round(tdee * (1 + ajustPct));
+
+  // 3bis. Plancher de sécurité
+  const kcalMin = Math.max(Math.round(bmr), sexe === 'Femme' ? 1200 : 1500);
+  if (kcalTotal < kcalMin) kcalTotal = kcalMin;
+
+  // 4. Protéines
+  let protFactor;
+  if (objectif.includes('Prise'))                                      protFactor = 2.1;
+  else if (objectif.includes('Perte') || objectif.includes('recompo')) protFactor = 2.0;
+  else if (objectif.includes('Performance'))                           protFactor = 1.8;
+  else                                                                 protFactor = 1.8;
+  const prot = Math.round(poids * protFactor);
+
+  // 5. Lipides
+  const lipFactor = (objectif.includes('Perte')) ? 0.85 : 0.9;
+  const lip = Math.round(poids * lipFactor);
+
+  // 6. Glucides (le reste)
+  const gluc = Math.max(50, Math.round((kcalTotal - prot*4 - lip*9) / 4));
+
+  // 7. Recalcul kcal réel
+  kcalTotal = prot*4 + gluc*4 + lip*9;
+
+  return { kcal: kcalTotal, prot: prot, gluc: gluc, lip: lip };
+}
+
+function edNum(id) {
+  const el = document.getElementById(id); if (!el) return 0;
+  const v = (el.value || '').toString().replace(/[^\d.,-]/g, '').replace(',', '.');
+  return parseFloat(v) || 0;
+}
+function edSet(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+
+// Plafond protéines 50 g/repas — excédent redistribué 60% glucides / 40% lipides
+function edCapProt(rP, rG, rL) {
+  if (rP > 50) {
+    const kcalRecup = (rP - 50) * 4;
+    rP = 50;
+    rG = Math.round(rG + (kcalRecup * 0.60) / 4);
+    rL = Math.round(rL + (kcalRecup * 0.40) / 9);
+  }
+  return [rP, rG, rL];
+}
+
+function edRecalc(src) {
+  let P = edNum('e-prot'), G = edNum('e-gluc'), L = edNum('e-lip'), K = edNum('e-kcal');
+  const dayChanged = (src === 'e-kcal' || src === 'e-prot' || src === 'e-gluc' || src === 'e-lip');
+
+  // ── Journée ──
+  if (src === 'e-kcal') {
+    G = Math.max(0, Math.round((K - P * 4 - L * 9) / 4));
+    edSet('e-gluc', G);
+  } else if (src === 'e-prot' || src === 'e-gluc' || src === 'e-lip') {
+    K = P * 4 + G * 4 + L * 9;
+    edSet('e-kcal', K);
+  }
+
+  // ── Repas 1 ──
+  let rK = edNum('e-r-kcal'), rP = edNum('e-r-prot'), rG = edNum('e-r-gluc'), rL = edNum('e-r-lip');
+  let pct1 = edNum('e-pct1');
+
+  if (src === 'e-pct1' && K > 0 && pct1 > 0) {
+    const ratio = pct1 / 100;
+    rP = Math.round(P * ratio); rG = Math.round(G * ratio); rL = Math.round(L * ratio);
+    [rP, rG, rL] = edCapProt(rP, rG, rL);
+    rK = Math.min(1000, rP * 4 + rG * 4 + rL * 9);
+    edSet('e-r-kcal', rK); edSet('e-r-prot', rP); edSet('e-r-gluc', rG); edSet('e-r-lip', rL);
+  } else if (src === 'e-r-kcal' && K > 0) {
+    const ratio = rK / K;
+    rP = Math.round(P * ratio); rG = Math.round(G * ratio); rL = Math.round(L * ratio);
+    [rP, rG, rL] = edCapProt(rP, rG, rL);
+    edSet('e-r-prot', rP); edSet('e-r-gluc', rG); edSet('e-r-lip', rL);
+    edSet('e-pct1', Math.round(ratio * 100) + '%');
+  } else if (src === 'e-r-prot' || src === 'e-r-gluc' || src === 'e-r-lip') {
+    rK = rP * 4 + rG * 4 + rL * 9;
+    edSet('e-r-kcal', rK);
+    if (K > 0) edSet('e-pct1', Math.round(rK / K * 100) + '%');
+  } else if (dayChanged && K > 0) {
+    // kcal ou protéines jour modifiées → on régénère automatiquement le plat à 35% (cap 50g)
+    const ratio = (pct1 || 35) / 100;
+    rP = Math.round(P * ratio); rG = Math.round(G * ratio); rL = Math.round(L * ratio);
+    [rP, rG, rL] = edCapProt(rP, rG, rL);
+    rK = Math.min(1000, rP * 4 + rG * 4 + rL * 9);
+    edSet('e-r-kcal', rK); edSet('e-r-prot', rP); edSet('e-r-gluc', rG); edSet('e-r-lip', rL);
+    edSet('e-pct1', Math.round(rK / K * 100) + '%');
+  }
+
+  // ── Repas 2 (seulement s'il est utilisé) ──
+  const r2El = document.getElementById('e-r2-kcal');
+  const hasR2 = r2El && String(r2El.value || '').trim() !== '';
+  let r2K = edNum('e-r2-kcal'), r2P = edNum('e-r2-prot'), r2G = edNum('e-r2-gluc'), r2L = edNum('e-r2-lip');
+  let pct2 = edNum('e-pct2');
+
+  if (src === 'e-r2-kcal' && !hasR2) {
+    // champ vidé → on nettoie le repas 2
+    edSet('e-r2-prot', ''); edSet('e-r2-gluc', ''); edSet('e-r2-lip', ''); edSet('e-pct2', '');
+  } else if (src === 'e-pct2' && K > 0 && pct2 > 0) {
+    const ratio = pct2 / 100;
+    r2P = Math.round(P * ratio); r2G = Math.round(G * ratio); r2L = Math.round(L * ratio);
+    [r2P, r2G, r2L] = edCapProt(r2P, r2G, r2L);
+    r2K = Math.min(1000, r2P * 4 + r2G * 4 + r2L * 9);
+    edSet('e-r2-kcal', r2K); edSet('e-r2-prot', r2P); edSet('e-r2-gluc', r2G); edSet('e-r2-lip', r2L);
+  } else if (src === 'e-r2-kcal' && K > 0 && hasR2) {
+    const ratio = r2K / K;
+    r2P = Math.round(P * ratio); r2G = Math.round(G * ratio); r2L = Math.round(L * ratio);
+    [r2P, r2G, r2L] = edCapProt(r2P, r2G, r2L);
+    edSet('e-r2-prot', r2P); edSet('e-r2-gluc', r2G); edSet('e-r2-lip', r2L);
+    edSet('e-pct2', Math.round(ratio * 100) + '%');
+  } else if (src === 'e-r2-prot' || src === 'e-r2-gluc' || src === 'e-r2-lip') {
+    r2K = r2P * 4 + r2G * 4 + r2L * 9;
+    edSet('e-r2-kcal', r2K);
+    if (K > 0) edSet('e-pct2', Math.round(r2K / K * 100) + '%');
+  } else if (dayChanged && hasR2 && K > 0) {
+    const ratio = (pct2 || 30) / 100;
+    r2P = Math.round(P * ratio); r2G = Math.round(G * ratio); r2L = Math.round(L * ratio);
+    [r2P, r2G, r2L] = edCapProt(r2P, r2G, r2L);
+    r2K = Math.min(1000, r2P * 4 + r2G * 4 + r2L * 9);
+    edSet('e-r2-kcal', r2K); edSet('e-r2-prot', r2P); edSet('e-r2-gluc', r2G); edSet('e-r2-lip', r2L);
+    edSet('e-pct2', Math.round(r2K / K * 100) + '%');
+  }
+
+  // ── Calories restantes & % total ──
+  rK = edNum('e-r-kcal');
+  const r2Final = (r2El && String(r2El.value || '').trim() !== '') ? edNum('e-r2-kcal') : 0;
+  edSet('e-reste', Math.max(0, K - rK - r2Final) + ' kcal');
+  if (K > 0) edSet('e-pct-total', Math.round((rK + r2Final) / K * 100) + '%');
+
+  edUpdate();
+}
+
+function edUpdate() {
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  const setH = (id, val) => { const el = document.getElementById(id); if(el) el.innerHTML = val; };
+  set('bl-nom',   document.getElementById('e-nom').value);
+  set('bl-nom2',  document.getElementById('e-nom').value);
+  set('bl-date',  document.getElementById('e-date').value);
+  set('bl-age',   document.getElementById('e-age').value);
+  set('bl-taille',document.getElementById('e-taille').value);
+  set('bl-poids', document.getElementById('e-poids').value);
+  set('bl-obj-titre', document.getElementById('e-obj-titre').value);
+  set('bl-obj-desc',  document.getElementById('e-obj-desc').value);
+  // Sync page 2
+  const nomP2 = document.getElementById('bl-nom-p2'); if(nomP2) nomP2.textContent = document.getElementById('e-nom').value;
+  const dateP2 = document.getElementById('bl-date-p2'); if(dateP2) dateP2.textContent = document.getElementById('e-date').value;
+  set('bl-kcal',  document.getElementById('e-kcal').value);
+  set('bl-prot',  document.getElementById('e-prot').value);
+  set('bl-gluc',  document.getElementById('e-gluc').value);
+  set('bl-lip',   document.getElementById('e-lip').value);
+  const sport = document.getElementById('e-sport').value;
+  setH('bl-sport', sport.replace(/\//g, '<br>'));
+  set('bl-seances', document.getElementById('e-seances').value);
+  set('bl-duree',   document.getElementById('e-duree').value);
+  set('bl-r-kcal',  document.getElementById('e-r-kcal').value);
+  // Badge palier — calculé en direct depuis les besoins journaliers
+  var palBadge = document.getElementById('bl-palier');
+  if (palBadge) {
+    var kJour = edNum('e-kcal');
+    if (kJour > 0) { palBadge.textContent = 'Palier ' + c2bPalier(kJour).n; palBadge.style.display = ''; }
+    else { palBadge.style.display = 'none'; }
+  }
+  // Repas 2
+  var r2kcal = document.getElementById('e-r2-kcal').value;
+  var r2section = document.getElementById('bl-repas2-section');
+  // % repas 1
+  var pct1val = document.getElementById('e-pct1').value;
+  var pct1el = document.getElementById('bl-pct1');
+  if(pct1el && pct1val) pct1el.textContent = 'couvre ' + pct1val + ' de vos besoins';
+  if (r2kcal && r2kcal.trim() !== '') {
+    r2section.style.display = 'block';
+    set('bl-r2-kcal', r2kcal);
+    set('bl-r2-prot', (document.getElementById('e-r2-prot').value || '—') + (document.getElementById('e-r2-prot').value ? ' g' : ''));
+    set('bl-r2-gluc', (document.getElementById('e-r2-gluc').value || '—') + (document.getElementById('e-r2-gluc').value ? ' g' : ''));
+    set('bl-r2-lip',  (document.getElementById('e-r2-lip').value || '—') + (document.getElementById('e-r2-lip').value ? ' g' : ''));
+    var pct2val = document.getElementById('e-pct2').value;
+    var pct2el = document.getElementById('bl-pct2');
+    if(pct2el && pct2val) pct2el.textContent = 'couvre ' + pct2val + ' de vos besoins';
+  } else {
+    r2section.style.display = 'none';
+  }
+  set('bl-r-prot',  document.getElementById('e-r-prot').value + ' g');
+  set('bl-r-gluc',  document.getElementById('e-r-gluc').value + ' g');
+  set('bl-r-lip',   document.getElementById('e-r-lip').value + ' g');
+  set('bl-structure', document.getElementById('e-structure').value);
+  setH('bl-reste', document.getElementById('e-reste').value + '<small>sur le reste de la journée</small>');
+  const reco = document.getElementById('e-reco').value;
+  setH('bl-reco', reco
+    .replace(/répartir vos apports sur plusieurs prises dans la journée/g, '<strong>répartir vos apports sur plusieurs prises dans la journée</strong>')
+    .replace(/collation riche en protéines/g, '<strong>collation riche en protéines</strong>')
+    .replace(/\n\n/g, '<br><br>'));
+}
+
+function fillEditorFromURL() {
+  const p = new URLSearchParams(window.location.search);
+  if (!p.has('nom')) return;
+
+  const setField = (id, key, fallback) => {
+    const el = document.getElementById(id);
+    if (el) el.value = p.get(key) || fallback || '';
+  };
+  setField('e-nom',     'nom',      '');
+  const ageVal    = p.get('age')    || '';
+  const tailleVal = p.get('taille') || '';
+  const poidsVal  = p.get('poids')  || '';
+  const ageEl    = document.getElementById('e-age');    if(ageEl)    ageEl.value    = ageVal ? ageVal + ' ans' : '';
+  const tailleEl = document.getElementById('e-taille'); if(tailleEl) tailleEl.value = tailleVal ? tailleVal + ' cm' : '';
+  const poidsEl  = document.getElementById('e-poids');  if(poidsEl)  poidsEl.value  = poidsVal ? poidsVal + ' kg' : '';
+  setField('e-date',    'date',     new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}));
+  setField('e-obj-titre','objectif','');
+
+  // Description objectif — utilise le texte libre ou laisse vide pour saisie manuelle
+  const objDesc = p.get('obj_desc') || '';
+  const descEl = document.getElementById('e-obj-desc');
+  if (descEl) descEl.value = objDesc || '';
+
+  // Sport — ignore les tirets
+  const sport = p.get('sport') || '';
+  const sportEl = document.getElementById('e-sport');
+  if (sportEl) sportEl.value = (sport === '—' || !sport) ? '' : sport;
+
+  // Séances
+  const seances = p.get('seances') || '';
+  const seancesEl = document.getElementById('e-seances');
+  if (seancesEl) seancesEl.value = (seances === '—' || !seances) ? '' : seances;
+
+  // Durée
+  const duree = p.get('duree') || '';
+  const dureeEl = document.getElementById('e-duree');
+  if (dureeEl) dureeEl.value = (duree === '—' || !duree || duree === '–') ? '' : duree;
+
+  // ── BESOINS — via la fonction partagée c2bBesoins (même source que le dashboard) ──
+  const formule = p.get('formule') || '';
+  const besoins = c2bBesoins({
+    age:    p.get('age'),     taille:   p.get('taille'),   poids:   p.get('poids'),
+    sexe:   p.get('sexe'),    objectif: p.get('objectif'), job:     p.get('job'),
+    grigno: p.get('grigno'),  plaisir:  p.get('plaisir'),  seances: seances
+  });
+
+  if (besoins) {
+    const kcalTotal = besoins.kcal, prot = besoins.prot, gluc = besoins.gluc, lip = besoins.lip;
+
+    // ── Repas Chef2Box — SYSTÈME DE PALIERS ──
+    // Le repas n'est plus calculé au gramme. On range le client dans un palier
+    // selon ses besoins journaliers, et il reçoit le repas FIXE de ce palier.
+    // Seuls le % couvert et le « reste à compléter » restent personnels.
+    const palier = c2bPalier(kcalTotal);
+
+    // Repas identique midi/soir — seul le nombre change selon la formule
+    const deuxRepas = (formule === '2 repas par jour' || formule === 'Je ne sais pas encore');
+    const nbRepas = deuxRepas ? 2 : 1;
+
+    const rKcal = palier.kcal, rProt = palier.prot, rGluc = palier.gluc, rLip = palier.lip;
+    let r2Kcal = '', r2Prot = '', r2Gluc = '', r2Lip = '';
+    if (deuxRepas) { r2Kcal = palier.kcal; r2Prot = palier.prot; r2Gluc = palier.gluc; r2Lip = palier.lip; }
+
+    // Couverture & reste — personnels (besoins du client vs repas fixe)
+    const couvert  = nbRepas * palier.kcal;
+    const reste    = Math.max(0, kcalTotal - couvert);
+    const pct1     = Math.round(palier.kcal / kcalTotal * 100);
+    const pct2     = deuxRepas ? Math.round(palier.kcal / kcalTotal * 100) : 0;
+    const pctTotal = Math.round(couvert / kcalTotal * 100);
+
+    const fill = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+    fill('e-kcal',   kcalTotal);
+    fill('e-prot',   prot);
+    fill('e-gluc',   gluc);
+    fill('e-lip',    lip);
+    fill('e-r-kcal', rKcal);
+    fill('e-r-prot', rProt);
+    fill('e-r-gluc', rGluc);
+    fill('e-r-lip',  rLip);
+    fill('e-reste',  reste + ' kcal');
+    fill('e-r2-kcal', r2Kcal);
+    fill('e-r2-prot', r2Prot);
+    fill('e-r2-gluc', r2Gluc);
+    fill('e-r2-lip',  r2Lip);
+    fill('e-pct1', pct1 + '%');
+    fill('e-pct2', r2Kcal ? pct2 + '%' : '');
+    fill('e-pct-total', pctTotal + '%');
+
+  } else {
+    ['e-kcal','e-prot','e-gluc','e-lip','e-r-kcal','e-r-prot','e-r-gluc','e-r-lip','e-reste'].forEach(id => {
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+  }
+  const allergies = p.get('allergies') || '';
+  const refuses   = p.get('refuses')   || '';
+  const preferes  = p.get('preferes')  || '';
+  let reco = "Compte tenu de votre objectif et de votre activité physique, nous vous recommandons de répartir vos apports sur plusieurs prises dans la journée. Cela facilite l'atteinte des besoins en protéines, améliore la récupération et favorise la satiété.\n\nUne collation riche en protéines (skyr, yaourt grec, fromage blanc, whey, etc.) peut également être une option intéressante.";
+  if (allergies) reco += `\n\nAllergies : ${allergies}`;
+  if (refuses)   reco += `\n\nAliments à éviter : ${refuses}`;
+  if (preferes)  reco += `\n\nAliments préférés : ${preferes}`;
+  const recoEl = document.getElementById('e-reco'); if(recoEl) recoEl.value = reco;
+
+  // Structure actuelle — déduite de la formule
+  const structureEl = document.getElementById('e-structure');
+  if (structureEl) {
+    if (formule === '2 repas par jour' || formule === 'Je ne sais pas encore') structureEl.value = '2 repas / jour';
+    else structureEl.value = '1 repas / soir';
+  }
+
+  // Affiche bannière + ouvre l'onglet éditeur
+  document.getElementById('prefill-banner').style.display = 'flex';
+  document.getElementById('editor-tab').style.display = 'inline-flex';
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-editor').classList.add('active');
+  document.getElementById('editor-tab').classList.add('active');
+  edUpdate();
+}
+
+// Init éditeur
+edUpdate();
+fillEditorFromURL();
+
+function genererPDF() {
+  if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+    alert('Librairies non chargées. Vérifiez votre connexion internet et rechargez la page.');
+    return;
+  }
+  var btn = document.getElementById('btn-gen');
+  btn.textContent = '⏳ GÉNÉRATION...';
+  btn.disabled = true;
+
+  document.fonts.ready.then(function() {
+    var jsPDF = window.jspdf.jsPDF;
+    var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var margin = 10;
+    var contentW = 210 - margin * 2;
+    var pages = document.querySelectorAll('.bl-page');
+
+    // Créer un conteneur temporaire hors du flux, position absolute hors écran
+    // pour que html2canvas capture TOUT le contenu sans contrainte de scroll/overflow
+    var container = document.createElement('div');
+    container.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:794px;background:#fff;z-index:-1;pointer-events:none;';
+    document.body.appendChild(container);
+
+    // Cloner toutes les pages dans ce conteneur
+    var clones = [];
+    pages.forEach(function(page) {
+      var clone = page.cloneNode(true);
+      clone.style.cssText = 'width:794px;overflow:visible;margin-bottom:20px;';
+      container.appendChild(clone);
+      clones.push(clone);
+    });
+
+    var i = 0;
+    function processPage() {
+      if (i >= clones.length) {
+        document.body.removeChild(container);
+        var nom = document.getElementById('e-nom').value || 'client';
+        pdf.save('Bilan_Chef2Box_' + nom.replace(/\s+/g, '_') + '.pdf');
+        btn.textContent = '🖨 GÉNÉRER LE PDF';
+        btn.disabled = false;
+        return;
+      }
+      html2canvas(clones[i], {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+        windowWidth: 794
+      }).then(function(canvas) {
+        var imgData = canvas.toDataURL('image/jpeg', 0.95);
+        var imgProps = pdf.getImageProperties(imgData);
+        var imgH = (imgProps.height * contentW) / imgProps.width;
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, margin, contentW, imgH);
+        i++;
+        processPage();
+      });
+    }
+    processPage();
+  });
+}
+</script>
+</body>
+</html>
