@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Nav } from "@/components/Nav";
 import { AssistantChat } from "@/components/AssistantChat";
 import type { Client } from "@/lib/types";
 
@@ -25,7 +24,6 @@ export default async function AssistantPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20">
-      <Nav estAdmin={client.est_admin} />
       <AssistantChat prenom={client.nom.split(" ")[0]} messagesInitiaux={(messages ?? []).reverse()} />
     </div>
   );

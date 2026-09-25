@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
+  const [visible, setVisible] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(false);
 
@@ -68,15 +70,25 @@ export default function LoginPage() {
             <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               Mot de passe
             </label>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={motDePasse}
-              onChange={(e) => setMotDePasse(e.target.value)}
-              className="champ"
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                type={visible ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                value={motDePasse}
+                onChange={(e) => setMotDePasse(e.target.value)}
+                className="champ pr-12"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setVisible(!visible)}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-c2b-muted"
+                aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              >
+                {visible ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
 
           {erreur && <p className="text-red-700 text-sm">{erreur}</p>}

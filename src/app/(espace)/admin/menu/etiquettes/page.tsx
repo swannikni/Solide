@@ -1,5 +1,5 @@
 import { exigerAdmin } from "@/lib/admin";
-import { EtiquettesClient } from "@/app/admin/menu/etiquettes/EtiquettesClient";
+import { EtiquettesClient } from "@/app/(espace)/admin/menu/etiquettes/EtiquettesClient";
 import type { Plat } from "@/lib/types";
 
 export default async function EtiquettesPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {

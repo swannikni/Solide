@@ -13,6 +13,11 @@ const ENTETES_SECURITE = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // Un onglet déjà visité s'affiche tout de suite pendant 30 s au lieu d'être
+  // redemandé au serveur (les ajouts de repas rafraîchissent quand même).
+  experimental: {
+    staleTimes: { dynamic: 30 },
+  },
   images: {
     remotePatterns: [
       {

@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Nav } from "@/components/Nav";
 import { MessagesThread } from "@/components/MessagesThread";
-import { AdminMessagesClient } from "@/app/messages/AdminMessagesClient";
+import { AdminMessagesClient } from "@/app/(espace)/messages/AdminMessagesClient";
 import type { Client, Message } from "@/lib/types";
 
 export default async function MessagesPage() {
@@ -25,7 +24,6 @@ export default async function MessagesPage() {
 
     return (
       <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-        <Nav estAdmin />
         <AdminMessagesClient clients={clients ?? []} />
       </div>
     );
@@ -40,7 +38,6 @@ export default async function MessagesPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <Nav estAdmin={false} />
       <main className="max-w-2xl mx-auto">
         <div className="px-4 pt-6">
           <span className="lbl mb-2">Messagerie</span>

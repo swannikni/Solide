@@ -1,7 +1,6 @@
 import { exigerAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Nav } from "@/components/Nav";
-import { ClientsClient } from "@/app/admin/clients/ClientsClient";
+import { ClientsClient } from "@/app/(espace)/admin/clients/ClientsClient";
 import type { Client, Questionnaire } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +31,6 @@ export default async function ClientsPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <Nav estAdmin />
       <ClientsClient
         clientsInitiaux={clients ?? []}
         questionnairesInitiaux={questionnaires ?? []}

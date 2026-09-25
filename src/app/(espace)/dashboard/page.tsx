@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Nav } from "@/components/Nav";
-import { DashboardClient } from "@/app/dashboard/DashboardClient";
+import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
 import type { Client, Commande, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
@@ -76,7 +75,6 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <Nav estAdmin={client.est_admin} />
       <DashboardClient
         key={date}
         client={client}

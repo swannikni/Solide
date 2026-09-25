@@ -14,6 +14,7 @@ export default function BienvenuePage() {
   const [motDePasse, setMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [visible, setVisible] = useState(false);
+  const [visibleConfirmation, setVisibleConfirmation] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
@@ -73,10 +74,10 @@ export default function BienvenuePage() {
               <button
                 type="button"
                 onClick={() => setVisible(!visible)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-c2b-muted"
-                aria-label={visible ? "Masquer" : "Afficher"}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-c2b-muted"
+                aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
               >
-                {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+                {visible ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
           </div>
@@ -84,15 +85,25 @@ export default function BienvenuePage() {
             <label htmlFor="confirmation" className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               Confirmer
             </label>
-            <input
-              id="confirmation"
-              type={visible ? "text" : "password"}
-              autoComplete="new-password"
-              required
-              value={confirmation}
-              onChange={(e) => { setConfirmation(e.target.value); setErreur(null); }}
-              className="champ"
-            />
+            <div className="relative">
+              <input
+                id="confirmation"
+                type={visibleConfirmation ? "text" : "password"}
+                autoComplete="new-password"
+                required
+                value={confirmation}
+                onChange={(e) => { setConfirmation(e.target.value); setErreur(null); }}
+                className="champ pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setVisibleConfirmation(!visibleConfirmation)}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-c2b-muted"
+                aria-label={visibleConfirmation ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              >
+                {visibleConfirmation ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
           {erreur && <p className="text-sm font-semibold text-red-600">{erreur}</p>}
           <button type="submit" disabled={enCours} className="btn-primary w-full py-4">

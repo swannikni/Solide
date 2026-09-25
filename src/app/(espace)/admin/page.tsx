@@ -1,6 +1,5 @@
 import { exigerAdmin } from "@/lib/admin";
-import { Nav } from "@/components/Nav";
-import { AdminClient } from "@/app/admin/AdminClient";
+import { AdminClient } from "@/app/(espace)/admin/AdminClient";
 import type { Client, Commande, Plat } from "@/lib/types";
 import { dateDuJour } from "@/lib/dates";
 
@@ -21,7 +20,6 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <Nav estAdmin />
       <AdminClient
         clients={clients ?? []}
         plats={plats ?? []}

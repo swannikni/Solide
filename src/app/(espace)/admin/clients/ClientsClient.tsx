@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AdminOnglets } from "@/app/admin/AdminOnglets";
+import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { Pastille } from "@/components/Pastille";
 import {
   GRIGNOTAGE,

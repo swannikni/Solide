@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Plus, Printer, Pencil, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AdminOnglets } from "@/app/admin/AdminOnglets";
+import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { QrCode } from "@/components/QrCode";
 import { genererCodePlat, lienPlat } from "@/lib/qr";
 import type { Plat } from "@/lib/types";

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, Commande, Plat } from "@/lib/types";
 import { Check } from "lucide-react";
-import { AdminOnglets } from "@/app/admin/AdminOnglets";
+import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 
 export function AdminClient({
   clients,

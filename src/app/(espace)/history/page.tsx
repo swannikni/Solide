@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Nav } from "@/components/Nav";
 import { totauxDuJour } from "@/lib/macros";
 import type { Client, Poids, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
@@ -64,7 +63,6 @@ export default async function HistoryPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <Nav estAdmin={client.est_admin} />
       <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
         <div>
           <span className="lbl mb-2">Votre suivi</span>
