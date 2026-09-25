@@ -6,7 +6,9 @@ export function nomSimple(nom: string, groupe?: string | null): string {
     .replace(/\s*\(aliment moyen\)/gi, "")
     .replace(/,\s*prélev[ée]e?s?\b.*$/i, "")
     .replace(/,\s*pulpe et peau\b/gi, "")
-    .replace(/,\s*pulpe\b/gi, "");
+    .replace(/,\s*pulpe\b/gi, "")
+    .replace(/,\s*non instantané(?=,|$)/gi, "")
+    .replace(/,\s*prête? à boire\b/gi, "");
   // Un fruit se mange cru : inutile de le préciser.
   if (groupe === "fruits") n = n.replace(/,\s*crue?s?\s*$/i, "");
   return n.replace(/\s{2,}/g, " ").trim();

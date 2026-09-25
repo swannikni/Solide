@@ -8,7 +8,7 @@ import { Pastille } from "@/components/Pastille";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
-import { grammesParDefaut, portionsUsuelles } from "@/lib/portions";
+import { estLiquide, grammesParDefaut, portionsUsuelles } from "@/lib/portions";
 import { nomSimple } from "@/lib/noms-aliments";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
@@ -61,6 +61,12 @@ const MOTS_ENSEIGNES = [
   "mcdo", "macdo", "mc do", "mcdonald", "burger king", " bk ", "big mac", "mcflurry", "mcmuffin",
   "mcchicken", "big tasty", "whopper", "kingbox", "king nuggets", "sundae", "happy meal",
 ];
+
+const MOTS_VIDES = new Set(["de", "du", "des", "la", "le", "les", "au", "aux", "et", "en", "un", "une", "avec", "a"]);
+
+function sansAccents(texte: string) {
+  return texte.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/œ/g, "oe");
+}
 
 interface Ajoute {
   id: string;
@@ -285,7 +291,7 @@ export function AddMealModal({
       setBandeau({ id: "", texte: "Ajout impossible, réessayez." });
       return;
     }
-    setBandeau({ id, texte: `✓ ${l.nom} · ${libelleQuantiteMemo(l.unite, l.quantite)}` });
+    setBandeau({ id, texte: `✓ ${l.nom} · ${libelleQuantiteMemo(l.unite, l.quantite, l.nom)}` });
   }
 
   function ajoutRapideMemorise(m: {
@@ -314,9 +320,10 @@ export function AddMealModal({
 
   // Quantité utilisée par le bouton + (affichée sous le bouton).
   const quantiteRapide = (nom: string) => {
-    if (grammesSaisis) return `${grammesSaisis} g`;
+    const unite = estLiquide(nom) ? "ml" : "g";
+    if (grammesSaisis) return `${grammesSaisis} ${unite}`;
     const d = grammesParDefaut(nom);
-    return d.libelle ?? `${d.grammes} g`;
+    return d.libelle ?? `${d.grammes} ${unite}`;
   };
 
   function ajoutRapide100g(
@@ -727,6 +734,22 @@ export function AddMealModal({
 
   const facteur = trouve ? (trouve.paGrammes ? grammes / 100 : quantite) : 0;
 
+  // Pertinence : tous les mots cherchés sont au début d'un mot du nom.
+  const motsCherches = sansAccents(termesRecherche)
+    .split(/[^a-z0-9]+/)
+    .filter((m) => m.length >= 2 && !MOTS_VIDES.has(m));
+  const estPertinent = (nom: string) => {
+    const n = sansAccents(nom);
+    return motsCherches.length > 0 && motsCherches.every((m) => new RegExp(`(^|[^a-z0-9])${m}`).test(n));
+  };
+  const marquesTriees = [...(resultatsMarques ?? [])].sort(
+    (a, b) => Number(estPertinent(`${b.nom} ${b.marque}`)) - Number(estPertinent(`${a.nom} ${a.marque}`))
+  );
+  const marquesEnPremier =
+    !rechercheEnCours &&
+    marquesTriees.some((p) => estPertinent(`${p.nom} ${p.marque}`)) &&
+    !alimentsAffiches.some((a) => estPertinent(a.nom));
+
   // Restaurants en tête seulement si la recherche vise une enseigne (« mcdo »,
   // « big mac »…) ; sinon après les aliments et produits de marque, réduits à 3.
   const rechercheNormalisee = ` ${termesRecherche.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")} `;
@@ -872,7 +895,7 @@ export function AddMealModal({
                         >
                           <span className="block truncate text-sm font-semibold text-c2b-green">{a.nom}</span>
                           <span className="text-[11px] text-c2b-muted">
-                            {libelleQuantiteMemo(a.unite, a.quantite)} · {Math.round(a.calories * a.quantite)} kcal
+                            {libelleQuantiteMemo(a.unite, a.quantite, a.nom)} · {Math.round(a.calories * a.quantite)} kcal
                             {a.repas !== repasType && ` · ${REPAS_TYPE_LABELS[a.repas].toLowerCase()}`} ·{" "}
                             <span className="font-semibold text-c2b-gold">modifier</span>
                           </span>
@@ -1239,7 +1262,7 @@ export function AddMealModal({
                     {listeFavoris.map((f) => {
                       const detail = f.elements?.length
                         ? `${f.elements.length} aliments · ${Math.round(Number(f.calories))} kcal`
-                        : `${libelleQuantiteMemo(f.unite, Number(f.quantite))} · ${Math.round(
+                        : `${libelleQuantiteMemo(f.unite, Number(f.quantite), f.nom)} · ${Math.round(
                             Number(f.calories) * Number(f.quantite)
                           )} kcal`;
                       return gererFavoris ? (
@@ -1287,7 +1310,7 @@ export function AddMealModal({
                         <LigneMemorisee
                           key={r.id}
                           nom={r.nom}
-                          detail={`${libelleQuantiteMemo(r.unite, Number(r.quantite))} · ${Math.round(
+                          detail={`${libelleQuantiteMemo(r.unite, Number(r.quantite), r.nom)} · ${Math.round(
                             Number(r.calories) * Number(r.quantite)
                           )} kcal`}
                           onClick={() => choisirMemorise(r)}
@@ -1337,7 +1360,10 @@ export function AddMealModal({
               {restaurantsEnPremier && blocRestaurants}
 
               {rechercheActive && (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
+                  {/* Ordre des deux blocs : les produits de marque passent devant quand ils
+                      correspondent mieux à la recherche (« ice latte », « nutella »...). */}
+                  <div className={`space-y-2 ${marquesEnPremier ? "order-2 pt-3" : "order-1"}`}>
                   <p className="lbl pt-1">Aliments</p>
                   {rechercheEnCours ? (
                     <div className="flex justify-center py-4 text-c2b-green/50">
@@ -1376,7 +1402,8 @@ export function AddMealModal({
                             >
                               <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
                               <p className="text-[11px] text-c2b-muted">
-                                100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
+                                100 {estLiquide(a.nom) ? "ml" : "g"} · {Math.round(a.calories)} kcal · {a.proteines}g P ·{" "}
+                                {a.glucides}g G ·{" "}
                                 {a.lipides}g L
                               </p>
                             </button>
@@ -1399,7 +1426,10 @@ export function AddMealModal({
                     </>
                   )}
 
-                  <p className="lbl pt-3">Produits de marque</p>
+                  </div>
+
+                  <div className={`space-y-2 ${marquesEnPremier ? "order-1" : "order-2 pt-3"}`}>
+                  <p className="lbl pt-1">Produits de marque</p>
                   {rechercheMarquesEnCours || resultatsMarques === null ? (
                     <div className="flex items-center justify-center gap-2 py-4 text-sm text-c2b-muted">
                       <Loader2 className="animate-spin" size={18} /> Recherche dans les marques…
@@ -1410,7 +1440,7 @@ export function AddMealModal({
                     </p>
                   ) : (
                     <ul className="carte overflow-hidden divide-y divide-black/5">
-                      {resultatsMarques.map((p, i) => (
+                      {marquesTriees.map((p, i) => (
                         <li key={`${p.nom}-${p.marque}-${i}`} className="flex items-center">
                           <button
                             onClick={() =>
@@ -1428,7 +1458,8 @@ export function AddMealModal({
                                   Maroc
                                 </span>
                               )}
-                              100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
+                              100 {estLiquide(p.nom) ? "ml" : "g"} · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G ·{" "}
+                              {p.lipides}g L
                             </p>
                           </button>
                           <BoutonPlus
@@ -1440,6 +1471,7 @@ export function AddMealModal({
                       ))}
                     </ul>
                   )}
+                  </div>
                 </div>
               )}
 
@@ -1524,7 +1556,7 @@ export function AddMealModal({
                 </div>
                 <p className="text-xs text-c2b-muted mt-1.5">
                   {trouve.calories} kcal · {trouve.proteines}g P · {trouve.glucides}g G · {trouve.lipides}g L
-                  {trouve.paGrammes ? " pour 100 g" : " par portion"}
+                  {trouve.paGrammes ? (estLiquide(trouve.nom) ? " pour 100 ml" : " pour 100 g") : " par portion"}
                 </p>
               </div>
 
@@ -1541,7 +1573,7 @@ export function AddMealModal({
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
-                  {trouve.paGrammes ? "Quantité (grammes)" : "Quantité (portions)"}
+                  {trouve.paGrammes ? (estLiquide(trouve.nom) ? "Quantité (ml)" : "Quantité (grammes)") : "Quantité (portions)"}
                 </label>
                 {/* Champ texte (et non number) : garde la saisie telle quelle,
                     vide possible, virgule acceptée, pas de "0" collé devant. */}
@@ -1575,7 +1607,7 @@ export function AddMealModal({
                           grammes === pu.grammes ? "bg-c2b-gold text-c2b-green" : "bg-c2b-gold/[0.12] text-c2b-green"
                         }`}
                       >
-                        {pu.libelle} · {pu.grammes} g
+                        {pu.libelle} · {pu.grammes} {pu.ml ? "ml" : "g"}
                       </button>
                     ))}
                   </div>
@@ -1593,7 +1625,7 @@ export function AddMealModal({
                           grammes === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                         }`}
                       >
-                        {g} g
+                        {g} {estLiquide(trouve.nom) ? "ml" : "g"}
                       </button>
                     ))}
                   </div>
@@ -1660,8 +1692,8 @@ export function AddMealModal({
   );
 }
 
-function libelleQuantiteMemo(unite: "g" | "portion" | null, quantite: number) {
-  if (unite === "g") return `${Math.round(quantite * 100)} g`;
+function libelleQuantiteMemo(unite: "g" | "portion" | null, quantite: number, nom = "") {
+  if (unite === "g") return `${Math.round(quantite * 100)} ${estLiquide(nom) ? "ml" : "g"}`;
   const q = Math.round(quantite * 100) / 100;
   return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
 }

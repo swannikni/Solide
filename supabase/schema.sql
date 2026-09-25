@@ -266,6 +266,16 @@ begin
       (' viande hachee ', ' boeuf hache '),
       (' viande hache ', ' boeuf hache '),
       (' pdt ', ' pomme de terre '),
+      -- « pâtes » (au pluriel) = les pâtes alimentaires, pas la pâte à pizza.
+      (' pates ', ' pates seches '),
+      (' spaghettis ', ' pates seches '),
+      (' spaghetti ', ' pates seches '),
+      (' penne ', ' pates seches '),
+      (' macaroni ', ' pates seches '),
+      (' tagliatelles ', ' pates seches '),
+      (' tagliatelle ', ' pates seches '),
+      (' cafe ', ' cafe boire '),
+      (' the ', ' the infuse '),
       (' coca cola ', ' cola '),
       (' coca ', ' cola '),
       (' pepsi ', ' cola ')
@@ -298,25 +308,33 @@ begin
   select a.*
   from public.application_aliments a
   cross join lateral (
+    -- Chaque mot cherché doit être le début d'un mot du nom (pas un morceau au milieu).
     select count(*) filter (
-      where a.nom_normalise like '%' || r || '%'
+      where a.nom_normalise ~ ('(^|[^a-z0-9])' || r)
          or (r = 'cuit' and a.nom_normalise ~ '(cuit|roti|poele|saute|grille|bouilli|vapeur|four)')
-    ) as nb
+    ) as nb,
+    -- Mots trouvés en entier (« lait » plutôt que « laitue »).
+    count(*) filter (
+      where a.nom_normalise ~ ('(^|[^a-z0-9])' || r || '(e?s?|x)($|[^a-z0-9])')
+    ) as entiers
     from unnest(racines) r
   ) m
-  where (n = 0 or m.nb >= greatest(1, n - 1))
+  -- Jusqu'à 2 mots, tous obligatoires (« ice latte » ne donne plus « laitue iceberg ») ;
+  -- au-delà, un mot peut manquer.
+  where (n = 0 or m.nb >= case when n <= 2 then n else n - 1 end)
     and not exists (
       select 1 from unnest(pourcents) p
       where a.nom_normalise !~ ('(^|[^0-9])' || replace(p, '%', '') || ' ?%')
     )
   order by
     m.nb desc,
+    m.entiers desc,
     -- Échantillons de laboratoire (« prélevé à la Martinique »...) et produits
     -- pour bébé en dernier.
     (a.nom_normalise like '%prelev%' or coalesce(a.groupe, '') like '%infantile%') asc,
     (n > 0 and a.nom_normalise like racines[1] || '%') desc,
     -- Fruits : la version crue (celle qu'on mange) d'abord.
-    (a.groupe = 'fruits' and a.nom_normalise ~ '(^| )crue?s?( |$)') desc,
+    (a.groupe = 'fruits' and a.nom_normalise ~ '(^|[^a-z0-9])crue?s?($|[^a-z0-9])') desc,
     extensions.similarity(a.nom_normalise, trim(qn)) desc,
     length(a.nom)
   limit least(greatest(limite, 1), 100);

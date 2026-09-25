@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { ChevronRight, UtensilsCrossed } from "lucide-react";
 import type { RepasJournal } from "@/lib/types";
+import { estLiquide } from "@/lib/portions";
 
 const SOURCE_LABELS: Record<string, string> = {
   chef2box: "Box Chef2Box",
@@ -8,8 +9,8 @@ const SOURCE_LABELS: Record<string, string> = {
   manuel: "Saisie manuelle",
 };
 
-export function libelleQuantite(repas: Pick<RepasJournal, "quantite" | "unite">): string {
-  if (repas.unite === "g") return `${Math.round(repas.quantite * 100)} g`;
+export function libelleQuantite(repas: Pick<RepasJournal, "quantite" | "unite"> & { nom?: string }): string {
+  if (repas.unite === "g") return `${Math.round(repas.quantite * 100)} ${estLiquide(repas.nom ?? "") ? "ml" : "g"}`;
   const q = Math.round(repas.quantite * 100) / 100;
   return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
 }

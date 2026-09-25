@@ -5,6 +5,7 @@ import { X, Trash2, Star, Copy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Pastille } from "@/components/Pastille";
 import { GRAMMES_RAPIDES } from "@/components/AddMealModal";
+import { estLiquide, portionsUsuelles } from "@/lib/portions";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { RepasJournal, RepasType } from "@/lib/types";
 
@@ -41,6 +42,8 @@ export function EditMealModal({
   });
 
   const facteur = enGrammes ? valeur / 100 : valeur;
+  const unite = estLiquide(repas.nom) ? "ml" : "g";
+  const portions = enGrammes ? portionsUsuelles(repas.nom) : [];
   const lire = (t: string) => {
     const n = parseFloat(t.replace(",", "."));
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -156,7 +159,7 @@ export function EditMealModal({
             <details className="mt-1.5 group">
               <summary className="cursor-pointer list-none text-xs text-c2b-muted">
                 {valeurs.calories} kcal · {valeurs.proteines}g P · {valeurs.glucides}g G · {valeurs.lipides}g L
-                {enGrammes ? " pour 100 g" : " par portion"} ·{" "}
+                {enGrammes ? ` pour 100 ${unite}` : " par portion"} ·{" "}
                 <span className="font-semibold text-c2b-gold group-open:hidden">Modifier</span>
               </summary>
               <div className="grid grid-cols-4 gap-2 mt-2">
@@ -180,7 +183,7 @@ export function EditMealModal({
                   </label>
                 ))}
               </div>
-              <p className="text-[11px] text-c2b-muted mt-1">Valeurs {enGrammes ? "pour 100 g" : "pour 1 portion"}.</p>
+              <p className="text-[11px] text-c2b-muted mt-1">Valeurs {enGrammes ? `pour 100 ${unite}` : "pour 1 portion"}.</p>
             </details>
           </div>
 
@@ -197,7 +200,7 @@ export function EditMealModal({
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
-              {enGrammes ? "Quantité (grammes)" : "Quantité (portions)"}
+              {enGrammes ? (unite === "ml" ? "Quantité (ml)" : "Quantité (grammes)") : "Quantité (portions)"}
             </label>
             <input
               type="text"
@@ -213,6 +216,24 @@ export function EditMealModal({
               onBlur={() => setSaisie(null)}
               className="champ"
             />
+            {portions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {portions.map((pu) => (
+                  <button
+                    key={pu.libelle}
+                    onClick={() => {
+                      setValeur(pu.grammes);
+                      setSaisie(null);
+                    }}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                      valeur === pu.grammes ? "bg-c2b-gold text-c2b-green" : "bg-c2b-gold/[0.12] text-c2b-green"
+                    }`}
+                  >
+                    {pu.libelle} · {pu.grammes} {unite}
+                  </button>
+                ))}
+              </div>
+            )}
             {enGrammes ? (
               <div className="flex gap-1.5 mt-2">
                 {GRAMMES_RAPIDES.map((g) => (
@@ -226,7 +247,7 @@ export function EditMealModal({
                       valeur === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                     }`}
                   >
-                    {g} g
+                    {g} {unite}
                   </button>
                 ))}
               </div>

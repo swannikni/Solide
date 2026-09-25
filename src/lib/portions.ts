@@ -4,14 +4,31 @@
 
 export interface PortionUsuelle {
   libelle: string;
-  grammes: number;
+  grammes: number; // pour une boisson : millilitres (1 ml ≈ 1 g)
+  ml?: boolean;
 }
+
+const ml = (libelle: string, quantite: number): PortionUsuelle => ({ libelle, grammes: quantite, ml: true });
 
 // Chaque motif est ancré au début du nom (« Oeuf, cuit dur », « Poulet, filet ») :
 // « Brick à l'oeuf » ou « Tajine de poulet » ne reçoivent pas la portion d'un œuf
 // ou d'un filet. Les plus précis d'abord (« huile d'olive » avant « olive »).
 const REGLES: { motif: RegExp; portions: PortionUsuelle[] }[] = [
   { motif: /^huile/, portions: [{ libelle: "1 c. à café", grammes: 4 }, { libelle: "1 c. à soupe", grammes: 10 }] },
+  // Boissons : au verre, à la tasse, à la canette (valeurs en ml).
+  // Boissons café du commerce : le mot peut être n'importe où (« Ice caramel latte »).
+  { motif: /(^| )(latte|cappuccino|macchiato|mocha|moka|frappe|frappuccino|flat white)\b/, portions: [ml("1 gobelet", 250), ml("1 grand gobelet", 400)] },
+  { motif: /^cafe\b.*\bsoluble/, portions: [{ libelle: "1 c. à café", grammes: 2 }] },
+  { motif: /^cafe\b.*\b(moulu|grain)/, portions: [{ libelle: "1 dose", grammes: 7 }] },
+  { motif: /^(cafe|expresso|espresso)\b/, portions: [ml("1 expresso", 40), ml("1 tasse", 150), ml("1 mug", 250)] },
+  { motif: /(ice ?tea|iced tea|the glace)/, portions: [ml("1 canette", 330), ml("1 bouteille", 500)] },
+  { motif: /^(the|infusion|tisane)\b/, portions: [ml("1 tasse", 250)] },
+  { motif: /^(cola|soda|limonade|boisson gazeuse|coca|fanta|sprite|schweppes|orangina|tonic|oasis|red ?bull|boisson energisante)/, portions: [ml("1 canette", 330), ml("1 bouteille", 500)] },
+  { motif: /^eau\b/, portions: [ml("1 verre", 250), ml("1 bouteille", 500)] },
+  { motif: /^(biere|cidre)\b/, portions: [ml("1 demi", 250), ml("1 canette", 330)] },
+  { motif: /^vin\b/, portions: [ml("1 verre", 125)] },
+  { motif: /^(soupe|veloute|potage)\b/, portions: [ml("1 bol", 250)] },
+  { motif: /^(boisson|smoothie|nectar)\b/, portions: [ml("1 verre", 250)] },
   { motif: /^oeufs?\b/, portions: [{ libelle: "1 œuf", grammes: 55 }, { libelle: "2 œufs", grammes: 110 }] },
   { motif: /^banane/, portions: [{ libelle: "1 banane", grammes: 120 }] },
   { motif: /^(pommes? de terre|patate)/, portions: [{ libelle: "1 moyenne", grammes: 150 }] },
@@ -39,8 +56,8 @@ const REGLES: { motif: RegExp; portions: PortionUsuelle[] }[] = [
   { motif: /^sucre\b/, portions: [{ libelle: "1 morceau", grammes: 5 }, { libelle: "1 c. à soupe", grammes: 12 }] },
   { motif: /^(yaourt|yogourt)/, portions: [{ libelle: "1 pot", grammes: 125 }] },
   { motif: /^(fromage blanc|skyr)/, portions: [{ libelle: "1 pot", grammes: 100 }] },
-  { motif: /^lait\b/, portions: [{ libelle: "1 verre", grammes: 200 }, { libelle: "1 bol", grammes: 250 }] },
-  { motif: /^jus\b/, portions: [{ libelle: "1 verre", grammes: 200 }] },
+  { motif: /^lait\b(?! en poudre| concentre)/, portions: [ml("1 verre", 200), ml("1 bol", 250)] },
+  { motif: /^jus\b/, portions: [ml("1 verre", 200), ml("1 bouteille", 330)] },
   { motif: /^(fromage|emmental|camembert|comte\b|gouda|mozzarella|feta)/, portions: [{ libelle: "1 portion", grammes: 30 }] },
   { motif: /^(amande|noix\b|noisette|cajou|noix de cajou|pistache|cacahu)/, portions: [{ libelle: "1 poignée", grammes: 30 }] },
   { motif: /^chocolat (noir|au lait|blanc)/, portions: [{ libelle: "1 carré", grammes: 5 }, { libelle: "4 carrés", grammes: 20 }] },
@@ -73,4 +90,9 @@ export function portionsUsuelles(nom: string): PortionUsuelle[] {
 export function grammesParDefaut(nom: string): { grammes: number; libelle: string | null } {
   const p = portionsUsuelles(nom)[0];
   return p ? { grammes: p.grammes, libelle: p.libelle } : { grammes: 100, libelle: null };
+}
+
+// Boisson : quantités affichées en ml plutôt qu'en g.
+export function estLiquide(nom: string): boolean {
+  return portionsUsuelles(nom)[0]?.ml === true;
 }
