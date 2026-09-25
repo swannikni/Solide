@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 // Lien imprimé dans le QR des étiquettes : ouvre l'accueil avec le plat pré-rempli.
-export default function LienPlat({ params }: { params: { code: string } }) {
-  redirect(`/dashboard?plat=${encodeURIComponent(decodeURIComponent(params.code))}`);
+export default async function LienPlat({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  redirect(`/dashboard?plat=${encodeURIComponent(decodeURIComponent(code))}`);
 }

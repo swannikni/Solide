@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return erreur("L'assistant n'est pas encore activé.", 503);
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

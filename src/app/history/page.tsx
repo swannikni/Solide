@@ -5,12 +5,13 @@ import { totauxDuJour } from "@/lib/macros";
 import type { Client, Poids, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
 import { dateDuJour, decalerDate } from "@/lib/dates";
+import { signerPhotos } from "@/lib/photos";
 import Image from "next/image";
 import Link from "next/link";
 import { UtensilsCrossed } from "lucide-react";
 
 export default async function HistoryPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -56,7 +57,7 @@ export default async function HistoryPage() {
   });
 
   const parJour = new Map<string, RepasJournal[]>();
-  for (const r of repas ?? []) {
+  for (const r of await signerPhotos(supabase, repas ?? [])) {
     if (!parJour.has(r.date)) parJour.set(r.date, []);
     parJour.get(r.date)!.push(r);
   }

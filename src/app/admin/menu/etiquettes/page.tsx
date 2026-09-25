@@ -2,9 +2,9 @@ import { exigerAdmin } from "@/lib/admin";
 import { EtiquettesClient } from "@/app/admin/menu/etiquettes/EtiquettesClient";
 import type { Plat } from "@/lib/types";
 
-export default async function EtiquettesPage({ searchParams }: { searchParams: { ids?: string } }) {
+export default async function EtiquettesPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
   const { supabase } = await exigerAdmin();
-  const ids = (searchParams.ids ?? "")
+  const ids = ((await searchParams).ids ?? "")
     .split(",")
     .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
     .slice(0, 100);

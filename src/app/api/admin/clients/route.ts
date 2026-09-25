@@ -18,7 +18,7 @@ function erreur(message: string, statut: number) {
 }
 
 async function verifierAdmin() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

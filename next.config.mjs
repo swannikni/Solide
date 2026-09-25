@@ -1,5 +1,18 @@
+// En-têtes de sécurité envoyés avec chaque page.
+const ENTETES_SECURITE = [
+  // Interdit d'afficher l'appli dans un cadre sur un autre site (anti-clickjacking).
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Caméra autorisée pour le scanner, le reste coupé.
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       {
@@ -7,11 +20,13 @@ const nextConfig = {
         hostname: "**.supabase.co",
       },
     ],
-    // Optimiseur d'images désactivé : ferme la faille RCE non authentifiée
-    // de l'API d'optimisation d'images sur fichiers AVIF (GHSA-2xp9-vwfh-vxw4)
-    // tant que le projet reste sur Next 14.2.x. Les <Image> continuent de
-    // fonctionner, simplement sans redimensionnement serveur.
+    // Optimiseur d'images désactivé : moins de surface d'attaque (plusieurs
+    // failles passées de Next.js visaient cette API) et pas de coût serveur.
+    // Les <Image> fonctionnent, simplement sans redimensionnement serveur.
     unoptimized: true,
+  },
+  async headers() {
+    return [{ source: "/:path*", headers: ENTETES_SECURITE }];
   },
 };
 

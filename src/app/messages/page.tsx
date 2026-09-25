@@ -6,7 +6,7 @@ import { AdminMessagesClient } from "@/app/messages/AdminMessagesClient";
 import type { Client, Message } from "@/lib/types";
 
 export default async function MessagesPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

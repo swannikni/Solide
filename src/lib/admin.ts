@@ -5,7 +5,7 @@ import type { Client } from "@/lib/types";
 // À appeler en tête de chaque page admin : renvoie le client Supabase si
 // l'utilisateur connecté est admin, sinon redirige.
 export async function exigerAdmin() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

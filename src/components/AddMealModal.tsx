@@ -8,6 +8,7 @@ import { Pastille } from "@/components/Pastille";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
+import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, Favori, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
@@ -329,11 +330,13 @@ export function AddMealModal({
 
     let photoUrl: string | null = null;
     if (photo) {
-      const chemin = `${clientId}/${Date.now()}-${photo.name}`;
-      const { data, error } = await supabase.storage.from("application-repas-photos").upload(chemin, photo);
-      if (!error && data) {
-        photoUrl = supabase.storage.from("application-repas-photos").getPublicUrl(data.path).data.publicUrl;
-      }
+      // Nom de fichier neutre : le nom d'origine peut contenir n'importe quoi.
+      const extension = (photo.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "jpg";
+      const chemin = `${clientId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      const { data, error } = await supabase.storage
+        .from(BUCKET_PHOTOS)
+        .upload(chemin, photo, { contentType: photo.type || undefined });
+      if (!error && data) photoUrl = data.path; // chemin privé, signé à l'affichage
     }
 
     const quantiteFinale = trouve.paGrammes ? grammes / 100 : quantite;

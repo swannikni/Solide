@@ -4,9 +4,11 @@ import { Nav } from "@/components/Nav";
 import { DashboardClient } from "@/app/dashboard/DashboardClient";
 import type { Client, Commande, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
+import { signerPhotos } from "@/lib/photos";
 
-export default async function DashboardPage({ searchParams }: { searchParams: { date?: string; plat?: string } }) {
-  const supabase = createClient();
+export default async function DashboardPage(props: { searchParams: Promise<{ date?: string; plat?: string }> }) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -81,7 +83,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         date={date}
         aujourdhui={aujourdhui}
         commandesDuJour={commandes ?? []}
-        repasDuJour={repas ?? []}
+        repasDuJour={await signerPhotos(supabase, repas ?? [])}
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}
         recents={recents}

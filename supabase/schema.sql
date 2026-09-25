@@ -182,7 +182,7 @@ create policy "commandes_admin_write" on public.application_commandes
 drop policy if exists "repas_self_or_admin" on public.application_repas_journal;
 create policy "repas_self_or_admin" on public.application_repas_journal
   for all using (auth.uid() = client_id or public.application_is_admin())
-  with check (auth.uid() = client_id or public.application_is_admin());
+  with check ((auth.uid() = client_id and cree_par = 'client') or public.application_is_admin());
 
 -- Un client ne peut envoyer qu'en son nom ("client"), jamais se faire passer
 -- pour Swann.
@@ -358,9 +358,24 @@ create policy "poids_self_write" on public.application_poids
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
 -- ============ STORAGE (photos de repas) ============
-insert into storage.buckets (id, name, public)
-values ('application-repas-photos', 'application-repas-photos', true)
-on conflict (id) do nothing;
+-- Bucket privé : les photos s'affichent via des liens signés (1 h).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'application-repas-photos', 'application-repas-photos', false, 10485760,
+  array['image/jpeg','image/png','image/webp','image/heic','image/heif','image/gif']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "application_photos_select" on storage.objects;
+create policy "application_photos_select" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'application-repas-photos'
+    and ((storage.foldername(name))[1] = auth.uid()::text or public.application_is_admin())
+  );
 
 -- Chaque client dépose ses photos dans son propre dossier (<son id>/...).
 drop policy if exists "application_photos_insert" on storage.objects;

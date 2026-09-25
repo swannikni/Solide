@@ -5,7 +5,7 @@ import { AssistantChat } from "@/components/AssistantChat";
 import type { Client } from "@/lib/types";
 
 export default async function AssistantPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

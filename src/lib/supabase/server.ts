@@ -7,8 +7,8 @@ interface CookieAEcrire {
   options: CookieOptions;
 }
 
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,7 +24,7 @@ export function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // set() depuis un Server Component : ignoré, le middleware
+            // set() depuis un Server Component : ignoré, le proxy
             // se charge du rafraîchissement de session.
           }
         },
