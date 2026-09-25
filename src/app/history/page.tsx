@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/Nav";
 import { totauxDuJour } from "@/lib/macros";
-import type { Client, RepasJournal } from "@/lib/types";
+import type { Client, Poids, RepasJournal } from "@/lib/types";
+import { Progres } from "@/components/Progres";
+import { dateDuJour, decalerDate } from "@/lib/dates";
 import Image from "next/image";
+import Link from "next/link";
 import { UtensilsCrossed } from "lucide-react";
 
 export default async function HistoryPage() {
@@ -16,14 +19,41 @@ export default async function HistoryPage() {
   const { data: client } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
   if (!client) redirect("/login");
 
-  const { data: repas } = await supabase
-    .from("application_repas_journal")
-    .select("*")
-    .eq("client_id", user.id)
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: true })
-    .limit(300)
-    .returns<RepasJournal[]>();
+  const aujourdhui = dateDuJour();
+  const debutSemaine = decalerDate(aujourdhui, -6);
+
+  const [{ data: repas }, { data: semaine }, { data: poids }] = await Promise.all([
+    supabase
+      .from("application_repas_journal")
+      .select("*")
+      .eq("client_id", user.id)
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(300)
+      .returns<RepasJournal[]>(),
+    supabase
+      .from("application_repas_journal")
+      .select("date, calories, quantite")
+      .eq("client_id", user.id)
+      .gte("date", debutSemaine)
+      .lte("date", aujourdhui)
+      .returns<Pick<RepasJournal, "date" | "calories" | "quantite">[]>(),
+    supabase
+      .from("application_poids")
+      .select("date, poids_kg")
+      .eq("client_id", user.id)
+      .gte("date", decalerDate(aujourdhui, -180))
+      .order("date", { ascending: true })
+      .returns<Pick<Poids, "date" | "poids_kg">[]>(),
+  ]);
+
+  const caloriesSemaine = Array.from({ length: 7 }, (_, i) => {
+    const date = decalerDate(debutSemaine, i);
+    const calories = (semaine ?? [])
+      .filter((r) => r.date === date)
+      .reduce((t, r) => t + Number(r.calories) * Number(r.quantite), 0);
+    return { date, calories: Math.round(calories) };
+  });
 
   const parJour = new Map<string, RepasJournal[]>();
   for (const r of repas ?? []) {
@@ -38,9 +68,19 @@ export default async function HistoryPage() {
         <div>
           <span className="lbl mb-2">Votre suivi</span>
           <h1 className="titre text-[34px]">
-            Votre <em>historique</em>
+            Vos <em>progrès</em>
           </h1>
         </div>
+
+        <Progres
+          clientId={client.id}
+          aujourdhui={aujourdhui}
+          poids={poids ?? []}
+          caloriesSemaine={caloriesSemaine}
+          objectifCalories={client.objectif_calories}
+        />
+
+        <h2 className="font-serif text-[26px] text-c2b-green pt-2">Journal des repas</h2>
 
         {parJour.size === 0 && (
           <p className="text-sm text-c2b-muted italic text-center py-8">Aucun repas enregistré pour le moment.</p>
@@ -51,9 +91,12 @@ export default async function HistoryPage() {
           return (
             <section key={date} className="carte p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-serif text-xl text-c2b-green first-letter:uppercase">
-                  {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-                </h2>
+                <Link
+                  href={date === aujourdhui ? "/dashboard" : `/dashboard?date=${date}`}
+                  className="font-serif text-xl text-c2b-green first-letter:uppercase hover:text-c2b-gold"
+                >
+                  {new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
+                </Link>
                 <span className="pastille">
                   {Math.round(totaux.calories)} kcal · {Math.round(totaux.proteines)}g P
                 </span>

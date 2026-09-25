@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, MessageCircle, History, LogOut, ShieldCheck, Sparkles } from "lucide-react";
+import { LayoutDashboard, MessageCircle, LogOut, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 
 const LIENS_CLIENT = [
   { href: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
   { href: "/assistant", label: "Assistant", icon: Sparkles },
-  { href: "/history", label: "Historique", icon: History },
+  { href: "/history", label: "Progrès", icon: TrendingUp },
   { href: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
