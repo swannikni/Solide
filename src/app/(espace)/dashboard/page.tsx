@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
-import type { Client, Commande, Favori, Plat, RepasJournal } from "@/lib/types";
+import type { Client, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
 
@@ -16,15 +16,9 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: commandes }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }] =
+  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }] =
     await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
-    supabase
-      .from("application_commandes")
-      .select("*, plats:application_plats(*)")
-      .eq("client_id", user.id)
-      .eq("date_livraison", date)
-      .returns<Commande[]>(),
     supabase
       .from("application_repas_journal")
       .select("*")
@@ -80,7 +74,6 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         client={client}
         date={date}
         aujourdhui={aujourdhui}
-        commandesDuJour={commandes ?? []}
         repasDuJour={await signerPhotos(supabase, repas ?? [])}
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}

@@ -7,14 +7,13 @@ import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CalorieRing } from "@/components/CalorieRing";
 import { MacroBar } from "@/components/MacroBar";
-import { BoxDuJourCard } from "@/components/BoxDuJourCard";
 import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
 import { EditMealModal } from "@/components/EditMealModal";
 import { InstallerAppli } from "@/components/InstallerAppli";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
-import type { Client, Commande, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
+import type { Client, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
 
 function lienJour(date: string, aujourdhui: string) {
   return date === aujourdhui ? "/dashboard" : `/dashboard?date=${date}`;
@@ -24,7 +23,6 @@ export function DashboardClient({
   client,
   date,
   aujourdhui,
-  commandesDuJour,
   repasDuJour,
   repasVeille,
   favoris,
@@ -35,7 +33,6 @@ export function DashboardClient({
   client: Client;
   date: string;
   aujourdhui: string;
-  commandesDuJour: Commande[];
   repasDuJour: RepasJournal[];
   repasVeille: RepasJournal[];
   favoris: Favori[];
@@ -46,10 +43,6 @@ export function DashboardClient({
   const router = useRouter();
   const supabase = createClient();
   const [modalOuverte, setModalOuverte] = useState(false);
-  const [prefillBox, setPrefillBox] = useState<{
-    commande: Commande;
-    editable: boolean;
-  } | null>(null);
   const [repasCible, setRepasCible] = useState<RepasType>("dejeuner");
   const [repasEnEdition, setRepasEnEdition] = useState<RepasJournal | null>(null);
   const [copieEnCours, setCopieEnCours] = useState<RepasType | null>(null);
@@ -61,7 +54,6 @@ export function DashboardClient({
   useEffect(() => {
     if (!platScanne && !codePlatInconnu) return;
     if (platScanne) {
-      setPrefillBox(null);
       setPlatPrerempli(platScanne);
       setRepasCible(repasSelonHeure());
       setModalOuverte(true);
@@ -80,16 +72,8 @@ export function DashboardClient({
     router.refresh();
   }
 
-  function ouvrirDepuisBox(commande: Commande) {
-    setPlatPrerempli(null);
-    setPrefillBox({ commande, editable: true });
-    setRepasCible(commande.repas_type);
-    setModalOuverte(true);
-  }
-
   function ouvrirAjout(type: RepasType) {
     setPlatPrerempli(null);
-    setPrefillBox(null);
     setRepasCible(type);
     setModalOuverte(true);
   }
@@ -119,10 +103,6 @@ export function DashboardClient({
     rafraichir();
   }
 
-  const portionsBox: Record<string, number> = {};
-  for (const c of commandesDuJour) if (c.plat_id) portionsBox[c.plat_id] = Number(c.portion ?? 1);
-
-  const idsCommandesAjoutees = new Set(repasDuJour.map((r) => r.commande_id).filter(Boolean));
   const veille = decalerDate(date, -1);
 
   return (
@@ -188,20 +168,6 @@ export function DashboardClient({
         </div>
       </section>
 
-      {commandesDuJour.length > 0 && (
-        <section className="space-y-3">
-          {commandesDuJour.map((commande) => (
-            <BoxDuJourCard
-              key={commande.id}
-              commande={commande}
-              dejaAjoutee={idsCommandesAjoutees.has(commande.id)}
-              onAjouterTelQuel={() => ouvrirDepuisBox(commande)}
-              onAjuster={() => ouvrirDepuisBox(commande)}
-            />
-          ))}
-        </section>
-      )}
-
       {ORDRE_REPAS.map((type) => {
         const repasSection = repasDuJour.filter((r) => r.repas_type === type);
         const kcalSection = totauxDuJour(repasSection).calories;
@@ -266,23 +232,18 @@ export function DashboardClient({
         <AddMealModal
           clientId={client.id}
           date={date}
-          commandeId={prefillBox?.commande.id}
           repasTypeParDefaut={repasCible}
           favoris={favoris}
           recents={recents}
-          portionsBox={portionsBox}
           prefillTrouve={(() => {
-            const plat = prefillBox?.commande.plats ?? platPrerempli;
-            // Box adaptée au palier : macros de la portion du client, comptées comme 1 box.
-            const portion = plat ? (portionsBox[plat.id] ?? 1) : 1;
-            const arrondi = (v: number) => Math.round(v * portion * 10) / 10;
+            const plat = platPrerempli;
             return plat
               ? {
                   nom: plat.nom,
-                  calories: Math.round(plat.calories * portion),
-                  proteines: arrondi(plat.proteines),
-                  glucides: arrondi(plat.glucides),
-                  lipides: arrondi(plat.lipides),
+                  calories: plat.calories,
+                  proteines: plat.proteines,
+                  glucides: plat.glucides,
+                  lipides: plat.lipides,
                   source: "chef2box" as const,
                   plat_id: plat.id,
                   quantiteParDefaut: 1,

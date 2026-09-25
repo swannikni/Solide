@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ONGLETS = [
-  { href: "/admin", label: "Box du jour" },
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/menu", label: "Menu & QR" },
 ];
@@ -14,7 +13,7 @@ export function AdminOnglets() {
   return (
     <nav className="flex gap-1.5 overflow-x-auto -mx-4 px-4 pb-1">
       {ONGLETS.map(({ href, label }) => {
-        const actif = href === "/admin" ? pathname === href : pathname.startsWith(href);
+        const actif = pathname.startsWith(href);
         return (
           <Link
             key={href}

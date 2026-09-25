@@ -43,19 +43,6 @@ export interface Aliment {
   lipides: number;
 }
 
-export interface Commande {
-  id: string;
-  client_id: string;
-  plat_id: string | null;
-  date_livraison: string;
-  repas_type: "dejeuner" | "diner";
-  statut: "confirmee" | "annulee" | "livree";
-  // Multiplicateur des macros standard du plat (1 = box standard).
-  portion: number;
-  created_at: string;
-  plats?: Plat | null;
-}
-
 export interface RepasJournal {
   id: string;
   client_id: string;

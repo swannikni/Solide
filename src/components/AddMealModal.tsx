@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
@@ -10,9 +10,9 @@ import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { Aliment, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, Favori, Plat, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
-type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
+type Etape = "choix" | "plats_chef2box" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
 
 type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
 
@@ -70,8 +70,6 @@ export function AddMealModal({
   clientId,
   repasTypeParDefaut = "dejeuner",
   prefillTrouve,
-  portionsBox,
-  commandeId,
   date,
   favoris = [],
   recents = [],
@@ -84,9 +82,6 @@ export function AddMealModal({
   recents?: RepasJournal[];
   repasTypeParDefaut?: RepasType;
   prefillTrouve?: Trouve;
-  // Box du jour adaptée au palier : multiplicateur des macros par plat.
-  portionsBox?: Record<string, number>;
-  commandeId?: string;
   onClose: () => void;
   onAjoute: () => void;
 }) {
@@ -109,12 +104,12 @@ export function AddMealModal({
   const [enregistrement, setEnregistrement] = useState(false);
   const [nomAffiche, setNomAffiche] = useState(prefillTrouve?.nom ?? "");
   const [ajoutes, setAjoutes] = useState<{ nom: string; kcal: number }[]>([]);
-  const [commandeLiee, setCommandeLiee] = useState(commandeId);
+  const [platsMenu, setPlatsMenu] = useState<Plat[] | null>(null);
   const [origine, setOrigine] = useState<Etape>("choix");
 
   // Écran où revenir après un ajout ou un "Retour" depuis la confirmation.
   useEffect(() => {
-    if (etape === "choix" || etape === "manuel") setOrigine(etape);
+    if (etape === "choix" || etape === "manuel" || etape === "plats_chef2box") setOrigine(etape);
   }, [etape]);
   const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
   const [filtreGras, setFiltreGras] = useState<string | null>(null);
@@ -222,6 +217,34 @@ export function AddMealModal({
   const [glucidesLibre, setGlucidesLibre] = useState("");
   const [lipidesLibre, setLipidesLibre] = useState("");
 
+  // Menu Chef2Box : chargé la première fois qu'on ouvre la liste.
+  async function ouvrirPlatsChef2Box() {
+    setEtape("plats_chef2box");
+    if (platsMenu) return;
+    const { data } = await supabase
+      .from("application_plats")
+      .select("*")
+      .eq("actif", true)
+      .order("nom")
+      .returns<Plat[]>();
+    setPlatsMenu(data ?? []);
+  }
+
+  function choisirPlat(plat: Plat) {
+    setTrouve({
+      nom: plat.nom,
+      calories: plat.calories,
+      proteines: plat.proteines,
+      glucides: plat.glucides,
+      lipides: plat.lipides,
+      source: "chef2box",
+      plat_id: plat.id,
+      quantiteParDefaut: 1,
+    });
+    setQuantite(1);
+    setEtape("confirmation");
+  }
+
   async function onScanChef2Box(texteScanne: string) {
     const { data, error } = await supabase
       .from("application_plats")
@@ -236,13 +259,12 @@ export function AddMealModal({
       return;
     }
 
-    const portion = portionsBox?.[data.id] ?? 1;
     setTrouve({
       nom: data.nom,
-      calories: Math.round(data.calories * portion),
-      proteines: Math.round(data.proteines * portion * 10) / 10,
-      glucides: Math.round(data.glucides * portion * 10) / 10,
-      lipides: Math.round(data.lipides * portion * 10) / 10,
+      calories: data.calories,
+      proteines: data.proteines,
+      glucides: data.glucides,
+      lipides: data.lipides,
       source: "chef2box",
       plat_id: data.id,
       quantiteParDefaut: 1,
@@ -377,7 +399,6 @@ export function AddMealModal({
       lipides: trouve.lipides,
       photo_url: photoUrl,
       plat_id: trouve.plat_id ?? null,
-      commande_id: commandeLiee ?? null,
       cree_par: "client",
     });
 
@@ -412,7 +433,6 @@ export function AddMealModal({
         ...prev,
         { nom: nomAffiche.trim() || trouve.nom, kcal: Math.round(trouve.calories * quantiteFinale) },
       ]);
-      setCommandeLiee(undefined);
       setTrouve(null);
       setPhoto(null);
       setPreviewPhoto(null);
@@ -463,6 +483,17 @@ export function AddMealModal({
           {etape === "choix" && (
             <div className="space-y-3">
               <button
+                onClick={ouvrirPlatsChef2Box}
+                className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
+              >
+                <UtensilsCrossed className="text-c2b-gold" />
+                <div>
+                  <p className="font-bold text-c2b-green">Plats Chef2Box</p>
+                  <p className="text-xs text-c2b-muted">Choisir votre box dans le menu</p>
+                </div>
+              </button>
+
+              <button
                 onClick={() => setEtape("scan_chef2box")}
                 className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
               >
@@ -494,6 +525,23 @@ export function AddMealModal({
                   <p className="text-xs text-c2b-muted">Recherche, favoris et aliments récents</p>
                 </div>
               </button>
+            </div>
+          )}
+
+          {etape === "plats_chef2box" && (
+            <div className="space-y-3">
+              <button onClick={() => setEtape("choix")} className="text-sm font-semibold text-c2b-muted">
+                ← Retour
+              </button>
+              {platsMenu === null ? (
+                <div className="flex justify-center py-8 text-c2b-green/60">
+                  <Loader2 className="animate-spin" />
+                </div>
+              ) : platsMenu.length === 0 ? (
+                <p className="carte p-6 text-center text-sm text-c2b-muted">Le menu n&apos;est pas encore en ligne.</p>
+              ) : (
+                platsMenu.map((plat) => <CartePlat key={plat.id} plat={plat} onChoisir={() => choisirPlat(plat)} />)
+              )}
             </div>
           )}
 
@@ -940,4 +988,48 @@ const PAYS: Record<string, string> = { FR: "France", CH: "Suisse", MA: "Maroc", 
 
 function sourcesRestaurants(produits: ProduitRestaurant[]) {
   return Array.from(new Set(produits.map((p) => `${p.enseigne} ${PAYS[p.pays] ?? p.pays}`))).join(", ");
+}
+
+// Un plat du menu : photo, macros, ingrédients et recette dépliable.
+function CartePlat({ plat, onChoisir }: { plat: Plat; onChoisir: () => void }) {
+  const ingredients = (plat.ingredients ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return (
+    <div className="carte overflow-hidden">
+      {plat.photo_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={plat.photo_url} alt={plat.nom} className="w-full h-40 object-cover" />
+      )}
+      <div className="p-4">
+        <p className="font-serif text-[20px] leading-tight text-c2b-green">{plat.nom}</p>
+        {plat.description && <p className="text-sm text-c2b-muted mt-1">{plat.description}</p>}
+        <p className="text-xs font-semibold text-c2b-green mt-2">
+          {plat.calories} kcal · {plat.proteines}g P · {plat.glucides}g G · {plat.lipides}g L
+        </p>
+        {ingredients.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5 mt-2.5">
+            {ingredients.map((ing) => (
+              <li key={ing} className="rounded-full bg-c2b-cream px-2.5 py-1 text-xs text-c2b-green">
+                {ing}
+              </li>
+            ))}
+          </ul>
+        )}
+        {plat.recette && (
+          <details className="mt-2.5 group">
+            <summary className="cursor-pointer list-none text-sm font-bold text-c2b-gold">
+              <span className="group-open:hidden">Voir la recette →</span>
+              <span className="hidden group-open:inline">Masquer la recette</span>
+            </summary>
+            <p className="mt-2 text-sm text-c2b-green whitespace-pre-line">{plat.recette}</p>
+          </details>
+        )}
+        <button onClick={onChoisir} className="btn-primary w-full py-3 mt-3.5 text-sm">
+          J&apos;ai mangé ce plat
+        </button>
+      </div>
+    </div>
+  );
 }

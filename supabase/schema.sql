@@ -499,13 +499,10 @@ create policy "application_photos_insert" on storage.objects
     )
   );
 
--- ============ BOX DU JOUR : fiche du plat + portion par client ============
--- Le plat a des macros standard ; chaque box assignée peut être adaptée au
--- palier du client (portion = multiplicateur des macros standard, 1 par défaut).
+-- ============ FICHE DU PLAT ============
+-- Photo, ingrédients et recette affichés dans « Plats Chef2Box » côté client.
 alter table public.application_plats add column if not exists ingredients text;
 alter table public.application_plats add column if not exists recette text;
-alter table public.application_commandes
-  add column if not exists portion numeric not null default 1 check (portion between 0.3 and 3);
 
 -- Photos des plats : publiques (ce sont les photos du menu), seul l'admin en dépose.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

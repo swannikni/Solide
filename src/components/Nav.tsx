@@ -7,15 +7,16 @@ import { LayoutDashboard, MessageCircle, LogOut, ShieldCheck, Sparkles, Trending
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 
+// racine : partie de l'adresse qui allume l'onglet (Admin couvre /admin/...).
 const LIENS_CLIENT = [
-  { href: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
-  { href: "/assistant", label: "Assistant", icon: Sparkles },
-  { href: "/history", label: "Progrès", icon: TrendingUp },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
+  { href: "/dashboard", racine: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
+  { href: "/assistant", racine: "/assistant", label: "Assistant", icon: Sparkles },
+  { href: "/history", racine: "/history", label: "Progrès", icon: TrendingUp },
+  { href: "/messages", racine: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
-function estActif(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function estActif(pathname: string, racine: string) {
+  return pathname === racine || pathname.startsWith(`${racine}/`);
 }
 
 export function Nav({ estAdmin }: { estAdmin: boolean }) {
@@ -29,7 +30,7 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
   const setCible = (href: string) => setTouche({ href, depuis: pathname });
 
   const liens = estAdmin
-    ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }, ...LIENS_CLIENT]
+    ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...LIENS_CLIENT]
     : LIENS_CLIENT;
 
   async function deconnexion() {
@@ -41,7 +42,7 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
   // Planche d'étiquettes à imprimer : pas de barres.
   if (pathname.includes("/etiquettes")) return null;
 
-  const actifSur = (href: string) => (cible ? cible === href : estActif(pathname, href));
+  const actifSur = (href: string, racine: string) => (cible ? cible === href : estActif(pathname, racine));
 
   return (
     <>
@@ -51,13 +52,13 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
             <Logo className="h-11 md:h-[52px] w-auto" />
           </Link>
           <nav className="hidden md:flex items-center gap-7">
-            {liens.map(({ href, label }) => (
+            {liens.map(({ href, racine, label }) => (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setCible(href)}
                 className={`text-[13px] font-medium transition ${
-                  actifSur(href) ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
+                  actifSur(href, racine) ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
                 }`}
               >
                 {label}
@@ -79,8 +80,8 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
 
       <nav className="print:hidden md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch justify-around">
-          {liens.map(({ href, label, icon: Icon }) => {
-            const actif = actifSur(href);
+          {liens.map(({ href, racine, label, icon: Icon }) => {
+            const actif = actifSur(href, racine);
             return (
               <Link
                 key={href}

@@ -285,9 +285,9 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
                   className="champ resize-none"
                 />
               </Champ>
-              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Macros de la box standard</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Macros d'une box</p>
               <p className="text-xs text-c2b-muted -mt-1.5">
-                Dans « Box du jour », vous pourrez ensuite adapter la portion au palier de chaque client.
+                Le client voit la photo, les ingrédients et la recette dans « Plats Chef2Box » quand il ajoute un repas.
               </p>
               <div className="grid grid-cols-2 gap-2.5">
                 {(

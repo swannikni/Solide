@@ -166,18 +166,3 @@ export function profilComplet(p: Partial<Profil>): p is Profil {
     !!p.job
   );
 }
-
-// Box adaptée au palier du client : multiplicateur des macros standard du plat
-// pour atteindre les kcal du repas de ce palier.
-export function portionPalier(palier: string | null | undefined, caloriesStandard: number): number | null {
-  const n = Number(palier?.replace("P", ""));
-  const repas = C2B_PALIERS.find((x) => x.n === n);
-  if (!repas || !caloriesStandard) return null;
-  const portion = Math.round((repas.kcal / caloriesStandard) * 100) / 100;
-  return Math.min(3, Math.max(0.3, portion));
-}
-
-export function kcalPalier(palier: string | null | undefined): number | null {
-  const n = Number(palier?.replace("P", ""));
-  return C2B_PALIERS.find((x) => x.n === n)?.kcal ?? null;
-}
