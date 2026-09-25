@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2 } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
+import { grammesParDefaut, portionsUsuelles } from "@/lib/portions";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
@@ -60,6 +61,15 @@ const MOTS_ENSEIGNES = [
   "mcchicken", "big tasty", "whopper", "kingbox", "king nuggets", "sundae", "happy meal",
 ];
 
+interface Ajoute {
+  id: string;
+  nom: string;
+  unite: "g" | "portion";
+  quantite: number;
+  calories: number; // pour 100 g ou pour 1 portion
+  repas: RepasType;
+}
+
 interface Trouve {
   nom: string;
   calories: number;
@@ -109,7 +119,11 @@ export function AddMealModal({
   const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
   const [nomAffiche, setNomAffiche] = useState(prefillTrouve?.nom ?? "");
-  const [ajoutes, setAjoutes] = useState<{ nom: string; kcal: number }[]>([]);
+  // Aliments ajoutés depuis l'ouverture : restent modifiables et supprimables ici.
+  const [ajoutes, setAjoutes] = useState<Ajoute[]>([]);
+  const [edition, setEdition] = useState<{ id: string; valeur: string } | null>(null);
+  // Bandeau « ✓ ajouté · Annuler » après un ajout rapide.
+  const [bandeau, setBandeau] = useState<{ id: string; texte: string } | null>(null);
   // « Mon plat Chef2Box » : macros recopiées de l'étiquette de la box.
   const [messageMonPlat, setMessageMonPlat] = useState("");
   // Favoris : liste locale (modifiable), repas complet choisi, favori en cours d'édition.
@@ -215,6 +229,127 @@ export function AddMealModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [termesRecherche]);
 
+  // Enregistre une ligne du journal et la garde dans la liste « Dans ce repas ».
+  async function insererLigne(l: {
+    nom: string;
+    unite: "g" | "portion";
+    quantite: number;
+    calories: number;
+    proteines: number;
+    glucides: number;
+    lipides: number;
+    source: SourceRepas;
+    plat_id?: string | null;
+    photo_url?: string | null;
+  }): Promise<string | null> {
+    const { data, error } = await supabase
+      .from("application_repas_journal")
+      .insert({
+        client_id: clientId,
+        date,
+        repas_type: repasType,
+        cree_par: "client",
+        ...l,
+        plat_id: l.plat_id ?? null,
+        photo_url: l.photo_url ?? null,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (error || !data) return null;
+    setAjoutes((prev) => [
+      ...prev,
+      { id: data.id, nom: l.nom, unite: l.unite, quantite: l.quantite, calories: l.calories, repas: repasType },
+    ]);
+    onAjoute();
+    return data.id;
+  }
+
+  // Ajout en un geste (bouton +), avec la quantité habituelle ; « Annuler » juste après.
+  async function ajoutRapide(l: Parameters<typeof insererLigne>[0]) {
+    const id = await insererLigne(l);
+    if (!id) {
+      setBandeau({ id: "", texte: "Ajout impossible, réessayez." });
+      return;
+    }
+    setBandeau({ id, texte: `✓ ${l.nom} · ${libelleQuantiteMemo(l.unite, l.quantite)}` });
+  }
+
+  function ajoutRapideMemorise(m: {
+    nom: string;
+    calories: number;
+    proteines: number;
+    glucides: number;
+    lipides: number;
+    quantite: number;
+    unite: "g" | "portion" | null;
+    source: SourceRepas;
+    plat_id: string | null;
+  }) {
+    return ajoutRapide({
+      nom: m.nom,
+      unite: m.unite === "g" ? "g" : "portion",
+      quantite: Number(m.quantite) || 1,
+      calories: Number(m.calories),
+      proteines: Number(m.proteines),
+      glucides: Number(m.glucides),
+      lipides: Number(m.lipides),
+      source: m.source,
+      plat_id: m.plat_id,
+    });
+  }
+
+  // Quantité utilisée par le bouton + (affichée sous le bouton).
+  const quantiteRapide = (nom: string) => {
+    if (grammesSaisis) return `${grammesSaisis} g`;
+    const d = grammesParDefaut(nom);
+    return d.libelle ?? `${d.grammes} g`;
+  };
+
+  function ajoutRapide100g(
+    nom: string,
+    v: { calories: number; proteines: number; glucides: number; lipides: number },
+    source: SourceRepas
+  ) {
+    const grammes = grammesSaisis ?? grammesParDefaut(nom).grammes;
+    return ajoutRapide({
+      nom,
+      unite: "g",
+      quantite: grammes / 100,
+      calories: Math.round(v.calories),
+      proteines: v.proteines,
+      glucides: v.glucides,
+      lipides: v.lipides,
+      source,
+    });
+  }
+
+  async function supprimerAjoute(id: string) {
+    const { error } = await supabase.from("application_repas_journal").delete().eq("id", id);
+    if (error) return;
+    setAjoutes((prev) => prev.filter((a) => a.id !== id));
+    setBandeau((b) => (b?.id === id ? null : b));
+    onAjoute();
+  }
+
+  async function validerEdition(a: Ajoute) {
+    if (!edition) return;
+    const valeur = parseFloat(edition.valeur.replace(",", "."));
+    if (!Number.isFinite(valeur) || valeur <= 0) return setEdition(null);
+    const quantite = a.unite === "g" ? valeur / 100 : valeur;
+    const { error } = await supabase.from("application_repas_journal").update({ quantite }).eq("id", a.id);
+    if (!error) {
+      setAjoutes((prev) => prev.map((x) => (x.id === a.id ? { ...x, quantite } : x)));
+      onAjoute();
+    }
+    setEdition(null);
+  }
+
+  useEffect(() => {
+    if (!bandeau) return;
+    const minuteur = setTimeout(() => setBandeau(null), 4500);
+    return () => clearTimeout(minuteur);
+  }, [bandeau]);
+
   function choisirPour100g(
     nom: string,
     valeurs: { calories: number; proteines: number; glucides: number; lipides: number },
@@ -231,7 +366,8 @@ export function AddMealModal({
       quantiteParDefaut: 1,
       paGrammes: true,
     });
-    setGrammes(grammesPreremplis ?? 100);
+    // Poids tapé dans la recherche, sinon la portion habituelle (1 œuf, 1 tranche...), sinon 100 g.
+    setGrammes(grammesPreremplis ?? grammesParDefaut(nom).grammes);
     setEtape("confirmation");
   }
 
@@ -522,10 +658,7 @@ export function AddMealModal({
 
     const quantiteFinale = trouve.paGrammes ? grammes / 100 : quantite;
 
-    const { error } = await supabase.from("application_repas_journal").insert({
-      client_id: clientId,
-      date,
-      repas_type: repasType,
+    const idAjoute = await insererLigne({
       unite: trouve.paGrammes ? "g" : "portion",
       source: trouve.source,
       nom: nomAffiche.trim() || trouve.nom,
@@ -536,8 +669,8 @@ export function AddMealModal({
       lipides: trouve.lipides,
       photo_url: photoUrl,
       plat_id: trouve.plat_id ?? null,
-      cree_par: "client",
     });
+    const error = !idAjoute;
 
     if (!error) {
       const nomFinal = nomAffiche.trim() || trouve.nom;
@@ -565,11 +698,6 @@ export function AddMealModal({
     setEnregistrement(false);
     if (!error) {
       // On reste dans la fenêtre pour enchaîner les aliments du même repas.
-      onAjoute();
-      setAjoutes((prev) => [
-        ...prev,
-        { nom: nomAffiche.trim() || trouve.nom, kcal: Math.round(trouve.calories * quantiteFinale) },
-      ]);
       setTrouve(null);
       setPhoto(null);
       setPreviewPhoto(null);
@@ -598,8 +726,8 @@ export function AddMealModal({
       <p className="lbl pt-1">Restaurants &amp; fast-food</p>
       <ul className="carte overflow-hidden divide-y divide-black/5">
         {restaurantsAffiches.map((r) => (
-          <li key={r.id}>
-            <button onClick={() => choisirRestaurant(r)} className="w-full text-left px-4 py-3">
+          <li key={r.id} className="flex items-center">
+            <button onClick={() => choisirRestaurant(r)} className="flex-1 min-w-0 text-left pl-4 py-3">
               <p className="text-[15px] font-semibold text-c2b-green">
                 {r.nom}
                 <span className="font-medium text-c2b-muted"> · {r.enseigne}</span>
@@ -610,6 +738,22 @@ export function AddMealModal({
                 {Number(r.lipides)}g L
               </p>
             </button>
+            <BoutonPlus
+              libelle={`Ajouter ${r.nom}`}
+              detail="1 portion"
+              onClick={() =>
+                ajoutRapide({
+                  nom: `${r.nom} (${r.enseigne})`,
+                  unite: "portion",
+                  quantite: 1,
+                  calories: Math.round(Number(r.calories)),
+                  proteines: Number(r.proteines),
+                  glucides: Number(r.glucides),
+                  lipides: Number(r.lipides),
+                  source: "manuel",
+                })
+              }
+            />
           </li>
         ))}
       </ul>
@@ -647,17 +791,90 @@ export function AddMealModal({
         </div>
 
         <div className="p-5">
+          {/* Repas visé, choisi dès le début : les ajouts rapides (+) y vont directement. */}
+          {(etape === "choix" || etape === "manuel") && (
+            <div className="mb-4 grid grid-cols-4 gap-1.5">
+              {ORDRE_REPAS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRepasType(r)}
+                  className={`rounded-full px-1 py-1.5 text-[12px] font-bold transition ${
+                    repasType === r ? "bg-c2b-green text-c2b-cream" : "bg-white text-c2b-green border border-c2b-green/15"
+                  }`}
+                  aria-pressed={repasType === r}
+                >
+                  {r === "petit_dejeuner" ? "Petit-déj." : REPAS_TYPE_LABELS[r]}
+                </button>
+              ))}
+            </div>
+          )}
+
           {ajoutes.length > 0 && etape !== "confirmation" && (
-            <div className="mb-4 rounded-2xl bg-c2b-green/[0.06] px-4 py-3">
-              <p className="text-sm font-bold text-c2b-green">
-                ✓ {ajoutes.length} aliment{ajoutes.length > 1 ? "s" : ""} ajouté{ajoutes.length > 1 ? "s" : ""} au{" "}
-                {REPAS_TYPE_LABELS[repasType].toLowerCase()} ·{" "}
-                <span className="text-c2b-gold">{ajoutes.reduce((t, a) => t + a.kcal, 0)} kcal</span>
+            <div className="mb-4 rounded-2xl bg-c2b-green/[0.06] p-3">
+              <p className="px-1 text-sm font-bold text-c2b-green">
+                Ajouté{ajoutes.length > 1 ? "s" : ""} ·{" "}
+                <span className="text-c2b-gold">
+                  {Math.round(ajoutes.reduce((t, a) => t + a.calories * a.quantite, 0))} kcal
+                </span>
               </p>
-              <p className="text-xs text-c2b-muted mt-0.5 line-clamp-2">{ajoutes.map((a) => a.nom).join(" · ")}</p>
-              <p className="text-xs text-c2b-green/70 mt-1.5">
-                Ajoutez l&apos;aliment suivant, ou touchez « Terminer ».
-              </p>
+              <ul className="mt-2 space-y-1">
+                {ajoutes.map((a) => (
+                  <li key={a.id} className="rounded-xl bg-white px-3 py-2">
+                    {edition?.id === a.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 min-w-0 truncate text-sm font-semibold text-c2b-green">{a.nom}</span>
+                        <input
+                          autoFocus
+                          inputMode="decimal"
+                          value={edition.valeur}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => setEdition({ id: a.id, valeur: e.target.value.replace(/[^0-9.,]/g, "") })}
+                          onKeyDown={(e) => e.key === "Enter" && validerEdition(a)}
+                          className="champ w-20 px-2.5 py-1.5 text-right text-sm"
+                          aria-label={`Quantité de ${a.nom}`}
+                        />
+                        <span className="text-xs text-c2b-muted">{a.unite === "g" ? "g" : "port."}</span>
+                        <button
+                          onClick={() => validerEdition(a)}
+                          className="w-8 h-8 rounded-full bg-c2b-green text-c2b-cream flex items-center justify-center"
+                          aria-label="Valider la quantité"
+                        >
+                          <Check size={15} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            setEdition({
+                              id: a.id,
+                              valeur: String(
+                                a.unite === "g" ? Math.round(a.quantite * 100) : Math.round(a.quantite * 100) / 100
+                              ).replace(".", ","),
+                            })
+                          }
+                          className="flex-1 min-w-0 text-left"
+                          aria-label={`Modifier ${a.nom}`}
+                        >
+                          <span className="block truncate text-sm font-semibold text-c2b-green">{a.nom}</span>
+                          <span className="text-[11px] text-c2b-muted">
+                            {libelleQuantiteMemo(a.unite, a.quantite)} · {Math.round(a.calories * a.quantite)} kcal
+                            {a.repas !== repasType && ` · ${REPAS_TYPE_LABELS[a.repas].toLowerCase()}`} ·{" "}
+                            <span className="font-semibold text-c2b-gold">modifier</span>
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => supprimerAjoute(a.id)}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-c2b-muted hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Retirer ${a.nom}`}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {etape === "choix" && (
@@ -722,6 +939,7 @@ export function AddMealModal({
                             : `${Math.round(Number(f.calories) * Number(f.quantite))} kcal`
                         }
                         onClick={() => choisirFavori(f)}
+                        onAjoutRapide={f.elements?.length ? undefined : () => ajoutRapideMemorise(f)}
                       />
                     ))}
                   </div>
@@ -1029,7 +1247,13 @@ export function AddMealModal({
                           </button>
                         </div>
                       ) : (
-                        <LigneMemorisee key={f.id} nom={f.nom} detail={detail} onClick={() => choisirFavori(f)} />
+                        <LigneMemorisee
+                          key={f.id}
+                          nom={f.nom}
+                          detail={detail}
+                          onClick={() => choisirFavori(f)}
+                          onAjoutRapide={f.elements?.length ? undefined : () => ajoutRapideMemorise(f)}
+                        />
                       );
                     })}
                   </div>
@@ -1042,16 +1266,20 @@ export function AddMealModal({
                     <History size={12} /> Récents
                   </p>
                   <div className="carte overflow-hidden divide-y divide-black/5">
-                    {recents.map((r) => (
-                      <LigneMemorisee
-                        key={r.id}
-                        nom={r.nom}
-                        detail={`${libelleQuantiteMemo(r.unite, Number(r.quantite))} · ${Math.round(
-                          Number(r.calories) * Number(r.quantite)
-                        )} kcal`}
-                        onClick={() => choisirMemorise(r)}
-                      />
-                    ))}
+                    {/* Ceux déjà mangés à ce repas-là d'abord (comme MyFitnessPal). */}
+                    {[...recents]
+                      .sort((a, b) => Number(b.repas_type === repasType) - Number(a.repas_type === repasType))
+                      .map((r) => (
+                        <LigneMemorisee
+                          key={r.id}
+                          nom={r.nom}
+                          detail={`${libelleQuantiteMemo(r.unite, Number(r.quantite))} · ${Math.round(
+                            Number(r.calories) * Number(r.quantite)
+                          )} kcal`}
+                          onClick={() => choisirMemorise(r)}
+                          onAjoutRapide={() => ajoutRapideMemorise(r)}
+                        />
+                      ))}
                   </div>
                 </div>
               )}
@@ -1061,16 +1289,32 @@ export function AddMealModal({
                   <p className="lbl">Ajout rapide</p>
                   <div className="grid grid-cols-2 gap-2">
                     {ALIMENTS_POPULAIRES.map((a) => (
-                      <button
-                        key={a.nom}
-                        onClick={() => choisirAlimentPopulaire(a.nom, a.calories, a.proteines, a.glucides, a.lipides)}
-                        className="carte p-3 text-left transition hover:border-c2b-gold/40"
-                      >
-                        <p className="text-sm font-medium text-c2b-green">{a.nom}</p>
-                        <p className="text-[11px] text-c2b-muted">
-                          {a.portion} · {a.calories} kcal
-                        </p>
-                      </button>
+                      <div key={a.nom} className="carte flex items-center transition hover:border-c2b-gold/40">
+                        <button
+                          onClick={() => choisirAlimentPopulaire(a.nom, a.calories, a.proteines, a.glucides, a.lipides)}
+                          className="flex-1 min-w-0 p-3 pr-0 text-left"
+                        >
+                          <p className="text-sm font-medium text-c2b-green truncate">{a.nom}</p>
+                          <p className="text-[11px] text-c2b-muted">
+                            {a.portion} · {a.calories} kcal
+                          </p>
+                        </button>
+                        <BoutonPlus
+                          libelle={`Ajouter ${a.nom}`}
+                          onClick={() =>
+                            ajoutRapide({
+                              nom: a.nom,
+                              unite: "portion",
+                              quantite: 1,
+                              calories: a.calories,
+                              proteines: a.proteines,
+                              glucides: a.glucides,
+                              lipides: a.lipides,
+                              source: "manuel",
+                            })
+                          }
+                        />
+                      </div>
                     ))}
                   </div>
                 </>
@@ -1111,10 +1355,10 @@ export function AddMealModal({
                       )}
                       <ul className="carte overflow-hidden divide-y divide-black/5">
                         {(tousLesAliments ? alimentsAffiches : alimentsAffiches.slice(0, 5)).map((a) => (
-                          <li key={a.id}>
+                          <li key={a.id} className="flex items-center">
                             <button
                               onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
-                              className="w-full text-left px-4 py-3"
+                              className="flex-1 min-w-0 text-left pl-4 py-3"
                             >
                               <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
                               <p className="text-[11px] text-c2b-muted">
@@ -1122,6 +1366,11 @@ export function AddMealModal({
                                 {a.lipides}g L
                               </p>
                             </button>
+                            <BoutonPlus
+                              libelle={`Ajouter ${a.nom}`}
+                              detail={quantiteRapide(a.nom)}
+                              onClick={() => ajoutRapide100g(a.nom, a, "manuel")}
+                            />
                           </li>
                         ))}
                       </ul>
@@ -1148,12 +1397,12 @@ export function AddMealModal({
                   ) : (
                     <ul className="carte overflow-hidden divide-y divide-black/5">
                       {resultatsMarques.map((p, i) => (
-                        <li key={`${p.nom}-${p.marque}-${i}`}>
+                        <li key={`${p.nom}-${p.marque}-${i}`} className="flex items-center">
                           <button
                             onClick={() =>
                               choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis)
                             }
-                            className="w-full text-left px-4 py-3"
+                            className="flex-1 min-w-0 text-left pl-4 py-3"
                           >
                             <p className="text-[15px] font-semibold text-c2b-green">
                               {p.nom}
@@ -1168,6 +1417,11 @@ export function AddMealModal({
                               100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
                             </p>
                           </button>
+                          <BoutonPlus
+                            libelle={`Ajouter ${p.nom}`}
+                            detail={quantiteRapide(p.nom)}
+                            onClick={() => ajoutRapide100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel")}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -1294,6 +1548,24 @@ export function AddMealModal({
                   placeholder={trouve.paGrammes ? "100" : "1"}
                   className="champ"
                 />
+                {trouve.paGrammes && portionsUsuelles(trouve.nom).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {portionsUsuelles(trouve.nom).map((pu) => (
+                      <button
+                        key={pu.libelle}
+                        onClick={() => {
+                          setGrammes(pu.grammes);
+                          setSaisieQuantite(null);
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                          grammes === pu.grammes ? "bg-c2b-gold text-c2b-green" : "bg-c2b-gold/[0.12] text-c2b-green"
+                        }`}
+                      >
+                        {pu.libelle} · {pu.grammes} g
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {trouve.paGrammes && (
                   <div className="flex gap-1.5 mt-2">
                     {GRAMMES_RAPIDES.map((g) => (
@@ -1359,6 +1631,17 @@ export function AddMealModal({
           )}
         </div>
       </div>
+
+      {bandeau && (
+        <div className="fixed bottom-5 inset-x-4 z-40 mx-auto max-w-md rounded-2xl bg-c2b-green px-4 py-3 text-sm text-c2b-cream shadow-lg flex items-center gap-3 animate-apparition">
+          <span className="flex-1 min-w-0 truncate font-semibold">{bandeau.texte}</span>
+          {bandeau.id && (
+            <button onClick={() => supprimerAjoute(bandeau.id)} className="font-bold text-c2b-gold flex-shrink-0">
+              Annuler
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1369,11 +1652,49 @@ function libelleQuantiteMemo(unite: "g" | "portion" | null, quantite: number) {
   return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
 }
 
-function LigneMemorisee({ nom, detail, onClick }: { nom: string; detail: string; onClick: () => void }) {
+function LigneMemorisee({
+  nom,
+  detail,
+  onClick,
+  onAjoutRapide,
+}: {
+  nom: string;
+  detail: string;
+  onClick: () => void;
+  onAjoutRapide?: () => void;
+}) {
   return (
-    <button onClick={onClick} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-c2b-cream/60">
-      <span className="text-sm font-medium text-c2b-green truncate">{nom}</span>
-      <span className="text-[11px] text-c2b-muted flex-shrink-0">{detail}</span>
+    <div className="flex items-center hover:bg-c2b-cream/60">
+      <button onClick={onClick} className="flex-1 min-w-0 flex items-center justify-between gap-3 pl-4 pr-2 py-3 text-left">
+        <span className="text-sm font-medium text-c2b-green truncate">{nom}</span>
+        <span className="text-[11px] text-c2b-muted flex-shrink-0">{detail}</span>
+      </button>
+      {onAjoutRapide ? <BoutonPlus libelle={`Ajouter ${nom}`} onClick={onAjoutRapide} /> : <span className="w-3" />}
+    </div>
+  );
+}
+
+// Bouton rond « + » : ajoute tout de suite avec la quantité indiquée.
+function BoutonPlus({ libelle, detail, onClick }: { libelle: string; detail?: string; onClick: () => void }) {
+  const [fait, setFait] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        setFait(true);
+        onClick();
+        setTimeout(() => setFait(false), 1200);
+      }}
+      className="flex-shrink-0 flex flex-col items-center justify-center px-3 py-2"
+      aria-label={detail ? `${libelle} (${detail})` : libelle}
+    >
+      <span
+        className={`w-9 h-9 rounded-full flex items-center justify-center transition ${
+          fait ? "bg-c2b-gold text-c2b-green" : "bg-c2b-green/[0.08] text-c2b-green"
+        }`}
+      >
+        {fait ? <Check size={17} /> : <Plus size={18} />}
+      </span>
+      {detail && <span className="mt-0.5 text-[10px] text-c2b-muted whitespace-nowrap">{detail}</span>}
     </button>
   );
 }
