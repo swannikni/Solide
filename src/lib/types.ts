@@ -117,3 +117,23 @@ export interface ProduitRestaurant {
   pays: string;
   source_url: string;
 }
+
+// Questionnaire rempli sur chef2box.com (ou repris de l'ancien outil),
+// en attente de création du compte client.
+export interface Questionnaire {
+  id: string;
+  created_at: string;
+  source: "site" | "ancien_outil";
+  nom: string;
+  email: string | null;
+  telephone: string | null;
+  calories: number | null;
+  proteines: number | null;
+  glucides: number | null;
+  lipides: number | null;
+  palier: Palier | null;
+  profil: import("@/lib/objectifs").Profil | null;
+  reponses: Record<string, string | number | null>;
+  statut: "nouveau" | "compte_cree" | "ignore";
+  client_id: string | null;
+}

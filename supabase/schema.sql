@@ -364,6 +364,36 @@ drop policy if exists "poids_self_write" on public.application_poids;
 create policy "poids_self_write" on public.application_poids
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
+-- ============ QUESTIONNAIRES REÇUS (chef2box.com) ============
+-- Envoyés par le site via la route /api/questionnaire (clé secrète) ; l'admin
+-- crée ensuite le compte du client en un clic.
+create table if not exists public.application_questionnaires (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  source text not null default 'site' check (source in ('site', 'ancien_outil')),
+  nom text not null,
+  email text,
+  telephone text,
+  calories int,
+  proteines int,
+  glucides int,
+  lipides int,
+  palier text check (palier in ('P1','P2','P3','P4','P5','P6')),
+  profil jsonb,
+  reponses jsonb not null default '{}'::jsonb,
+  statut text not null default 'nouveau' check (statut in ('nouveau', 'compte_cree', 'ignore')),
+  client_id uuid references public.application_clients (id) on delete set null
+);
+
+create index if not exists application_questionnaires_statut_idx
+  on public.application_questionnaires (statut, created_at desc);
+
+alter table public.application_questionnaires enable row level security;
+
+drop policy if exists "questionnaires_admin" on public.application_questionnaires;
+create policy "questionnaires_admin" on public.application_questionnaires
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
 -- ============ RESTAURANTS & FAST-FOOD ============
 -- Valeurs officielles publiées par les enseignes (par portion). Données
 -- dans supabase/data/restaurants.json (McDonald's Suisse, Burger King France).

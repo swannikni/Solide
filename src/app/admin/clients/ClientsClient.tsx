@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/admin/AdminOnglets";
 import { Pastille } from "@/components/Pastille";
@@ -16,10 +16,11 @@ import {
   profilComplet,
   type Profil,
 } from "@/lib/objectifs";
-import type { Client, Palier } from "@/lib/types";
+import type { Client, Palier, Questionnaire } from "@/lib/types";
 
 type Fiche = {
   id?: string;
+  questionnaireId?: string;
   nom: string;
   email: string;
   telephone: string;
@@ -142,16 +143,19 @@ function numeroWhatsApp(telephone: string | null) {
 
 export function ClientsClient({
   clientsInitiaux,
+  questionnairesInitiaux = [],
   emails,
   cleServicePresente,
 }: {
   clientsInitiaux: Client[];
+  questionnairesInitiaux?: Questionnaire[];
   emails: Record<string, string>;
   cleServicePresente: boolean;
 }) {
   const supabase = createClient();
   const [clients, setClients] = useState(clientsInitiaux);
   const [emailsConnus, setEmailsConnus] = useState(emails);
+  const [questionnaires, setQuestionnaires] = useState(questionnairesInitiaux);
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -161,6 +165,31 @@ export function ClientsClient({
   function ouvrirNouveau() {
     setErreur("");
     setFiche({ ...FICHE_VIDE, profil: { ...PROFIL_VIDE } });
+  }
+
+  // Fiche pré-remplie depuis un questionnaire reçu : rien à retaper.
+  function ouvrirDepuisQuestionnaire(q: Questionnaire) {
+    setErreur("");
+    const tel = q.telephone ?? "";
+    setFiche({
+      ...FICHE_VIDE,
+      questionnaireId: q.id,
+      nom: q.nom,
+      email: q.email ?? "",
+      ...(tel.startsWith("+") ? decouperNumero(tel) : { indicatif: "+212", telephone: tel }),
+      palier: q.palier ?? "",
+      calories: q.calories != null ? String(q.calories) : "",
+      proteines: q.proteines != null ? String(q.proteines) : "",
+      glucides: q.glucides != null ? String(q.glucides) : "",
+      lipides: q.lipides != null ? String(q.lipides) : "",
+      profil: depuisProfil(q.profil),
+    });
+  }
+
+  async function ignorerQuestionnaire(q: Questionnaire) {
+    if (!confirm(`Retirer « ${q.nom} » de la liste des questionnaires reçus ?`)) return;
+    const { error } = await supabase.from("application_questionnaires").update({ statut: "ignore" }).eq("id", q.id);
+    if (!error) setQuestionnaires((prev) => prev.filter((x) => x.id !== q.id));
   }
 
   function ouvrirEdition(c: Client) {
@@ -276,6 +305,13 @@ export function ClientsClient({
     setEmailsConnus((prev) => ({ ...prev, [resultat.id]: resultat.email }));
     setFiche(null);
     setCopie(false);
+    if (fiche.questionnaireId) {
+      await supabase
+        .from("application_questionnaires")
+        .update({ statut: "compte_cree", client_id: resultat.id })
+        .eq("id", fiche.questionnaireId);
+      setQuestionnaires((prev) => prev.filter((x) => x.id !== fiche.questionnaireId));
+    }
     setAcces({ nom: fiche.nom.trim(), email: resultat.email, motDePasse: resultat.motDePasse, telephone: numeroInternational(fiche.indicatif, fiche.telephone) });
   }
 
@@ -382,6 +418,52 @@ export function ClientsClient({
             </button>
           </div>
         </div>
+      )}
+
+      {questionnaires.length > 0 && (
+        <section className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Inbox size={18} className="text-c2b-gold" />
+            <h2 className="font-serif text-[22px] text-c2b-green">Questionnaires reçus</h2>
+            <span className="pastille py-0.5 px-2">{questionnaires.length}</span>
+          </div>
+          <p className="text-xs text-c2b-muted">
+            Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
+          </p>
+          {questionnaires.map((q) => (
+            <div key={q.id} className="carte p-4 border-c2b-gold/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-[15px] text-c2b-green">
+                    {q.nom}
+                    {q.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{q.palier}</span>}
+                  </p>
+                  <p className="text-xs text-c2b-muted truncate">
+                    {[q.email, q.telephone].filter(Boolean).join(" · ") || "Pas d'email"} ·{" "}
+                    {q.source === "site"
+                      ? new Date(q.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                      : "ancien outil, chiffres à vérifier"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => ignorerQuestionnaire(q)}
+                  className="text-c2b-muted/60 hover:text-c2b-green flex-shrink-0"
+                  aria-label="Retirer de la liste"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+              {q.calories != null && (
+                <p className="text-sm text-c2b-green mt-2">
+                  <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
+                </p>
+              )}
+              <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold w-full mt-3 py-2.5 text-sm">
+                Créer son compte
+              </button>
+            </div>
+          ))}
+        </section>
       )}
 
       {clients.length === 0 ? (
@@ -506,11 +588,16 @@ export function ClientsClient({
                 </Champ>
               </div>
 
-              <div className="rounded-2xl bg-white border border-black/5 p-4 space-y-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-c2b-green">Profil</p>
-                  <p className="text-[11px] text-c2b-muted">Même calcul que le questionnaire de chef2box.com.</p>
-                </div>
+              <details className="rounded-2xl bg-white border border-black/5 p-4 [&[open]>summary]:mb-3">
+                <summary className="cursor-pointer list-none">
+                  <p className="text-xs font-bold uppercase tracking-wider text-c2b-green">
+                    Calculer depuis le profil <span className="text-c2b-gold">›</span>
+                  </p>
+                  <p className="text-[11px] text-c2b-muted">
+                    Seulement si le client n&apos;a pas rempli le questionnaire du site (même calcul).
+                  </p>
+                </summary>
+                <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   {(["Homme", "Femme"] as const).map((sx) => (
                     <Pastille key={sx} active={fiche.profil.sexe === sx} onClick={() => changerProfil({ sexe: sx })} large>
@@ -602,7 +689,8 @@ export function ClientsClient({
                     ))}
                   </select>
                 </Champ>
-              </div>
+                </div>
+              </details>
 
               <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Objectifs par jour</p>
               <Champ label="Calories (kcal)">

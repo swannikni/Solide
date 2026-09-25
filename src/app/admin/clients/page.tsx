@@ -2,7 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Nav } from "@/components/Nav";
 import { ClientsClient } from "@/app/admin/clients/ClientsClient";
-import type { Client } from "@/lib/types";
+import type { Client, Questionnaire } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,13 @@ export default async function ClientsPage() {
     .order("nom")
     .returns<Client[]>();
 
+  const { data: questionnaires } = await supabase
+    .from("application_questionnaires")
+    .select("*")
+    .eq("statut", "nouveau")
+    .order("created_at", { ascending: false })
+    .returns<Questionnaire[]>();
+
   // Les emails sont dans Supabase Auth : lisibles seulement avec la clé service.
   const admin = createAdminClient();
   const emails: Record<string, string> = {};
@@ -26,7 +33,12 @@ export default async function ClientsPage() {
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <Nav estAdmin />
-      <ClientsClient clientsInitiaux={clients ?? []} emails={emails} cleServicePresente={!!admin} />
+      <ClientsClient
+        clientsInitiaux={clients ?? []}
+        questionnairesInitiaux={questionnaires ?? []}
+        emails={emails}
+        cleServicePresente={!!admin}
+      />
     </div>
   );
 }

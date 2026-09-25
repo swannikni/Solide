@@ -1,7 +1,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+// /api/questionnaire : reçoit les questionnaires envoyés depuis chef2box.com.
+const PUBLIC_PATHS = ["/login", "/api/questionnaire"];
 
 interface CookieAEcrire {
   name: string;
