@@ -283,6 +283,34 @@ $$;
 revoke execute on function public.application_rechercher_aliments(text, int) from public, anon;
 grant execute on function public.application_rechercher_aliments(text, int) to authenticated;
 
+-- ============ ASSISTANT IA ============
+-- Historique du chat avec l'assistant (sert aussi au quota quotidien).
+create table if not exists public.application_assistant_messages (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  contenu text not null check (char_length(contenu) <= 20000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists application_assistant_messages_client_idx
+  on public.application_assistant_messages (client_id, created_at);
+
+alter table public.application_assistant_messages enable row level security;
+
+drop policy if exists "assistant_self_or_admin_select" on public.application_assistant_messages;
+create policy "assistant_self_or_admin_select" on public.application_assistant_messages
+  for select using (auth.uid() = client_id or public.application_is_admin());
+
+-- Écrit par la route serveur sous la session du client lui-même.
+drop policy if exists "assistant_self_insert" on public.application_assistant_messages;
+create policy "assistant_self_insert" on public.application_assistant_messages
+  for insert with check (auth.uid() = client_id);
+
+drop policy if exists "assistant_self_delete" on public.application_assistant_messages;
+create policy "assistant_self_delete" on public.application_assistant_messages
+  for delete using (auth.uid() = client_id);
+
 -- ============ STORAGE (photos de repas) ============
 insert into storage.buckets (id, name, public)
 values ('application-repas-photos', 'application-repas-photos', true)

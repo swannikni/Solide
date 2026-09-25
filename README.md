@@ -63,6 +63,15 @@ on conflict (code_ciqual) do nothing;
 drop extension http;
 ```
 
+### 2 ter. Activer l'assistant IA
+
+L'onglet « Assistant » utilise Claude Haiku 4.5 (Anthropic) via la route
+serveur `/api/assistant` (30 questions par client et par jour). Il lui faut
+une clé API Anthropic (console.anthropic.com → API Keys), à déclarer
+uniquement côté serveur dans les variables d'environnement Netlify :
+`ANTHROPIC_API_KEY` (jamais préfixée `NEXT_PUBLIC_`). Sans clé, l'onglet
+affiche « L'assistant n'est pas encore activé ».
+
 ### 3. Créer les comptes
 
 Il n'y a pas d'auto-inscription (accès réservé aux clients Chef2Box) :

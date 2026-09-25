@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, MessageCircle, History, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, MessageCircle, History, LogOut, ShieldCheck, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 
 const LIENS_CLIENT = [
   { href: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
+  { href: "/assistant", label: "Assistant", icon: Sparkles },
   { href: "/history", label: "Historique", icon: History },
   { href: "/messages", label: "Messages", icon: MessageCircle },
 ];
