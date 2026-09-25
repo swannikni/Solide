@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PALIERS } from "@/lib/objectifs";
+import { PALIERS, profilComplet, type Profil } from "@/lib/objectifs";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +50,20 @@ export async function POST(request: Request) {
   const glucides = entier(corps?.objectif_glucides, 0, 1000);
   const lipides = entier(corps?.objectif_lipides, 0, 400);
 
+  const profilBrut = corps?.profil as Partial<Profil> | null | undefined;
+  const profil = profilBrut && profilComplet(profilBrut)
+    ? {
+        sexe: profilBrut.sexe,
+        age: Number(profilBrut.age),
+        taille: Number(profilBrut.taille),
+        poids: Number(profilBrut.poids),
+        objectifs: profilBrut.objectifs.map(String).slice(0, 5),
+        seances: String(profilBrut.seances),
+        job: String(profilBrut.job),
+        grignotage: String(profilBrut.grignotage),
+      }
+    : null;
+
   if (!nom) return erreur("Le nom est obligatoire.", 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return erreur("Adresse email invalide.", 400);
   if (calories === null || proteines === null || glucides === null || lipides === null)
@@ -72,6 +86,7 @@ export async function POST(request: Request) {
     nom,
     telephone,
     palier,
+    profil,
     objectif_calories: calories,
     objectif_proteines: proteines,
     objectif_glucides: glucides,

@@ -4,7 +4,17 @@ import { useState } from "react";
 import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/admin/AdminOnglets";
-import { PALIERS, repartirMacros } from "@/lib/objectifs";
+import { Pastille } from "@/components/Pastille";
+import {
+  GRIGNOTAGE,
+  METIERS,
+  OBJECTIFS,
+  PALIERS,
+  SEANCES,
+  calculerObjectifs,
+  profilComplet,
+  type Profil,
+} from "@/lib/objectifs";
 import type { Client, Palier } from "@/lib/types";
 
 type Fiche = {
@@ -18,21 +28,72 @@ type Fiche = {
   proteines: string;
   glucides: string;
   lipides: string;
+  profil: ProfilSaisi;
 };
+
+// Profil tel que saisi dans le formulaire (nombres en texte).
+type ProfilSaisi = {
+  sexe: Profil["sexe"] | "";
+  age: string;
+  taille: string;
+  poids: string;
+  objectifs: string[];
+  seances: Profil["seances"];
+  job: Profil["job"];
+  grignotage: Profil["grignotage"];
+};
+
+const PROFIL_VIDE: ProfilSaisi = {
+  sexe: "",
+  age: "",
+  taille: "",
+  poids: "",
+  objectifs: [],
+  seances: "0",
+  job: "Principalement assis",
+  grignotage: "Occasionnellement",
+};
+
+function versProfil(p: ProfilSaisi): Partial<Profil> {
+  return {
+    sexe: p.sexe || undefined,
+    age: parseInt(p.age, 10) || 0,
+    taille: parseInt(p.taille, 10) || 0,
+    poids: parseFloat(p.poids.replace(",", ".")) || 0,
+    objectifs: p.objectifs,
+    seances: p.seances,
+    job: p.job,
+    grignotage: p.grignotage,
+  };
+}
+
+function depuisProfil(p: Profil | null | undefined): ProfilSaisi {
+  if (!p) return { ...PROFIL_VIDE };
+  return {
+    sexe: p.sexe,
+    age: String(p.age),
+    taille: String(p.taille),
+    poids: String(p.poids).replace(".", ","),
+    objectifs: p.objectifs ?? [],
+    seances: p.seances,
+    job: p.job,
+    grignotage: p.grignotage,
+  };
+}
 
 type Acces = { nom: string; email: string; motDePasse: string; telephone: string | null };
 
-const MACROS_2000 = repartirMacros(2000);
 const FICHE_VIDE: Fiche = {
   nom: "",
   email: "",
   telephone: "",
   indicatif: "+212",
   palier: "",
-  calories: "2000",
-  proteines: String(MACROS_2000.proteines),
-  glucides: String(MACROS_2000.glucides),
-  lipides: String(MACROS_2000.lipides),
+  calories: "",
+  proteines: "",
+  glucides: "",
+  lipides: "",
+  profil: { ...PROFIL_VIDE },
 };
 
 const INDICATIFS = [
@@ -87,7 +148,6 @@ export function ClientsClient({
   const [clients, setClients] = useState(clientsInitiaux);
   const [emailsConnus, setEmailsConnus] = useState(emails);
   const [fiche, setFiche] = useState<Fiche | null>(null);
-  const [macrosManuelles, setMacrosManuelles] = useState(false);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState("");
   const [acces, setAcces] = useState<Acces | null>(null);
@@ -95,13 +155,11 @@ export function ClientsClient({
 
   function ouvrirNouveau() {
     setErreur("");
-    setMacrosManuelles(false);
-    setFiche({ ...FICHE_VIDE });
+    setFiche({ ...FICHE_VIDE, profil: { ...PROFIL_VIDE } });
   }
 
   function ouvrirEdition(c: Client) {
     setErreur("");
-    setMacrosManuelles(true);
     setFiche({
       id: c.id,
       nom: c.nom,
@@ -112,25 +170,35 @@ export function ClientsClient({
       proteines: String(c.objectif_proteines),
       glucides: String(c.objectif_glucides),
       lipides: String(c.objectif_lipides),
+      profil: depuisProfil(c.profil),
     });
   }
 
-  function changerCalories(texte: string) {
+  // Chaque modification du profil recalcule les objectifs (même calcul que
+  // le questionnaire du site) dès que le profil est complet.
+  function changerProfil(modif: Partial<ProfilSaisi>) {
     if (!fiche) return;
-    const kcal = parseInt(texte, 10);
-    const suivant = { ...fiche, calories: texte };
-    if (!macrosManuelles && Number.isFinite(kcal)) {
-      const m = repartirMacros(kcal);
-      Object.assign(suivant, { proteines: String(m.proteines), glucides: String(m.glucides), lipides: String(m.lipides) });
+    const profil = { ...fiche.profil, ...modif };
+    const suivant: Fiche = { ...fiche, profil };
+    const p = versProfil(profil);
+    if (profilComplet(p)) {
+      const o = calculerObjectifs(p);
+      Object.assign(suivant, {
+        calories: String(o.calories),
+        proteines: String(o.proteines),
+        glucides: String(o.glucides),
+        lipides: String(o.lipides),
+      });
     }
     setFiche(suivant);
   }
 
-  function repartir() {
+  function basculerObjectif(o: string) {
     if (!fiche) return;
-    const m = repartirMacros(parseInt(fiche.calories, 10) || 0);
-    setFiche({ ...fiche, proteines: String(m.proteines), glucides: String(m.glucides), lipides: String(m.lipides) });
-    setMacrosManuelles(false);
+    const liste = fiche.profil.objectifs.includes(o)
+      ? fiche.profil.objectifs.filter((x) => x !== o)
+      : [...fiche.profil.objectifs, o];
+    changerProfil({ objectifs: liste });
   }
 
   async function enregistrer() {
@@ -143,13 +211,16 @@ export function ClientsClient({
       objectif_lipides: parseInt(fiche.lipides, 10),
     };
     if (!fiche.nom.trim()) return setErreur("Le nom est obligatoire.");
-    if (Object.values(objectifs).some((v) => !Number.isFinite(v))) return setErreur("Renseignez tous les objectifs.");
+    if (Object.values(objectifs).some((v) => !Number.isFinite(v)))
+      return setErreur("Complétez le profil (ou saisissez les objectifs à la main).");
+    const p = versProfil(fiche.profil);
+    const profil = profilComplet(p) ? p : null;
 
     setEnCours(true);
     if (fiche.id) {
       const { data, error } = await supabase
         .from("application_clients")
-        .update({ nom: fiche.nom.trim(), telephone: numeroInternational(fiche.indicatif, fiche.telephone), palier: fiche.palier || null, ...objectifs })
+        .update({ nom: fiche.nom.trim(), telephone: numeroInternational(fiche.indicatif, fiche.telephone), palier: fiche.palier || null, profil, ...objectifs })
         .eq("id", fiche.id)
         .select("*")
         .single<Client>();
@@ -168,6 +239,7 @@ export function ClientsClient({
         email: fiche.email,
         telephone: numeroInternational(fiche.indicatif, fiche.telephone),
         palier: fiche.palier || null,
+        profil,
         ...objectifs,
       }),
     });
@@ -188,6 +260,7 @@ export function ClientsClient({
           nom: fiche.nom.trim(),
           telephone: numeroInternational(fiche.indicatif, fiche.telephone),
           palier: (fiche.palier || null) as Palier | null,
+          profil,
           ...objectifs,
           est_admin: false,
           created_at: new Date().toISOString(),
@@ -396,7 +469,7 @@ export function ClientsClient({
                   >
                     {INDICATIFS.map((i) => (
                       <option key={i.code} value={i.code}>
-                        {i.pays} {i.code}
+                        {i.pays.split(" ")[0]} {i.code}
                       </option>
                     ))}
                   </select>
@@ -427,18 +500,98 @@ export function ClientsClient({
                 </Champ>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted">Objectifs par jour</p>
-                <button onClick={repartir} className="text-xs font-bold text-c2b-gold">
-                  Répartir 30 / 40 / 30
-                </button>
+              <div className="rounded-2xl bg-white border border-black/5 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-c2b-green">Profil</p>
+                  <p className="text-[11px] text-c2b-muted">Même calcul que le questionnaire de chef2box.com.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["Homme", "Femme"] as const).map((sx) => (
+                    <Pastille key={sx} active={fiche.profil.sexe === sx} onClick={() => changerProfil({ sexe: sx })} large>
+                      {sx}
+                    </Pastille>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["age", "Âge"],
+                      ["taille", "Taille (cm)"],
+                      ["poids", "Poids (kg)"],
+                    ] as const
+                  ).map(([cle, label]) => (
+                    <Champ key={cle} label={label}>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={fiche.profil[cle]}
+                        onChange={(e) => changerProfil({ [cle]: e.target.value.replace(/[^0-9.,]/g, "") })}
+                        className="champ px-3"
+                      />
+                    </Champ>
+                  ))}
+                </div>
+                <div>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
+                    Objectif (plusieurs possibles)
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {OBJECTIFS.map((o) => (
+                      <Pastille key={o} active={fiche.profil.objectifs.includes(o)} onClick={() => basculerObjectif(o)}>
+                        {o}
+                      </Pastille>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
+                    Séances de sport par semaine
+                  </span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {SEANCES.map((sc) => (
+                      <Pastille key={sc} active={fiche.profil.seances === sc} onClick={() => changerProfil({ seances: sc })}>
+                        {sc}
+                      </Pastille>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Champ label="Travail">
+                    <select
+                      value={fiche.profil.job}
+                      onChange={(e) => changerProfil({ job: e.target.value as Profil["job"] })}
+                      className="champ px-2 text-sm"
+                    >
+                      {METIERS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </Champ>
+                  <Champ label="Grignotage">
+                    <select
+                      value={fiche.profil.grignotage}
+                      onChange={(e) => changerProfil({ grignotage: e.target.value as Profil["grignotage"] })}
+                      className="champ px-2 text-sm"
+                    >
+                      {GRIGNOTAGE.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </Champ>
+                </div>
               </div>
+
+              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Objectifs par jour</p>
               <Champ label="Calories (kcal)">
                 <input
                   type="text"
                   inputMode="numeric"
                   value={fiche.calories}
-                  onChange={(e) => changerCalories(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) => setFiche({ ...fiche, calories: e.target.value.replace(/\D/g, "") })}
                   className="champ"
                 />
               </Champ>
@@ -455,18 +608,14 @@ export function ClientsClient({
                       type="text"
                       inputMode="numeric"
                       value={fiche[cle]}
-                      onChange={(e) => {
-                        setMacrosManuelles(true);
-                        setFiche({ ...fiche, [cle]: e.target.value.replace(/\D/g, "") });
-                      }}
+                      onChange={(e) => setFiche({ ...fiche, [cle]: e.target.value.replace(/\D/g, "") })}
                       className="champ px-3"
                     />
                   </Champ>
                 ))}
               </div>
               <p className="text-[11px] text-c2b-muted">
-                Les macros se calculent seules à partir des calories (30 % protéines, 40 % glucides, 30 % lipides).
-                Vous pouvez les ajuster à la main.
+                Calculés automatiquement dès que le profil est complet. Vous pouvez les ajuster à la main.
               </p>
 
               {erreur && <p className="text-sm font-semibold text-red-600">{erreur}</p>}

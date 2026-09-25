@@ -80,6 +80,10 @@ create index if not exists application_repas_journal_client_date_idx
 alter table public.application_repas_journal
   add column if not exists unite text check (unite in ('g', 'portion'));
 
+-- Profil (sexe, âge, taille, poids, objectifs, activité) pour calculer les
+-- objectifs comme le questionnaire de chef2box.com.
+alter table public.application_clients add column if not exists profil jsonb;
+
 -- ============ FAVORIS ============
 create table if not exists public.application_favoris (
   id uuid primary key default gen_random_uuid(),

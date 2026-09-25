@@ -12,6 +12,7 @@ export interface Client {
   objectif_glucides: number;
   objectif_lipides: number;
   est_admin: boolean;
+  profil?: import("@/lib/objectifs").Profil | null;
   created_at: string;
 }
 
