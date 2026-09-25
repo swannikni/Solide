@@ -1408,15 +1408,10 @@ function genererBilan() {
   ];
   var palier = C2B_PALIERS.find(function(p){ return kcal >= p.min; }) || C2B_PALIERS[C2B_PALIERS.length-1];
 
-  // Un repas Chef2Box : jamais moins de 550 kcal ni plus de 850 kcal.
-  // Les macros du repas suivent la même proportion.
-  var REPAS_MIN = 550, REPAS_MAX = 850;
-  var kcalRepas = Math.min(REPAS_MAX, Math.max(REPAS_MIN, palier.kcal));
-  if (kcalRepas !== palier.kcal) {
-    var f = kcalRepas / palier.kcal;
-    palier = { n: palier.n, min: palier.min, kcal: kcalRepas,
-      prot: Math.round(palier.prot * f), lip: Math.round(palier.lip * f), gluc: Math.round(palier.gluc * f) };
-  }
+  // Repas Chef2Box : entre 550 et 800 kcal quel que soit le résultat.
+  // Au-dessus -> palier 3 (800 kcal), en dessous -> palier 5 (550 kcal).
+  if (palier.kcal > 800) palier = C2B_PALIERS.find(function(p){ return p.n === 3; });
+  if (palier.kcal < 550) palier = C2B_PALIERS.find(function(p){ return p.n === 5; });
 
   var deuxRepas = (repartition && repartition.indexOf('+') !== -1) || nbRepas >= 2;
   var repasKcal  = palier.kcal;

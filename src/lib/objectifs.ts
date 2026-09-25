@@ -125,7 +125,10 @@ export function calculerObjectifs(p: Profil) {
   const glucides = Math.max(50, Math.round((kcal - proteines * 4 - lipides * 9) / 4));
   kcal = proteines * 4 + glucides * 4 + lipides * 9;
 
-  const palier = C2B_PALIERS.find((x) => kcal >= x.min) ?? C2B_PALIERS[C2B_PALIERS.length - 1];
+  let palier: (typeof C2B_PALIERS)[number] = C2B_PALIERS.find((x) => kcal >= x.min) ?? C2B_PALIERS[C2B_PALIERS.length - 1];
+  // Repas entre 550 et 800 kcal quel que soit le résultat : P3 au plus haut, P5 au plus bas.
+  if (palier.kcal > REPAS_KCAL.max) palier = C2B_PALIERS[2];
+  if (palier.kcal < REPAS_KCAL.min) palier = C2B_PALIERS[4];
 
   return { calories: kcal, proteines, glucides, lipides, palier: `P${palier.n}` as (typeof PALIERS)[number] };
 }
@@ -138,8 +141,8 @@ export const LIMITES = {
   poids: { min: 35, max: 250 },
 } as const;
 
-// Un repas Chef2Box : jamais moins de 550 kcal ni plus de 850 kcal.
-export const REPAS_KCAL = { min: 550, max: 850 } as const;
+// Un repas Chef2Box : entre 550 et 800 kcal (paliers P3 à P5).
+export const REPAS_KCAL = { min: 550, max: 800 } as const;
 
 export function horsLimites(p: Partial<Profil>): string[] {
   const erreurs: string[] = [];
