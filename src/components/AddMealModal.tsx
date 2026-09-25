@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
@@ -10,9 +10,9 @@ import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { Aliment, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
-type Etape = "choix" | "mon_plat" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
+type Etape = "choix" | "mon_plat" | "favori_repas" | "favori_edition" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
 
 type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
 
@@ -112,6 +112,21 @@ export function AddMealModal({
   const [ajoutes, setAjoutes] = useState<{ nom: string; kcal: number }[]>([]);
   // « Mon plat Chef2Box » : macros recopiées de l'étiquette de la box.
   const [messageMonPlat, setMessageMonPlat] = useState("");
+  // Favoris : liste locale (modifiable), repas complet choisi, favori en cours d'édition.
+  const [listeFavoris, setListeFavoris] = useState(favoris);
+  const [gererFavoris, setGererFavoris] = useState(false);
+  const [favoriRepas, setFavoriRepas] = useState<{ favori: Favori; choix: { coche: boolean; valeur: string }[] } | null>(
+    null
+  );
+  const [favoriEdite, setFavoriEdite] = useState<{
+    favori: Favori;
+    nom: string;
+    calories: string;
+    proteines: string;
+    glucides: string;
+    lipides: string;
+    quantite: string;
+  } | null>(null);
   const [monPlat, setMonPlat] = useState({ nom: "", calories: "", proteines: "", glucides: "", lipides: "" });
   const [origine, setOrigine] = useState<Etape>("choix");
 
@@ -226,6 +241,106 @@ export function AddMealModal({
   const [proteinesLibre, setProteinesLibre] = useState("");
   const [glucidesLibre, setGlucidesLibre] = useState("");
   const [lipidesLibre, setLipidesLibre] = useState("");
+
+  const lireNombre = (t: string) => {
+    const n = parseFloat(t.replace(",", "."));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+  // Quantité affichée : grammes pour les aliments au poids, portions sinon.
+  const versAffichage = (e: ElementRepas) =>
+    String(e.unite === "g" ? Math.round(e.quantite * 100) : Math.round(e.quantite * 100) / 100).replace(".", ",");
+  const depuisAffichage = (e: ElementRepas, t: string) => (e.unite === "g" ? lireNombre(t) / 100 : lireNombre(t));
+
+  function choisirFavori(f: Favori) {
+    if (f.elements?.length) {
+      setFavoriRepas({ favori: f, choix: f.elements.map((e) => ({ coche: true, valeur: versAffichage(e) })) });
+      setEtape("favori_repas");
+    } else {
+      choisirMemorise(f);
+    }
+  }
+
+  async function ajouterFavoriRepas() {
+    if (!favoriRepas?.favori.elements) return;
+    const lignes = favoriRepas.favori.elements
+      .map((e, i) => ({ e, c: favoriRepas.choix[i] }))
+      .filter(({ e, c }) => c.coche && depuisAffichage(e, c.valeur) > 0)
+      .map(({ e, c }) => ({
+        client_id: clientId,
+        date,
+        repas_type: repasType,
+        source: e.source,
+        nom: e.nom,
+        quantite: depuisAffichage(e, c.valeur),
+        unite: e.unite,
+        calories: e.calories,
+        proteines: e.proteines,
+        glucides: e.glucides,
+        lipides: e.lipides,
+        plat_id: e.plat_id,
+        cree_par: "client",
+      }));
+    if (!lignes.length) return;
+    setEnregistrement(true);
+    const { error } = await supabase.from("application_repas_journal").insert(lignes);
+    setEnregistrement(false);
+    if (error) {
+      setMessageErreur("Erreur lors de l'enregistrement, réessayez.");
+      setEtape("erreur");
+      return;
+    }
+    onAjoute();
+    onClose();
+  }
+
+  function editerFavori(f: Favori) {
+    setFavoriEdite({
+      favori: f,
+      nom: f.nom,
+      calories: String(Math.round(Number(f.calories))),
+      proteines: String(Number(f.proteines)),
+      glucides: String(Number(f.glucides)),
+      lipides: String(Number(f.lipides)),
+      quantite: f.unite === "g" ? String(Math.round(Number(f.quantite) * 100)) : String(Number(f.quantite)),
+    });
+    setEtape("favori_edition");
+  }
+
+  async function enregistrerFavoriEdite() {
+    if (!favoriEdite) return;
+    const f = favoriEdite.favori;
+    const composite = !!f.elements?.length;
+    const maj = composite
+      ? { nom: favoriEdite.nom.trim() || f.nom }
+      : {
+          nom: favoriEdite.nom.trim() || f.nom,
+          calories: Math.round(lireNombre(favoriEdite.calories)),
+          proteines: lireNombre(favoriEdite.proteines),
+          glucides: lireNombre(favoriEdite.glucides),
+          lipides: lireNombre(favoriEdite.lipides),
+          quantite: Math.max(0.01, f.unite === "g" ? lireNombre(favoriEdite.quantite) / 100 : lireNombre(favoriEdite.quantite)),
+        };
+    setEnregistrement(true);
+    const { data, error } = await supabase.from("application_favoris").update(maj).eq("id", f.id).select("*").single<Favori>();
+    setEnregistrement(false);
+    if (error || !data) {
+      setMessageErreur(/duplicate|unique/i.test(error?.message ?? "") ? "Un favori porte déjà ce nom." : "Enregistrement impossible, réessayez.");
+      setEtape("erreur");
+      return;
+    }
+    setListeFavoris((l) => l.map((x) => (x.id === data.id ? data : x)));
+    setFavoriEdite(null);
+    setEtape("manuel");
+    onAjoute();
+  }
+
+  async function supprimerFavori(f: Favori) {
+    const { error } = await supabase.from("application_favoris").delete().eq("id", f.id);
+    if (!error) {
+      setListeFavoris((l) => l.filter((x) => x.id !== f.id));
+      onAjoute();
+    }
+  }
 
   function ouvrirMonPlat() {
     if (repasType !== "dejeuner" && repasType !== "diner") setRepasType(new Date().getHours() < 16 ? "dejeuner" : "diner");
@@ -590,6 +705,33 @@ export function AddMealModal({
                   <p className="text-xs text-c2b-muted">Recherche, favoris et aliments récents</p>
                 </div>
               </button>
+
+              {listeFavoris.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <p className="lbl flex items-center gap-1.5">
+                    <Star size={12} fill="currentColor" /> Vos favoris
+                  </p>
+                  <div className="carte overflow-hidden divide-y divide-black/5">
+                    {listeFavoris.slice(0, 5).map((f) => (
+                      <LigneMemorisee
+                        key={f.id}
+                        nom={f.nom}
+                        detail={
+                          f.elements?.length
+                            ? `${f.elements.length} aliments · ${Math.round(Number(f.calories))} kcal`
+                            : `${Math.round(Number(f.calories) * Number(f.quantite))} kcal`
+                        }
+                        onClick={() => choisirFavori(f)}
+                      />
+                    ))}
+                  </div>
+                  {listeFavoris.length > 5 && (
+                    <button onClick={() => setEtape("manuel")} className="w-full py-1 text-sm font-semibold text-c2b-green">
+                      Tous les favoris →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -642,6 +784,153 @@ export function AddMealModal({
                 {enregistrement ? "Ajout..." : "Ajouter à ma journée"}
               </button>
               <button onClick={() => setEtape("choix")} className="w-full text-sm font-semibold text-c2b-muted">
+                ← Retour
+              </button>
+            </div>
+          )}
+
+          {etape === "favori_repas" && favoriRepas?.favori.elements && (
+            <div className="space-y-4">
+              <div>
+                <p className="lbl mb-1">Repas favori</p>
+                <p className="font-serif text-2xl text-c2b-green">{favoriRepas.favori.nom}</p>
+                <p className="text-xs text-c2b-muted mt-1">Décochez ou changez les quantités si besoin.</p>
+              </div>
+              <ul className="carte overflow-hidden divide-y divide-black/5">
+                {favoriRepas.favori.elements.map((e, i) => {
+                  const c = favoriRepas.choix[i];
+                  const q = depuisAffichage(e, c.valeur);
+                  return (
+                    <li key={i} className={`flex items-center gap-3 px-4 py-2.5 ${c.coche ? "" : "opacity-45"}`}>
+                      <input
+                        type="checkbox"
+                        checked={c.coche}
+                        onChange={() => {
+                          const choix = [...favoriRepas.choix];
+                          choix[i] = { ...c, coche: !c.coche };
+                          setFavoriRepas({ ...favoriRepas, choix });
+                        }}
+                        className="h-5 w-5 accent-c2b-green flex-shrink-0"
+                        aria-label={e.nom}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-c2b-green truncate">{e.nom}</p>
+                        <p className="text-[11px] text-c2b-muted">{Math.round(e.calories * q)} kcal</p>
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={c.valeur}
+                        onFocus={(ev) => ev.target.select()}
+                        onChange={(ev) => {
+                          const choix = [...favoriRepas.choix];
+                          choix[i] = { ...c, valeur: ev.target.value.replace(/[^0-9.,]/g, "") };
+                          setFavoriRepas({ ...favoriRepas, choix });
+                        }}
+                        className="champ w-[72px] px-2.5 py-2 text-right text-sm"
+                        aria-label={`Quantité de ${e.nom}`}
+                      />
+                      <span className="w-8 text-[11px] text-c2b-muted flex-shrink-0">{e.unite === "g" ? "g" : "port."}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="grid grid-cols-2 gap-2">
+                {ORDRE_REPAS.map((r) => (
+                  <Pastille key={r} active={repasType === r} onClick={() => setRepasType(r)} large>
+                    {REPAS_TYPE_LABELS[r]}
+                  </Pastille>
+                ))}
+              </div>
+              {(() => {
+                const choisis = favoriRepas.favori.elements
+                  .map((e, i) => ({ e, c: favoriRepas.choix[i] }))
+                  .filter(({ c }) => c.coche);
+                const kcal = choisis.reduce((t, { e, c }) => t + e.calories * depuisAffichage(e, c.valeur), 0);
+                return (
+                  <button
+                    onClick={ajouterFavoriRepas}
+                    disabled={enregistrement || choisis.length === 0}
+                    className="btn-primary w-full py-4"
+                  >
+                    {enregistrement
+                      ? "Ajout..."
+                      : `Ajouter ${choisis.length} aliment${choisis.length > 1 ? "s" : ""} · ${Math.round(kcal)} kcal`}
+                  </button>
+                );
+              })()}
+              <button onClick={() => setEtape(origine)} className="w-full text-sm font-semibold text-c2b-muted">
+                ← Retour
+              </button>
+            </div>
+          )}
+
+          {etape === "favori_edition" && favoriEdite && (
+            <div className="space-y-4">
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du favori</span>
+                <input
+                  value={favoriEdite.nom}
+                  onChange={(e) => setFavoriEdite({ ...favoriEdite, nom: e.target.value })}
+                  className="champ font-semibold"
+                />
+              </label>
+              {favoriEdite.favori.elements?.length ? (
+                <p className="text-xs text-c2b-muted">
+                  Repas de {favoriEdite.favori.elements.length} aliments : les quantités se règlent au moment de l&apos;ajouter.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {(
+                      [
+                        ["calories", "Calories (kcal)"],
+                        ["proteines", "Protéines (g)"],
+                        ["glucides", "Glucides (g)"],
+                        ["lipides", "Lipides (g)"],
+                      ] as const
+                    ).map(([cle, label]) => (
+                      <label key={cle} className="block">
+                        <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
+                          {label}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={favoriEdite[cle]}
+                          onChange={(e) => setFavoriEdite({ ...favoriEdite, [cle]: e.target.value.replace(/[^0-9.,]/g, "") })}
+                          className="champ"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-c2b-muted -mt-2">
+                    Valeurs {favoriEdite.favori.unite === "g" ? "pour 100 g" : "pour 1 portion"}.
+                  </p>
+                  <label className="block">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
+                      Quantité habituelle ({favoriEdite.favori.unite === "g" ? "grammes" : "portions"})
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={favoriEdite.quantite}
+                      onChange={(e) => setFavoriEdite({ ...favoriEdite, quantite: e.target.value.replace(/[^0-9.,]/g, "") })}
+                      className="champ"
+                    />
+                  </label>
+                </>
+              )}
+              <button onClick={enregistrerFavoriEdite} disabled={enregistrement} className="btn-primary w-full py-4">
+                {enregistrement ? "Enregistrement..." : "Enregistrer le favori"}
+              </button>
+              <button
+                onClick={() => {
+                  setFavoriEdite(null);
+                  setEtape("manuel");
+                }}
+                className="w-full text-sm font-semibold text-c2b-muted"
+              >
                 ← Retour
               </button>
             </div>
@@ -701,22 +990,48 @@ export function AddMealModal({
                 </p>
               )}
 
-              {!rechercheActive && favoris.length > 0 && (
+              {!rechercheActive && listeFavoris.length > 0 && (
                 <div className="space-y-2">
-                  <p className="lbl flex items-center gap-1.5">
-                    <Star size={12} fill="currentColor" /> Favoris
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="lbl flex items-center gap-1.5">
+                      <Star size={12} fill="currentColor" /> Favoris
+                    </p>
+                    <button
+                      onClick={() => setGererFavoris(!gererFavoris)}
+                      className="text-xs font-bold text-c2b-green/70 hover:text-c2b-green"
+                    >
+                      {gererFavoris ? "Terminé" : "Gérer"}
+                    </button>
+                  </div>
                   <div className="carte overflow-hidden divide-y divide-black/5">
-                    {favoris.map((f) => (
-                      <LigneMemorisee
-                        key={f.id}
-                        nom={f.nom}
-                        detail={`${libelleQuantiteMemo(f.unite, Number(f.quantite))} · ${Math.round(
-                          Number(f.calories) * Number(f.quantite)
-                        )} kcal`}
-                        onClick={() => choisirMemorise(f)}
-                      />
-                    ))}
+                    {listeFavoris.map((f) => {
+                      const detail = f.elements?.length
+                        ? `${f.elements.length} aliments · ${Math.round(Number(f.calories))} kcal`
+                        : `${libelleQuantiteMemo(f.unite, Number(f.quantite))} · ${Math.round(
+                            Number(f.calories) * Number(f.quantite)
+                          )} kcal`;
+                      return gererFavoris ? (
+                        <div key={f.id} className="flex items-center gap-2 px-4 py-2.5">
+                          <span className="flex-1 min-w-0 text-sm font-medium text-c2b-green truncate">{f.nom}</span>
+                          <button
+                            onClick={() => editerFavori(f)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-cream"
+                            aria-label={`Modifier ${f.nom}`}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() => supprimerFavori(f)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-red-600/80 hover:bg-red-50"
+                            aria-label={`Supprimer ${f.nom}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <LigneMemorisee key={f.id} nom={f.nom} detail={detail} onClick={() => choisirFavori(f)} />
+                      );
+                    })}
                   </div>
                 </div>
               )}

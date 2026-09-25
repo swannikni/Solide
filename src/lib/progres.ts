@@ -106,3 +106,36 @@ export function calculerBadges({
     b("but", "🏆", "Objectif atteint", "Poids objectif atteint", objectifAtteint ? 1 : 0, 1, ""),
   ];
 }
+
+// Semaine passée (lundi → dimanche) à résumer, montrée du lundi au mercredi.
+export function semaineAResumer(aujourdhui: string): { lundi: string; dimanche: string } | null {
+  const rang = (new Date(`${aujourdhui}T12:00:00Z`).getUTCDay() + 6) % 7; // 0 = lundi
+  if (rang > 2) return null;
+  const lundiCourant = decalerDate(aujourdhui, -rang);
+  return { lundi: decalerDate(lundiCourant, -7), dimanche: decalerDate(lundiCourant, -1) };
+}
+
+export function bilanSemaine(
+  semaine: { lundi: string; dimanche: string },
+  jours: Map<string, Journee>,
+  pesees: { date: string; poids_kg: number }[],
+  objectifCalories: number,
+  objectifProteines: number
+) {
+  const dates = Array.from({ length: 7 }, (_, i) => decalerDate(semaine.lundi, i));
+  const notes = dates.map((d) => jours.get(d)).filter((j): j is Journee => !!j);
+  // Poids : dernière pesée avant la semaine (sinon la première de la semaine) → dernière de la semaine.
+  const avant = pesees.filter((p) => p.date < semaine.lundi).at(-1);
+  const pendant = pesees.filter((p) => p.date >= semaine.lundi && p.date <= semaine.dimanche);
+  const debut = avant ?? pendant[0];
+  const fin = pendant.at(-1);
+  return {
+    ...semaine,
+    joursNotes: notes.length,
+    joursObjectif: notes.filter((j) => dansObjectifCalories(j, objectifCalories)).length,
+    joursProteines: notes.filter((j) => proteinesAtteintes(j, objectifProteines)).length,
+    moyenneKcal: notes.length ? Math.round(notes.reduce((t, j) => t + j.calories, 0) / notes.length) : null,
+    variationPoids:
+      debut && fin && debut.date !== fin.date ? Math.round((fin.poids_kg - debut.poids_kg) * 10) / 10 : null,
+  };
+}

@@ -352,6 +352,11 @@ create policy "assistant_self_delete" on public.application_assistant_messages
 alter table public.application_favoris enable row level security;
 alter table public.application_poids enable row level security;
 
+-- Favori « repas complet » : la liste des aliments (nom, macros, unité, quantité...).
+-- Les colonnes calories/proteines/... gardent alors le total, pour l'affichage.
+alter table public.application_favoris add column if not exists elements jsonb
+  check (elements is null or (jsonb_typeof(elements) = 'array' and jsonb_array_length(elements) between 1 and 30));
+
 drop policy if exists "favoris_self" on public.application_favoris;
 create policy "favoris_self" on public.application_favoris
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
@@ -521,6 +526,51 @@ $$;
 
 revoke execute on function public.application_definir_poids_objectif(numeric) from public, anon;
 grant execute on function public.application_definir_poids_objectif(numeric) to authenticated;
+
+-- ============ NOTIFICATIONS (rappel du soir, bilan du lundi) ============
+-- Abonnements push des téléphones (un par appareil).
+create table if not exists public.application_push_abonnements (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists application_push_abonnements_client_idx on public.application_push_abonnements (client_id);
+alter table public.application_push_abonnements enable row level security;
+drop policy if exists "push_self" on public.application_push_abonnements;
+create policy "push_self" on public.application_push_abonnements
+  for all to authenticated
+  using (client_id = auth.uid())
+  with check (client_id = auth.uid());
+
+-- Secrets du coffre (clés VAPID « vapid_prive » / « vapid_public », secret
+-- « rappel_cron_secret »), lisibles seulement par la fonction d'envoi.
+-- Création (une fois, valeurs jamais versionnées) :
+--   select vault.create_secret('<valeur>', 'vapid_prive', '...');
+create or replace function public.application_secret(p_nom text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select decrypted_secret from vault.decrypted_secrets where name = p_nom;
+$$;
+revoke execute on function public.application_secret(text) from public, anon, authenticated;
+grant execute on function public.application_secret(text) to service_role;
+
+-- Envois planifiés vers la fonction supabase/functions/rappels (heures UTC :
+-- 19 h = 20 h à Casablanca ; lundi 8 h = 9 h).
+create extension if not exists pg_net with schema extensions;
+create extension if not exists pg_cron;
+-- select cron.schedule('chef2box-rappel-soir', '0 19 * * *', $$ select net.http_post(
+--   url := 'https://gsptgfzgkefgmequnhzk.supabase.co/functions/v1/rappels',
+--   headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret',
+--     (select decrypted_secret from vault.decrypted_secrets where name = 'rappel_cron_secret')),
+--   body := '{"type":"soir"}'::jsonb, timeout_milliseconds := 30000); $$);
+-- select cron.schedule('chef2box-bilan-lundi', '0 8 * * 1', ... body := '{"type":"bilan"}' ...);
 
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.

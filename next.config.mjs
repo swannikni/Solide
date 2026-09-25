@@ -31,7 +31,11 @@ const nextConfig = {
     unoptimized: true,
   },
   async headers() {
-    return [{ source: "/:path*", headers: ENTETES_SECURITE }];
+    return [
+      { source: "/:path*", headers: ENTETES_SECURITE },
+      // Le service worker doit toujours être relu pour prendre les mises à jour.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+    ];
   },
 };
 

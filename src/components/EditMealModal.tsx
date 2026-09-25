@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { X, Trash2, Star } from "lucide-react";
+import { X, Trash2, Star, Copy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Pastille } from "@/components/Pastille";
 import { GRAMMES_RAPIDES } from "@/components/AddMealModal";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { RepasJournal, RepasType } from "@/lib/types";
 
-// Modifier un aliment déjà ajouté : quantité, repas, nom, ou le supprimer.
+// Modifier un aliment déjà ajouté : quantité, repas, nom, valeurs nutritionnelles ;
+// le dupliquer ou le supprimer.
 export function EditMealModal({
   repas,
   estFavori,
@@ -31,14 +32,55 @@ export function EditMealModal({
   const [favori, setFavori] = useState(estFavori);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState("");
+  // Valeurs pour 100 g ou pour 1 portion, modifiables.
+  const [macros, setMacros] = useState({
+    calories: String(Math.round(Number(repas.calories))),
+    proteines: String(Number(repas.proteines)),
+    glucides: String(Number(repas.glucides)),
+    lipides: String(Number(repas.lipides)),
+  });
 
   const facteur = enGrammes ? valeur / 100 : valeur;
+  const lire = (t: string) => {
+    const n = parseFloat(t.replace(",", "."));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+  const valeurs = {
+    calories: Math.round(lire(macros.calories)),
+    proteines: lire(macros.proteines),
+    glucides: lire(macros.glucides),
+    lipides: lire(macros.lipides),
+  };
+
+  // Même aliment ajouté une deuxième fois, avec les réglages affichés.
+  async function dupliquer() {
+    setEnCours(true);
+    const { error } = await supabase.from("application_repas_journal").insert({
+      client_id: repas.client_id,
+      date: repas.date,
+      repas_type: repasType,
+      source: repas.source,
+      nom: nom.trim() || repas.nom,
+      quantite: facteur,
+      unite: repas.unite,
+      ...valeurs,
+      plat_id: repas.plat_id,
+      cree_par: "client",
+    });
+    setEnCours(false);
+    if (error) {
+      setErreur("Copie impossible, réessayez.");
+      return;
+    }
+    onModifie();
+    onClose();
+  }
 
   async function enregistrer() {
     setEnCours(true);
     const { error } = await supabase
       .from("application_repas_journal")
-      .update({ nom: nom.trim() || repas.nom, repas_type: repasType, quantite: facteur })
+      .update({ nom: nom.trim() || repas.nom, repas_type: repasType, quantite: facteur, ...valeurs })
       .eq("id", repas.id);
     setEnCours(false);
     if (error) {
@@ -71,10 +113,7 @@ export function EditMealModal({
         {
           client_id: repas.client_id,
           nom: nomFavori,
-          calories: repas.calories,
-          proteines: repas.proteines,
-          glucides: repas.glucides,
-          lipides: repas.lipides,
+          ...valeurs,
           unite: enGrammes ? "g" : "portion",
           quantite: facteur > 0 ? facteur : 1,
           source: repas.source,
@@ -114,10 +153,35 @@ export function EditMealModal({
                 <Star size={20} fill={favori ? "currentColor" : "none"} />
               </button>
             </div>
-            <p className="text-xs text-c2b-muted mt-1.5">
-              {Math.round(repas.calories)} kcal · {repas.proteines}g P · {repas.glucides}g G · {repas.lipides}g L
-              {enGrammes ? " pour 100 g" : " par portion"}
-            </p>
+            <details className="mt-1.5 group">
+              <summary className="cursor-pointer list-none text-xs text-c2b-muted">
+                {valeurs.calories} kcal · {valeurs.proteines}g P · {valeurs.glucides}g G · {valeurs.lipides}g L
+                {enGrammes ? " pour 100 g" : " par portion"} ·{" "}
+                <span className="font-semibold text-c2b-gold group-open:hidden">Modifier</span>
+              </summary>
+              <div className="grid grid-cols-4 gap-2 mt-2">
+                {(
+                  [
+                    ["calories", "kcal"],
+                    ["proteines", "P (g)"],
+                    ["glucides", "G (g)"],
+                    ["lipides", "L (g)"],
+                  ] as const
+                ).map(([cle, label]) => (
+                  <label key={cle} className="block">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-c2b-muted mb-1">{label}</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={macros[cle]}
+                      onChange={(e) => setMacros({ ...macros, [cle]: e.target.value.replace(/[^0-9.,]/g, "") })}
+                      className="champ px-2.5"
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-c2b-muted mt-1">Valeurs {enGrammes ? "pour 100 g" : "pour 1 portion"}.</p>
+            </details>
           </div>
 
           <div>
@@ -185,8 +249,8 @@ export function EditMealModal({
               </div>
             )}
             <p className="text-sm text-c2b-green mt-2 font-medium">
-              = {Math.round(repas.calories * facteur)} kcal · {Math.round(repas.proteines * facteur)}g P ·{" "}
-              {Math.round(repas.glucides * facteur)}g G · {Math.round(repas.lipides * facteur)}g L
+              = {Math.round(valeurs.calories * facteur)} kcal · {Math.round(valeurs.proteines * facteur)}g P ·{" "}
+              {Math.round(valeurs.glucides * facteur)}g G · {Math.round(valeurs.lipides * facteur)}g L
             </p>
           </div>
 
@@ -194,6 +258,13 @@ export function EditMealModal({
 
           <button onClick={enregistrer} disabled={enCours || facteur <= 0} className="btn-primary w-full py-4">
             {enCours ? "Enregistrement..." : "Enregistrer"}
+          </button>
+          <button
+            onClick={dupliquer}
+            disabled={enCours || facteur <= 0}
+            className="btn-secondary w-full py-3"
+          >
+            <Copy size={16} /> Dupliquer (l&apos;ajouter une 2e fois)
           </button>
           <button
             onClick={supprimer}

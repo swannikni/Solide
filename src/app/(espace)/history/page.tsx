@@ -4,6 +4,7 @@ import { totauxDuJour } from "@/lib/macros";
 import type { Client, Poids, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
 import { Motivation } from "@/components/Motivation";
+import { RappelSoir } from "@/components/RappelSoir";
 import { calculerBadges, meilleureSerie, serieActuelle, totauxParJour } from "@/lib/progres";
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
@@ -113,6 +114,8 @@ export default async function HistoryPage() {
           objectifProteines={client.objectif_proteines}
           badges={badges}
         />
+
+        <RappelSoir clientId={client.id} />
 
         <Progres
           clientId={client.id}

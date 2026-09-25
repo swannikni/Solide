@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Plus, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CalorieRing } from "@/components/CalorieRing";
 import { MacroBar } from "@/components/MacroBar";
@@ -11,6 +11,8 @@ import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
 import { EditMealModal } from "@/components/EditMealModal";
 import { InstallerAppli } from "@/components/InstallerAppli";
+import { RappelSoir } from "@/components/RappelSoir";
+import { BilanSemaine, type StatsSemaine } from "@/components/BilanSemaine";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { Client, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
@@ -28,6 +30,7 @@ export function DashboardClient({
   favoris,
   recents,
   serie,
+  statsSemaine,
   platScanne,
   codePlatInconnu,
 }: {
@@ -39,6 +42,7 @@ export function DashboardClient({
   favoris: Favori[];
   recents: RepasJournal[];
   serie: number;
+  statsSemaine: StatsSemaine | null;
   platScanne: Plat | null;
   codePlatInconnu: string | null;
 }) {
@@ -50,6 +54,9 @@ export function DashboardClient({
   const [copieEnCours, setCopieEnCours] = useState<RepasType | null>(null);
   const [platPrerempli, setPlatPrerempli] = useState<Plat | null>(null);
   const [alerteQr, setAlerteQr] = useState<string | null>(null);
+  // Enregistrer un repas complet en favori : section concernée et nom choisi.
+  const [favoriRepas, setFavoriRepas] = useState<{ type: RepasType; nom: string } | null>(null);
+  const [messageFavori, setMessageFavori] = useState<{ type: RepasType; texte: string } | null>(null);
 
   // QR d'étiquette scanné avec l'appareil photo : on ouvre l'ajout pré-rempli,
   // puis on nettoie l'adresse pour ne pas le rouvrir à chaque rafraîchissement.
@@ -107,6 +114,47 @@ export function DashboardClient({
 
   const veille = decalerDate(date, -1);
 
+  async function enregistrerRepasFavori() {
+    if (!favoriRepas) return;
+    const elements = repasDuJour
+      .filter((r) => r.repas_type === favoriRepas.type)
+      .map((r) => ({
+        nom: r.nom,
+        calories: Number(r.calories),
+        proteines: Number(r.proteines),
+        glucides: Number(r.glucides),
+        lipides: Number(r.lipides),
+        unite: r.unite === "g" ? "g" : "portion",
+        quantite: Number(r.quantite),
+        source: r.source,
+        plat_id: r.plat_id,
+      }));
+    const total = (cle: "calories" | "proteines" | "glucides" | "lipides") =>
+      Math.round(elements.reduce((t, e) => t + e[cle] * e.quantite, 0) * 10) / 10;
+    const nom = favoriRepas.nom.trim() || REPAS_TYPE_LABELS[favoriRepas.type];
+    const { error } = await supabase.from("application_favoris").upsert(
+      {
+        client_id: client.id,
+        nom,
+        calories: total("calories"),
+        proteines: total("proteines"),
+        glucides: total("glucides"),
+        lipides: total("lipides"),
+        unite: "portion",
+        quantite: 1,
+        source: "manuel",
+        elements,
+      },
+      { onConflict: "client_id,nom" }
+    );
+    setMessageFavori({
+      type: favoriRepas.type,
+      texte: error ? "Enregistrement impossible, réessayez." : `⭐ « ${nom} » ajouté à vos favoris`,
+    });
+    setFavoriRepas(null);
+    if (!error) rafraichir();
+  }
+
   return (
     <main className="max-w-2xl mx-auto px-4 pt-7 pb-20 space-y-6">
       <header>
@@ -158,7 +206,9 @@ export function DashboardClient({
         )}
       </header>
 
+      {statsSemaine && statsSemaine.joursNotes > 0 && <BilanSemaine stats={statsSemaine} />}
       {estAujourdhui && <InstallerAppli />}
+      {estAujourdhui && <RappelSoir clientId={client.id} compact />}
 
       {alerteQr && (
         <button
@@ -225,6 +275,35 @@ export function DashboardClient({
                 {repasSection.map((r) => (
                   <MealCard key={r.id} repas={r} onModifier={setRepasEnEdition} />
                 ))}
+                {favoriRepas?.type === type ? (
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={favoriRepas.nom}
+                      onChange={(e) => setFavoriRepas({ type, nom: e.target.value })}
+                      placeholder="Nom du repas favori"
+                      className="champ py-2.5 text-sm"
+                    />
+                    <button onClick={enregistrerRepasFavori} className="btn-primary px-4 text-sm flex-shrink-0">
+                      OK
+                    </button>
+                    <button onClick={() => setFavoriRepas(null)} className="text-sm text-c2b-muted px-1 flex-shrink-0">
+                      Annuler
+                    </button>
+                  </div>
+                ) : messageFavori?.type === type ? (
+                  <p className="text-[13px] font-semibold text-c2b-green px-1">{messageFavori.texte}</p>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setMessageFavori(null);
+                      setFavoriRepas({ type, nom: `${type === "collation" ? "Ma" : "Mon"} ${REPAS_TYPE_LABELS[type].toLowerCase()}` });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-1 text-[13px] font-semibold text-c2b-muted hover:text-c2b-green"
+                  >
+                    <Star size={14} /> Enregistrer ce repas en favori
+                  </button>
+                )}
               </div>
             )}
           </section>

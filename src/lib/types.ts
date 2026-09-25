@@ -83,7 +83,21 @@ export interface Favori {
   quantite: number;
   source: SourceRepas;
   plat_id: string | null;
+  // Repas complet enregistré en favori (sinon null : un seul aliment).
+  elements?: ElementRepas[] | null;
   created_at: string;
+}
+
+export interface ElementRepas {
+  nom: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  unite: "g" | "portion";
+  quantite: number;
+  source: SourceRepas;
+  plat_id: string | null;
 }
 
 export interface Poids {

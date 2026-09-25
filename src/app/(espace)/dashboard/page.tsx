@@ -4,7 +4,7 @@ import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
 import type { Client, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
-import { serieActuelle } from "@/lib/progres";
+import { bilanSemaine, semaineAResumer, serieActuelle, totauxParJour } from "@/lib/progres";
 
 export default async function DashboardPage(props: { searchParams: Promise<{ date?: string; plat?: string }> }) {
   const searchParams = await props.searchParams;
@@ -17,7 +17,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: datesRecentes }] =
+  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }] =
     await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
@@ -47,13 +47,21 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       .order("created_at", { ascending: false })
       .limit(80)
       .returns<RepasJournal[]>(),
+    // 90 jours de journal (colonnes minimales) : série et bilan de la semaine.
     supabase
       .from("application_repas_journal")
-      .select("date")
+      .select("date, calories, proteines, quantite")
       .eq("client_id", user.id)
       .gte("date", decalerDate(aujourdhui, -90))
       .order("date", { ascending: false })
-      .returns<{ date: string }[]>(),
+      .returns<{ date: string; calories: number; proteines: number; quantite: number }[]>(),
+    supabase
+      .from("application_poids")
+      .select("date, poids_kg")
+      .eq("client_id", user.id)
+      .gte("date", decalerDate(aujourdhui, -45))
+      .order("date", { ascending: true })
+      .returns<{ date: string; poids_kg: number }[]>(),
   ]);
 
   // Récents : derniers aliments distincts (par nom), hors box Chef2Box du jour.
@@ -68,6 +76,18 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   }
 
   if (!client) redirect("/login");
+
+  const jours = totauxParJour(journalRecent ?? []);
+  const semaine = date === aujourdhui ? semaineAResumer(aujourdhui) : null;
+  const statsSemaine = semaine
+    ? bilanSemaine(
+        semaine,
+        jours,
+        (pesees ?? []).map((p) => ({ date: p.date, poids_kg: Number(p.poids_kg) })),
+        client.objectif_calories,
+        client.objectif_proteines
+      )
+    : null;
 
   // Arrivée par le QR d'une étiquette (/p/<code>).
   const codePlat = searchParams.plat?.slice(0, 64);
@@ -86,7 +106,8 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}
         recents={recents}
-        serie={serieActuelle(new Set((datesRecentes ?? []).map((r) => r.date)), aujourdhui)}
+        serie={serieActuelle(new Set(jours.keys()), aujourdhui)}
+        statsSemaine={statsSemaine}
         platScanne={platScanne}
         codePlatInconnu={codePlat && !platScanne ? codePlat : null}
       />
