@@ -119,21 +119,21 @@ export function Scanner({
   return (
     <div className="space-y-3">
       {!cameraIndisponible ? (
-        <div id={idVideo} className="rounded-xl overflow-hidden bg-black min-h-[200px]" />
+        <div id={idVideo} className="rounded-[20px] overflow-hidden bg-black min-h-[200px]" />
       ) : (
-        <p className="text-xs text-center text-c2b-green/70 bg-white rounded-lg p-3">
+        <p className="carte text-xs text-center text-c2b-muted p-4">
           Caméra en direct indisponible. Utilisez la photo ci-dessous.
         </p>
       )}
       <div id={idPhoto} className="hidden" />
 
-      <p className="text-xs text-center text-c2b-green/60">
+      <p className="text-xs text-center text-c2b-muted">
         {mode === "code_barres"
           ? "Placez le code-barres à l'horizontale dans le cadre."
           : "Visez le QR code de l'étiquette Chef2Box."}
       </p>
 
-      <label className="flex items-center justify-center gap-2 w-full rounded-lg bg-c2b-green text-c2b-cream py-2.5 text-sm font-medium cursor-pointer">
+      <label className="btn-primary w-full cursor-pointer">
         <Camera size={18} />
         {analysePhoto ? "Analyse de la photo..." : "Ça ne lit pas ? Prendre une photo du code"}
         <input
@@ -155,16 +155,16 @@ export function Scanner({
         className="flex gap-2"
       >
         <div className="relative flex-1">
-          <Keyboard size={16} className="absolute left-3 top-2.5 text-c2b-green/40" />
+          <Keyboard size={16} className="absolute left-3.5 top-3.5 text-c2b-muted/60" />
           <input
             value={saisie}
             onChange={(e) => setSaisie(e.target.value)}
             inputMode={mode === "code_barres" ? "numeric" : "text"}
             placeholder={mode === "code_barres" ? "Ou tapez les chiffres du code" : "Ou tapez le code du plat"}
-            className="w-full rounded-lg border border-c2b-green/20 pl-9 pr-3 py-2 text-sm"
+            className="champ pl-10"
           />
         </div>
-        <button type="submit" className="rounded-lg border border-c2b-green/20 px-3 text-sm text-c2b-green">
+        <button type="submit" className="btn-secondary px-5 py-2">
           OK
         </button>
       </form>
@@ -174,7 +174,7 @@ export function Scanner({
           termineRef.current = true;
           arreterCamera().finally(onClose);
         }}
-        className="w-full rounded-lg border border-c2b-green/20 py-2 text-sm text-c2b-green"
+        className="btn-secondary w-full"
       >
         Annuler
       </button>

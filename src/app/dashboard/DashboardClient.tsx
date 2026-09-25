@@ -48,20 +48,23 @@ export function DashboardClient({
   const idsCommandesAjoutees = new Set(repasDuJour.map((r) => r.commande_id).filter(Boolean));
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
+    <main className="max-w-2xl mx-auto px-4 pt-7 space-y-6">
       <header>
-        <h1 className="font-hand text-3xl text-c2b-green">Bonjour {client.nom.split(" ")[0]}</h1>
-        <p className="text-sm text-c2b-green/60">
+        <span className="lbl mb-2">
           {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-        </p>
+        </span>
+        <h1 className="titre text-[38px]">
+          Bonjour <em className="inline">{client.nom.split(" ")[0]}</em>
+        </h1>
       </header>
 
-      <section className="bg-white rounded-2xl border border-c2b-green/10 p-4">
+      <section className="rounded-[20px] bg-c2b-green p-6 md:p-8">
+        <span className="lbl mb-4">Objectif du jour</span>
         <CalorieRing consommees={totaux.calories} objectif={client.objectif_calories} />
-        <div className="space-y-3 mt-4">
-          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#1c2e1e" />
+        <div className="grid grid-cols-3 gap-2.5 mt-6">
+          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#f7f3ec" />
           <MacroBar label="Glucides" consomme={totaux.glucides} objectif={client.objectif_glucides} couleur="#c9973a" />
-          <MacroBar label="Lipides" consomme={totaux.lipides} objectif={client.objectif_lipides} couleur="#b5482f" />
+          <MacroBar label="Lipides" consomme={totaux.lipides} objectif={client.objectif_lipides} couleur="#9db8a0" />
         </div>
       </section>
 
@@ -79,14 +82,22 @@ export function DashboardClient({
         </section>
       )}
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-c2b-green uppercase tracking-wide">Repas du jour</h2>
-        </div>
+      <section className="space-y-3">
+        <span className="lbl">Repas du jour</span>
         {repasDuJour.length === 0 ? (
-          <p className="text-sm text-c2b-green/50 italic py-4 text-center">
-            Aucun repas ajouté pour l'instant.
-          </p>
+          <div className="carte px-6 py-8 text-center">
+            <p className="font-serif text-xl text-c2b-green mb-1">Rien pour l&apos;instant.</p>
+            <p className="text-sm text-c2b-muted mb-5">Ajoutez votre premier repas de la journée.</p>
+            <button
+              onClick={() => {
+                setPrefillBox(null);
+                setModalOuverte(true);
+              }}
+              className="btn-primary"
+            >
+              <Plus size={18} /> Ajouter un repas
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
             {repasDuJour.map((r) => (
@@ -101,7 +112,7 @@ export function DashboardClient({
           setPrefillBox(null);
           setModalOuverte(true);
         }}
-        className="fixed bottom-20 md:bottom-6 right-4 md:right-8 bg-c2b-gold text-c2b-green rounded-full w-14 h-14 flex items-center justify-center shadow-lg"
+        className="fixed bottom-[92px] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-gold hover:bg-c2b-gold-light text-c2b-green rounded-full w-14 h-14 flex items-center justify-center shadow-[0_8px_24px_rgba(201,151,58,0.45)] transition"
         aria-label="Ajouter un repas"
       >
         <Plus size={26} />

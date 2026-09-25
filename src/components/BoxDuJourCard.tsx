@@ -17,37 +17,31 @@ export function BoxDuJourCard({
   if (!plat) return null;
 
   return (
-    <div className="bg-white rounded-2xl border border-c2b-gold/30 p-4 flex gap-4">
-      <div className="w-20 h-20 rounded-xl bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
+    <div className="carte p-4 flex gap-4 border-c2b-gold/30">
+      <div className="w-20 h-20 rounded-2xl bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
         {plat.photo_url ? (
           <Image src={plat.photo_url} alt={plat.nom} width={80} height={80} className="object-cover w-full h-full" />
         ) : (
-          <Package className="text-c2b-green/40" />
+          <Package className="text-c2b-green/30" />
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs uppercase tracking-wide text-c2b-gold font-medium">
+        <span className="lbl text-[10px] tracking-[2px]">
           Votre box du {commande.repas_type === "dejeuner" ? "déjeuner" : "dîner"}
-        </p>
-        <p className="font-medium text-c2b-green truncate">{plat.nom}</p>
-        <p className="text-xs text-c2b-green/60 mt-0.5">
-          {plat.calories} kcal · {plat.proteines}g prot · {plat.glucides}g gluc · {plat.lipides}g lip
+        </span>
+        <p className="mt-1 font-bold text-c2b-green truncate">{plat.nom}</p>
+        <p className="text-xs text-c2b-muted mt-0.5">
+          {plat.calories} kcal · {plat.proteines}g P · {plat.glucides}g G · {plat.lipides}g L
         </p>
 
         {dejaAjoutee ? (
-          <p className="text-xs text-c2b-green/60 mt-2">✓ Ajoutée à votre journal</p>
+          <p className="text-xs font-semibold text-c2b-gold mt-2.5">✓ Ajoutée à votre journal</p>
         ) : (
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={onAjouterTelQuel}
-              className="text-xs bg-c2b-green text-c2b-cream px-3 py-1.5 rounded-lg font-medium"
-            >
-              J'ai mangé ça
+          <div className="flex gap-2 mt-3">
+            <button onClick={onAjouterTelQuel} className="btn-primary px-4 py-2 text-[13px]">
+              J&apos;ai mangé ça
             </button>
-            <button
-              onClick={onAjuster}
-              className="text-xs border border-c2b-green/20 text-c2b-green px-3 py-1.5 rounded-lg"
-            >
+            <button onClick={onAjuster} className="btn-secondary px-4 py-1.5 text-[13px]">
               Ajuster
             </button>
           </div>

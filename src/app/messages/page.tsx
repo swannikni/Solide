@@ -24,7 +24,7 @@ export default async function MessagesPage() {
       .returns<Client[]>();
 
     return (
-      <div className="min-h-screen pb-24 md:pb-6 md:pt-20">
+      <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
         <Nav estAdmin />
         <AdminMessagesClient clients={clients ?? []} />
       </div>
@@ -39,10 +39,15 @@ export default async function MessagesPage() {
     .returns<Message[]>();
 
   return (
-    <div className="min-h-screen pb-24 md:pb-6 md:pt-20">
+    <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <Nav estAdmin={false} />
       <main className="max-w-2xl mx-auto">
-        <h1 className="font-hand text-3xl text-c2b-green px-4 pt-6">Messages avec Swann</h1>
+        <div className="px-4 pt-6">
+          <span className="lbl mb-2">Messagerie</span>
+          <h1 className="titre text-[34px]">
+            Une question ? <em>Écrivez-nous.</em>
+          </h1>
+        </div>
         <MessagesThread clientId={user.id} expediteurActuel="client" messagesInitiaux={messages ?? []} />
       </main>
     </div>

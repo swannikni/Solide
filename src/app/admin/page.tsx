@@ -27,7 +27,7 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <div className="min-h-screen pb-24 md:pb-6 md:pt-20">
+    <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <Nav estAdmin />
       <AdminClient
         clients={clients ?? []}

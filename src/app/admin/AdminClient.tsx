@@ -54,16 +54,21 @@ export function AdminClient({
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
       <header className="flex items-center justify-between">
-        <h1 className="font-hand text-3xl text-c2b-green">Box du jour — Admin</h1>
+        <div>
+          <span className="lbl mb-2">Espace admin</span>
+          <h1 className="titre text-[34px]">
+            Box <em>du jour</em>
+          </h1>
+        </div>
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border border-c2b-green/20 px-3 py-1.5 text-sm"
+          className="champ w-auto py-2"
         />
       </header>
 
-      <div className="bg-white rounded-2xl border border-c2b-green/10 overflow-hidden">
+      <div className="carte overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-c2b-green text-c2b-cream text-left">
             <tr>
@@ -85,7 +90,7 @@ export function AdminClient({
                         <select
                           value={commande?.plat_id ?? ""}
                           onChange={(e) => assignerPlat(client.id, repasType, e.target.value)}
-                          className="rounded-lg border border-c2b-green/20 px-2 py-1.5 text-xs flex-1"
+                          className="champ py-2 px-3 text-xs flex-1"
                         >
                           <option value="">— Aucun —</option>
                           {plats.map((p) => (
@@ -112,7 +117,7 @@ export function AdminClient({
       <section>
         <button
           onClick={() => setAfficherAjoutPlat((v) => !v)}
-          className="flex items-center gap-1.5 text-sm text-c2b-green font-medium"
+          className="btn-secondary"
         >
           <Plus size={16} /> Ajouter un plat au menu
         </button>
@@ -149,24 +154,24 @@ function FormulaireNouveauPlat({ onCree }: { onCree: () => void }) {
   }
 
   return (
-    <div className="mt-3 bg-white rounded-xl border border-c2b-green/10 p-4 space-y-2">
+    <div className="mt-3 carte p-5 space-y-2.5">
       <input
         value={nom}
         onChange={(e) => setNom(e.target.value)}
         placeholder="Nom du plat"
-        className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
+        className="champ"
       />
       <input
         value={qrCode}
         onChange={(e) => setQrCode(e.target.value)}
         placeholder="Code QR (identifiant unique de l'étiquette)"
-        className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
+        className="champ"
       />
       <div className="grid grid-cols-4 gap-2">
-        <input value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="kcal" type="number" className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm" />
-        <input value={proteines} onChange={(e) => setProteines(e.target.value)} placeholder="P (g)" type="number" className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm" />
-        <input value={glucides} onChange={(e) => setGlucides(e.target.value)} placeholder="G (g)" type="number" className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm" />
-        <input value={lipides} onChange={(e) => setLipides(e.target.value)} placeholder="L (g)" type="number" className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm" />
+        <input value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="kcal" type="number" className="champ px-2.5" />
+        <input value={proteines} onChange={(e) => setProteines(e.target.value)} placeholder="P (g)" type="number" className="champ px-2.5" />
+        <input value={glucides} onChange={(e) => setGlucides(e.target.value)} placeholder="G (g)" type="number" className="champ px-2.5" />
+        <input value={lipides} onChange={(e) => setLipides(e.target.value)} placeholder="L (g)" type="number" className="champ px-2.5" />
       </div>
       <button
         onClick={creer}

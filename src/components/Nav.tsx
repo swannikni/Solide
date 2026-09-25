@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, MessageCircle, History, LogOut, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/Logo";
 
 const LIENS_CLIENT = [
   { href: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
@@ -27,36 +28,58 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
   }
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 md:top-0 md:bottom-auto bg-c2b-green text-c2b-cream z-20">
-      <div className="max-w-2xl mx-auto flex items-center justify-around md:justify-between px-4 py-2 md:py-3">
-        <span className="hidden md:block font-hand text-2xl">
-          Chef<span className="text-c2b-gold">2</span>Box
-        </span>
-        <div className="flex items-center gap-1 md:gap-4">
+    <>
+      <header className="fixed top-0 inset-x-0 z-20 h-[68px] md:h-20 bg-white/95 backdrop-blur-lg border-b border-black/[0.06]">
+        <div className="max-w-3xl mx-auto h-full px-4 md:px-6 flex items-center justify-between">
+          <Link href="/" aria-label="Accueil">
+            <Logo className="h-11 md:h-[52px] w-auto" />
+          </Link>
+          <nav className="hidden md:flex items-center gap-7">
+            {liens.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`text-[13px] font-medium transition ${
+                  pathname === href ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+            <button onClick={deconnexion} className="text-[13px] font-medium text-[#555] hover:text-c2b-green">
+              Déconnexion
+            </button>
+          </nav>
+          <button
+            onClick={deconnexion}
+            className="md:hidden flex items-center gap-1.5 text-xs font-semibold text-c2b-muted"
+            aria-label="Déconnexion"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      </header>
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-stretch justify-around">
           {liens.map(({ href, label, icon: Icon }) => {
             const actif = pathname === href;
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex flex-col md:flex-row items-center gap-0.5 md:gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm transition ${
-                  actif ? "bg-c2b-gold text-c2b-green font-medium" : "text-c2b-cream/80 hover:text-c2b-cream"
+                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
+                  actif ? "text-c2b-green" : "text-c2b-muted"
                 }`}
               >
-                <Icon size={18} />
+                <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
                 <span>{label}</span>
+                <span className={`h-1 w-1 rounded-full ${actif ? "bg-c2b-gold" : "bg-transparent"}`} />
               </Link>
             );
           })}
-          <button
-            onClick={deconnexion}
-            className="flex flex-col md:flex-row items-center gap-0.5 md:gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm text-c2b-cream/70 hover:text-c2b-cream"
-          >
-            <LogOut size={18} />
-            <span className="hidden md:inline">Déconnexion</span>
-          </button>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </>
   );
 }

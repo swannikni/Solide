@@ -285,48 +285,48 @@ export function AddMealModal({
   const facteur = trouve ? (trouve.paGrammes ? grammes / 100 : quantite) : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-30 flex items-end md:items-center justify-center">
-      <div className="bg-c2b-cream w-full md:max-w-md md:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-c2b-green/10 sticky top-0 bg-c2b-cream">
-          <h2 className="font-medium text-c2b-green">Ajouter un repas</h2>
+    <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-end md:items-center justify-center">
+      <div className="bg-c2b-cream w-full md:max-w-md md:rounded-[24px] rounded-t-[24px] max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 sticky top-0 z-10 bg-c2b-cream">
+          <h2 className="titre text-2xl">Ajouter un <em>repas</em></h2>
           <button onClick={onClose} className="text-c2b-green/60">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="p-5">
           {etape === "choix" && (
             <div className="space-y-3">
               <button
                 onClick={() => setEtape("scan_chef2box")}
-                className="w-full flex items-center gap-3 bg-white rounded-xl border border-c2b-gold/40 p-4 text-left"
+                className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
               >
                 <QrCode className="text-c2b-gold" />
                 <div>
-                  <p className="font-medium text-c2b-green">Scanner une étiquette Chef2Box</p>
-                  <p className="text-xs text-c2b-green/60">Macros exactes, ajout instantané</p>
+                  <p className="font-bold text-c2b-green">Scanner une étiquette Chef2Box</p>
+                  <p className="text-xs text-c2b-muted">Macros exactes, ajout instantané</p>
                 </div>
               </button>
 
               <button
                 onClick={() => setEtape("scan_barcode")}
-                className="w-full flex items-center gap-3 bg-white rounded-xl border border-c2b-green/10 p-4 text-left"
+                className="carte w-full flex items-center gap-4 p-5 text-left transition hover:border-c2b-gold/40"
               >
                 <Barcode className="text-c2b-green" />
                 <div>
-                  <p className="font-medium text-c2b-green">Scanner un code-barres</p>
-                  <p className="text-xs text-c2b-green/60">Produit du commerce</p>
+                  <p className="font-bold text-c2b-green">Scanner un code-barres</p>
+                  <p className="text-xs text-c2b-muted">Produit du commerce</p>
                 </div>
               </button>
 
               <button
                 onClick={() => setEtape("manuel")}
-                className="w-full flex items-center gap-3 bg-white rounded-xl border border-c2b-green/10 p-4 text-left"
+                className="carte w-full flex items-center gap-4 p-5 text-left transition hover:border-c2b-gold/40"
               >
                 <PenLine className="text-c2b-green" />
                 <div>
-                  <p className="font-medium text-c2b-green">Saisie manuelle</p>
-                  <p className="text-xs text-c2b-green/60">Recherche parmi des milliers d'aliments</p>
+                  <p className="font-bold text-c2b-green">Saisie manuelle</p>
+                  <p className="text-xs text-c2b-muted">Recherche parmi des milliers d'aliments</p>
                 </div>
               </button>
             </div>
@@ -351,13 +351,13 @@ export function AddMealModal({
               <p className="text-sm text-red-700">{messageErreur}</p>
               <button
                 onClick={() => setEtape("manuel")}
-                className="w-full rounded-lg bg-c2b-green text-c2b-cream py-2 text-sm"
+                className="btn-primary w-full"
               >
                 Chercher par nom
               </button>
               <button
                 onClick={() => setEtape("choix")}
-                className="w-full rounded-lg border border-c2b-green/20 py-2 text-sm text-c2b-green"
+                className="btn-secondary w-full"
               >
                 Retour
               </button>
@@ -367,18 +367,18 @@ export function AddMealModal({
           {etape === "manuel" && (
             <div className="space-y-4">
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-2.5 text-c2b-green/40" />
+                <Search size={16} className="absolute left-3.5 top-3.5 text-c2b-muted/60" />
                 <input
                   value={rechercheManuelle}
                   onChange={(e) => setRechercheManuelle(e.target.value)}
                   placeholder="Ex : compote 45g, riz 150g, poulet rôti..."
                   autoFocus
-                  className="w-full rounded-lg border border-c2b-green/20 pl-9 pr-3 py-2 text-sm"
+                  className="champ pl-10"
                 />
               </div>
               {grammesSaisis !== null ? (
                 <p className="text-xs text-c2b-green/70 -mt-2">
-                  Quantité détectée : <span className="font-medium text-c2b-green">{grammesSaisis} g</span>
+                  Quantité détectée : <span className="font-bold text-c2b-green">{grammesSaisis} g</span>
                 </p>
               ) : (
                 <p className="text-[11px] text-c2b-green/50 -mt-2">
@@ -388,16 +388,16 @@ export function AddMealModal({
 
               {!rechercheActive && (
                 <>
-                  <p className="text-xs uppercase tracking-wide text-c2b-green/50">Ajout rapide</p>
+                  <p className="lbl">Ajout rapide</p>
                   <div className="grid grid-cols-2 gap-2">
                     {ALIMENTS_POPULAIRES.map((a) => (
                       <button
                         key={a.nom}
                         onClick={() => choisirAlimentPopulaire(a.nom, a.calories, a.proteines, a.glucides, a.lipides)}
-                        className="bg-white rounded-lg border border-c2b-green/10 p-2.5 text-left"
+                        className="carte p-3 text-left transition hover:border-c2b-gold/40"
                       >
                         <p className="text-sm font-medium text-c2b-green">{a.nom}</p>
-                        <p className="text-[11px] text-c2b-green/50">
+                        <p className="text-[11px] text-c2b-muted">
                           {a.portion} · {a.calories} kcal
                         </p>
                       </button>
@@ -413,11 +413,11 @@ export function AddMealModal({
                       <Loader2 className="animate-spin" size={20} />
                     </div>
                   ) : resultatsAliments.length === 0 ? (
-                    <p className="text-sm text-c2b-green/50 italic text-center py-2">
+                    <p className="text-sm text-c2b-muted italic text-center py-2">
                       Aucun aliment générique trouvé.
                     </p>
                   ) : (
-                    <ul className="bg-white rounded-lg border border-c2b-green/10 divide-y divide-c2b-green/10">
+                    <ul className="carte overflow-hidden divide-y divide-black/5">
                       {resultatsAliments.map((a) => (
                         <li key={a.id}>
                           <button
@@ -425,7 +425,7 @@ export function AddMealModal({
                             className="w-full text-left px-3 py-2.5"
                           >
                             <p className="text-sm text-c2b-green">{a.nom}</p>
-                            <p className="text-[11px] text-c2b-green/50">
+                            <p className="text-[11px] text-c2b-muted">
                               100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
                               {a.lipides}g L
                             </p>
@@ -439,18 +439,18 @@ export function AddMealModal({
                     <button
                       onClick={chercherMarques}
                       disabled={rechercheMarquesEnCours}
-                      className="w-full rounded-lg border border-c2b-green/20 py-2 text-sm text-c2b-green flex items-center justify-center gap-2"
+                      className="btn-secondary w-full"
                     >
                       {rechercheMarquesEnCours && <Loader2 className="animate-spin" size={16} />}
-                      Chercher aussi dans les produits de marque
+                      Voir aussi les produits de marque
                     </button>
                   ) : (
                     <>
-                      <p className="text-xs uppercase tracking-wide text-c2b-green/50 pt-2">Produits de marque</p>
+                      <p className="lbl pt-2">Produits de marque</p>
                       {resultatsMarques.length === 0 ? (
-                        <p className="text-sm text-c2b-green/50 italic text-center py-2">Aucun produit trouvé.</p>
+                        <p className="text-sm text-c2b-muted italic text-center py-2">Aucun produit trouvé.</p>
                       ) : (
-                        <ul className="bg-white rounded-lg border border-c2b-green/10 divide-y divide-c2b-green/10">
+                        <ul className="carte overflow-hidden divide-y divide-black/5">
                           {resultatsMarques.map((p, i) => (
                             <li key={`${p.nom}-${i}`}>
                               <button
@@ -463,7 +463,7 @@ export function AddMealModal({
                                   {p.nom}
                                   {p.marque && <span className="text-c2b-green/50"> · {p.marque}</span>}
                                 </p>
-                                <p className="text-[11px] text-c2b-green/50">
+                                <p className="text-[11px] text-c2b-muted">
                                   100 g · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G · {p.lipides}g L
                                 </p>
                               </button>
@@ -476,7 +476,7 @@ export function AddMealModal({
                 </div>
               )}
 
-              <details className="bg-white rounded-lg border border-c2b-green/10 p-3">
+              <details className="carte p-4">
                 <summary className="text-sm font-medium text-c2b-green cursor-pointer">
                   Aliment introuvable ? Saisir manuellement
                 </summary>
@@ -485,7 +485,7 @@ export function AddMealModal({
                     value={nomLibre}
                     onChange={(e) => setNomLibre(e.target.value)}
                     placeholder="Nom de l'aliment"
-                    className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
+                    className="champ"
                   />
                   <div className="grid grid-cols-4 gap-2">
                     <input
@@ -493,33 +493,33 @@ export function AddMealModal({
                       onChange={(e) => setCaloriesLibre(e.target.value)}
                       placeholder="kcal"
                       type="number"
-                      className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm"
+                      className="champ px-2.5"
                     />
                     <input
                       value={proteinesLibre}
                       onChange={(e) => setProteinesLibre(e.target.value)}
                       placeholder="P (g)"
                       type="number"
-                      className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm"
+                      className="champ px-2.5"
                     />
                     <input
                       value={glucidesLibre}
                       onChange={(e) => setGlucidesLibre(e.target.value)}
                       placeholder="G (g)"
                       type="number"
-                      className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm"
+                      className="champ px-2.5"
                     />
                     <input
                       value={lipidesLibre}
                       onChange={(e) => setLipidesLibre(e.target.value)}
                       placeholder="L (g)"
                       type="number"
-                      className="rounded-lg border border-c2b-green/20 px-2 py-2 text-sm"
+                      className="champ px-2.5"
                     />
                   </div>
                   <button
                     onClick={validerSaisieLibre}
-                    className="w-full rounded-lg bg-c2b-green text-c2b-cream py-2 text-sm"
+                    className="btn-primary w-full"
                   >
                     Continuer
                   </button>
@@ -530,20 +530,20 @@ export function AddMealModal({
 
           {etape === "confirmation" && trouve && (
             <div className="space-y-4">
-              <div className="bg-white rounded-xl border border-c2b-green/10 p-3">
-                <p className="font-medium text-c2b-green">{trouve.nom}</p>
-                <p className="text-xs text-c2b-green/60">
+              <div className="carte p-4">
+                <p className="font-bold text-c2b-green">{trouve.nom}</p>
+                <p className="text-xs text-c2b-muted">
                   {trouve.calories} kcal · {trouve.proteines}g P · {trouve.glucides}g G · {trouve.lipides}g L
                   {trouve.paGrammes ? " (pour 100g)" : " (par portion)"}
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-c2b-green mb-1">Repas</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Repas</label>
                 <select
                   value={repasType}
                   onChange={(e) => setRepasType(e.target.value as RepasType)}
-                  className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
+                  className="champ"
                 >
                   {Object.entries(REPAS_TYPE_LABELS).map(([valeur, label]) => (
                     <option key={valeur} value={valeur}>
@@ -554,7 +554,7 @@ export function AddMealModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-c2b-green mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   {trouve.paGrammes ? "Quantité (grammes)" : "Quantité (portions)"}
                 </label>
                 <input
@@ -569,7 +569,7 @@ export function AddMealModal({
                       ? setGrammes(Number(e.target.value))
                       : setQuantite(Number(e.target.value))
                   }
-                  className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 text-sm"
+                  className="champ"
                 />
                 {trouve.paGrammes && (
                   <div className="flex gap-1.5 mt-2">
@@ -577,7 +577,7 @@ export function AddMealModal({
                       <button
                         key={g}
                         onClick={() => setGrammes(g)}
-                        className={`flex-1 rounded-md py-1 text-xs ${
+                        className={`flex-1 rounded-full py-1.5 text-xs font-bold ${
                           grammes === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                         }`}
                       >
@@ -593,10 +593,10 @@ export function AddMealModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-c2b-green mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   Photo du repas (optionnel)
                 </label>
-                <label className="flex items-center gap-2 justify-center border border-dashed border-c2b-green/30 rounded-lg py-3 cursor-pointer text-sm text-c2b-green/70">
+                <label className="flex items-center gap-2 justify-center border-2 border-dashed border-c2b-green/20 rounded-2xl py-4 cursor-pointer text-sm font-semibold text-c2b-green/70 hover:border-c2b-gold">
                   <Camera size={18} />
                   {previewPhoto ? "Changer la photo" : "Prendre une photo"}
                   <input
@@ -609,14 +609,14 @@ export function AddMealModal({
                 </label>
                 {previewPhoto && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previewPhoto} alt="Aperçu" className="mt-2 w-full h-32 object-cover rounded-lg" />
+                  <img src={previewPhoto} alt="Aperçu" className="mt-2 w-full h-36 object-cover rounded-2xl" />
                 )}
               </div>
 
               <button
                 onClick={enregistrerRepas}
                 disabled={enregistrement}
-                className="w-full rounded-lg bg-c2b-green text-c2b-cream py-2.5 font-medium disabled:opacity-60"
+                className="btn-primary w-full py-4"
               >
                 {enregistrement ? "Enregistrement..." : "Ajouter au journal"}
               </button>

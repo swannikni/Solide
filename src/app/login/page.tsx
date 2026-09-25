@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,61 +35,62 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-c2b-cream px-4">
+    <div className="min-h-screen flex items-center justify-center bg-c2b-cream px-5 py-10">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="font-hand text-5xl text-c2b-green">
-            Chef<span className="text-c2b-gold">2</span>Box
+        <div className="flex flex-col items-center text-center mb-8">
+          <Logo className="h-20 w-auto mb-6" />
+          <span className="pastille mb-4">
+            <span className="h-1.5 w-1.5 rounded-full bg-c2b-gold" /> Espace client
+          </span>
+          <h1 className="titre text-[38px]">
+            Votre suivi,
+            <em className="block">au macro près.</em>
           </h1>
-          <p className="text-c2b-green/70 mt-1 text-sm tracking-wide">
-            Prêt. Sain. Maîtrisé.
-          </p>
         </div>
 
-        <form
-          onSubmit={seConnecter}
-          className="bg-white rounded-2xl shadow-sm p-6 space-y-4 border border-c2b-green/10"
-        >
+        <form onSubmit={seConnecter} className="carte p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-c2b-green mb-1">Email</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Email</label>
             <input
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-c2b-gold"
+              className="champ"
               placeholder="vous@exemple.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-c2b-green mb-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               Mot de passe
             </label>
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={motDePasse}
               onChange={(e) => setMotDePasse(e.target.value)}
-              className="w-full rounded-lg border border-c2b-green/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-c2b-gold"
+              className="champ"
               placeholder="••••••••"
             />
           </div>
 
-          {erreur && <p className="text-red-600 text-sm">{erreur}</p>}
+          {erreur && <p className="text-red-700 text-sm">{erreur}</p>}
 
-          <button
-            type="submit"
-            disabled={chargement}
-            className="w-full bg-c2b-green text-c2b-cream rounded-lg py-2.5 font-medium hover:bg-c2b-green/90 disabled:opacity-60 transition"
-          >
+          <button type="submit" disabled={chargement} className="btn-primary w-full py-4">
             {chargement ? "Connexion..." : "Se connecter"}
           </button>
         </form>
 
-        <p className="text-center text-xs text-c2b-green/60 mt-4">
-          Pas encore de compte ? Contactez Swann sur WhatsApp pour recevoir votre invitation.
+        <p className="text-center text-[13px] text-c2b-muted mt-5">
+          Pas encore de compte ?{" "}
+          <a href="https://wa.me/212660831640" target="_blank" rel="noreferrer" className="font-semibold text-c2b-green underline-offset-2 hover:underline">
+            Écrivez-nous sur WhatsApp
+          </a>
         </p>
+        <p className="text-center font-display tracking-[3px] text-c2b-green/40 mt-8">Prêt · Sain · Maîtrisé</p>
       </div>
     </div>
   );

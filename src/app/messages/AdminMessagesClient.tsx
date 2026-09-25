@@ -23,15 +23,20 @@ export function AdminMessagesClient({ clients }: { clients: Client[] }) {
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6">
-      <h1 className="font-hand text-3xl text-c2b-green mb-4">Messages</h1>
+      <div className="mb-5">
+        <span className="lbl mb-2">Messagerie</span>
+        <h1 className="titre text-[34px]">
+          Vos <em>clients</em>
+        </h1>
+      </div>
       <div className="grid md:grid-cols-3 gap-4">
         <div className="md:col-span-1 space-y-1">
           {clients.map((c) => (
             <button
               key={c.id}
               onClick={() => selectionner(c)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm ${
-                clientSelectionne?.id === c.id ? "bg-c2b-green text-c2b-cream" : "bg-white text-c2b-green"
+              className={`w-full text-left px-4 py-3 rounded-2xl text-sm transition ${
+                clientSelectionne?.id === c.id ? "bg-c2b-green text-white font-bold" : "bg-white text-c2b-green font-semibold border border-black/5"
               }`}
             >
               {c.nom}

@@ -32,31 +32,36 @@ export default async function HistoryPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-6 md:pt-20">
+    <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <Nav estAdmin={client.est_admin} />
       <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
-        <h1 className="font-hand text-3xl text-c2b-green">Historique</h1>
+        <div>
+          <span className="lbl mb-2">Votre suivi</span>
+          <h1 className="titre text-[34px]">
+            Votre <em>historique</em>
+          </h1>
+        </div>
 
         {parJour.size === 0 && (
-          <p className="text-sm text-c2b-green/50 italic text-center py-8">Aucun repas enregistré pour le moment.</p>
+          <p className="text-sm text-c2b-muted italic text-center py-8">Aucun repas enregistré pour le moment.</p>
         )}
 
         {[...parJour.entries()].map(([date, repasJour]) => {
           const totaux = totauxDuJour(repasJour);
           return (
-            <section key={date} className="bg-white rounded-2xl border border-c2b-green/10 p-4">
+            <section key={date} className="carte p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-medium text-c2b-green">
+                <h2 className="font-serif text-xl text-c2b-green first-letter:uppercase">
                   {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
                 </h2>
-                <span className="text-xs text-c2b-green/60">
+                <span className="pastille">
                   {Math.round(totaux.calories)} kcal · {Math.round(totaux.proteines)}g P
                 </span>
               </div>
               <div className="space-y-2">
                 {repasJour.map((r) => (
                   <div key={r.id} className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
                       {r.photo_url ? (
                         <Image src={r.photo_url} alt={r.nom} width={40} height={40} className="object-cover w-full h-full" />
                       ) : (
@@ -64,8 +69,8 @@ export default async function HistoryPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-c2b-green truncate">{r.nom}</p>
-                      <p className="text-[11px] text-c2b-green/50">{Math.round(r.calories * r.quantite)} kcal</p>
+                      <p className="text-sm font-semibold text-c2b-green truncate">{r.nom}</p>
+                      <p className="text-[11px] text-c2b-muted">{Math.round(r.calories * r.quantite)} kcal</p>
                     </div>
                   </div>
                 ))}
