@@ -44,6 +44,25 @@ sont jamais touchées.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    (Project Settings → API dans le dashboard Supabase)
 
+### 2 bis. Importer la base d'aliments (CIQUAL)
+
+La table `application_aliments` est remplie avec la table Ciqual 2020 de
+l'ANSES (3 178 aliments, macros pour 100 g), convertie dans
+[`supabase/data/aliments_ciqual_2020.json`](./supabase/data/aliments_ciqual_2020.json).
+Pour la réimporter, dans le SQL Editor :
+
+```sql
+create extension if not exists http with schema extensions;
+
+insert into public.application_aliments (code_ciqual, nom, groupe, calories, proteines, glucides, lipides, nom_normalise)
+select code, nom, groupe, calories, proteines, glucides, lipides, lower(extensions.unaccent(nom))
+from extensions.http_get('https://raw.githubusercontent.com/swannikni/Solide/8aa59b0e60768e09e1f8c774341e46ae461df063/supabase/data/aliments_ciqual_2020.json') r,
+     jsonb_to_recordset(r.content::jsonb) as x(code text, nom text, groupe text, calories numeric, proteines numeric, glucides numeric, lipides numeric)
+on conflict (code_ciqual) do nothing;
+
+drop extension http;
+```
+
 ### 3. Créer les comptes
 
 Il n'y a pas d'auto-inscription (accès réservé aux clients Chef2Box) :

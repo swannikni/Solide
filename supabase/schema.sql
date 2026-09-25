@@ -212,7 +212,13 @@ as $$
   with requete as (
     select lower(extensions.unaccent(trim(q))) as qn
   ), mots as (
-    select array_remove(string_to_array(qn, ' '), '') as liste, qn from requete
+    -- Pluriels : "amandes" doit trouver "Amande", "oeufs" trouver "Oeuf".
+    select array(
+      select case when length(w) > 3 and right(w, 1) in ('s', 'x') then left(w, -1) else w end
+      from unnest(string_to_array(qn, ' ')) w
+      where w <> ''
+    ) as liste, qn
+    from requete
   )
   select a.*
   from public.application_aliments a, mots
