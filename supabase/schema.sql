@@ -261,7 +261,10 @@ begin
       (' escalope de dinde ', ' dinde filet '),
       (' viande hachee ', ' boeuf hache '),
       (' viande hache ', ' boeuf hache '),
-      (' pdt ', ' pomme de terre ')
+      (' pdt ', ' pomme de terre '),
+      (' coca cola ', ' cola '),
+      (' coca ', ' cola '),
+      (' pepsi ', ' cola ')
     ) as v(de, vers)
   loop
     qn := replace(qn, syn.de, syn.vers);

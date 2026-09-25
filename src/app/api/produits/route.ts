@@ -30,15 +30,39 @@ async function chercher(q: string, taille: number): Promise<Hit[]> {
 
 const arrondi = (v: number | undefined) => Math.round((v ?? 0) * 10) / 10;
 
+const normaliser = (texte: string) =>
+  texte
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+// Open Food Facts renvoie parfois des produits sans rapport (« Espresso do
+// brazil » pour « mc do ») : on garde ceux dont le nom ou la marque contient
+// au moins un mot significatif de la recherche.
+function pertinent(hit: Hit, mots: string[]) {
+  if (mots.length === 0) return true;
+  const marques = Array.isArray(hit.brands) ? hit.brands.join(" ") : hit.brands ?? "";
+  const texte = normaliser(`${hit.product_name_fr ?? ""} ${hit.product_name ?? ""} ${marques}`);
+  return mots.some((m) => texte.includes(m));
+}
+
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   // Guillemets et ":" retirés : la saisie ne doit pas casser le filtre pays.
   const termes = (request.nextUrl.searchParams.get("q") ?? "").replace(/["':\\]/g, " ").trim().slice(0, 80);
   if (termes.length < 2) return NextResponse.json([]);
 
   const [maroc, monde] = await Promise.all([
-    chercher(`${termes} countries_tags:"en:morocco"`, 15).catch(() => []),
-    chercher(termes, 25).catch(() => []),
+    chercher(`${termes} countries_tags:"en:morocco"`, 25).catch(() => []),
+    chercher(termes, 30).catch(() => []),
   ]);
+
+  const mots = termes
+    .split(/\s+/)
+    .map((m) => normaliser(m).replace(/s$/, ""))
+    .filter((m) => m.length >= 3);
 
   const vus = new Set<string>();
   const produits = [];
@@ -46,7 +70,7 @@ export async function GET(request: NextRequest) {
     const nom = (hit.product_name_fr || hit.product_name || "").trim();
     const kcal = hit.nutriments?.["energy-kcal_100g"];
     const cle = hit.code || nom.toLowerCase();
-    if (!nom || kcal == null || vus.has(cle)) continue;
+    if (!nom || kcal == null || vus.has(cle) || !pertinent(hit, mots)) continue;
     vus.add(cle);
     const marque = (Array.isArray(hit.brands) ? hit.brands[0] : hit.brands?.split(",")[0])?.trim() ?? "";
     produits.push({
@@ -63,6 +87,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(produits, {
-    headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" },
+    // Cache du navigateur seulement : le cache partagé de Netlify ignorait la
+    // recherche (?q=) et resservait les résultats d'une autre recherche.
+    headers: { "Cache-Control": "private, max-age=600" },
   });
 }

@@ -160,7 +160,7 @@ export function Scanner({
             value={saisie}
             onChange={(e) => setSaisie(e.target.value)}
             inputMode={mode === "code_barres" ? "numeric" : "text"}
-            placeholder={mode === "code_barres" ? "Ou tapez les chiffres du code" : "Ou tapez le code du plat"}
+            placeholder={mode === "code_barres" ? "Ou tapez les chiffres du code" : "Ou le code sous le QR (C2B-…)"}
             className="champ pl-10"
           />
         </div>
