@@ -12,6 +12,7 @@ type Fiche = {
   nom: string;
   email: string;
   telephone: string;
+  indicatif: string;
   palier: Palier | "";
   calories: string;
   proteines: string;
@@ -26,6 +27,7 @@ const FICHE_VIDE: Fiche = {
   nom: "",
   email: "",
   telephone: "",
+  indicatif: "+212",
   palier: "",
   calories: "2000",
   proteines: String(MACROS_2000.proteines),
@@ -33,11 +35,43 @@ const FICHE_VIDE: Fiche = {
   lipides: String(MACROS_2000.lipides),
 };
 
-// Numéro marocain saisi "06..." -> "2126..." pour wa.me.
+const INDICATIFS = [
+  { code: "+212", pays: "🇲🇦 Maroc" },
+  { code: "+33", pays: "🇫🇷 France" },
+  { code: "+32", pays: "🇧🇪 Belgique" },
+  { code: "+41", pays: "🇨🇭 Suisse" },
+  { code: "+34", pays: "🇪🇸 Espagne" },
+  { code: "+44", pays: "🇬🇧 Royaume-Uni" },
+  { code: "+1", pays: "🇺🇸 États-Unis / Canada" },
+  { code: "+971", pays: "🇦🇪 Émirats" },
+];
+
+// Numéro enregistré au format international : "+33629021231".
+function numeroInternational(indicatif: string, saisie: string): string | null {
+  const brut = saisie.trim();
+  if (!brut) return null;
+  if (brut.startsWith("+")) return "+" + brut.replace(/\D/g, "");
+  const chiffres = brut.replace(/\D/g, "");
+  if (chiffres.startsWith("00")) return "+" + chiffres.slice(2);
+  return indicatif + chiffres.replace(/^0/, "");
+}
+
+// Sépare un numéro enregistré en (indicatif connu, reste) pour l'édition.
+function decouperNumero(telephone: string | null): { indicatif: string; telephone: string } {
+  const t = telephone ?? "";
+  const connu = [...INDICATIFS].sort((a, b) => b.code.length - a.code.length).find((i) => t.startsWith(i.code));
+  return connu ? { indicatif: connu.code, telephone: "0" + t.slice(connu.code.length) } : { indicatif: "+212", telephone: t };
+}
+
+// Pour wa.me : chiffres seuls, indicatif compris. Les anciens numéros
+// enregistrés sans indicatif ("06...") sont supposés marocains.
 function numeroWhatsApp(telephone: string | null) {
-  const chiffres = (telephone ?? "").replace(/\D/g, "");
+  const t = (telephone ?? "").trim();
+  if (t.startsWith("+")) return t.replace(/\D/g, "");
+  const chiffres = t.replace(/\D/g, "");
+  if (chiffres.startsWith("00")) return chiffres.slice(2);
   if (/^0[5-7]\d{8}$/.test(chiffres)) return `212${chiffres.slice(1)}`;
-  return chiffres.replace(/^00/, "");
+  return chiffres;
 }
 
 export function ClientsClient({
@@ -72,7 +106,7 @@ export function ClientsClient({
       id: c.id,
       nom: c.nom,
       email: emailsConnus[c.id] ?? "",
-      telephone: c.telephone ?? "",
+      ...decouperNumero(c.telephone),
       palier: c.palier ?? "",
       calories: String(c.objectif_calories),
       proteines: String(c.objectif_proteines),
@@ -115,7 +149,7 @@ export function ClientsClient({
     if (fiche.id) {
       const { data, error } = await supabase
         .from("application_clients")
-        .update({ nom: fiche.nom.trim(), telephone: fiche.telephone.trim() || null, palier: fiche.palier || null, ...objectifs })
+        .update({ nom: fiche.nom.trim(), telephone: numeroInternational(fiche.indicatif, fiche.telephone), palier: fiche.palier || null, ...objectifs })
         .eq("id", fiche.id)
         .select("*")
         .single<Client>();
@@ -132,7 +166,7 @@ export function ClientsClient({
       body: JSON.stringify({
         nom: fiche.nom,
         email: fiche.email,
-        telephone: fiche.telephone,
+        telephone: numeroInternational(fiche.indicatif, fiche.telephone),
         palier: fiche.palier || null,
         ...objectifs,
       }),
@@ -152,7 +186,7 @@ export function ClientsClient({
         {
           id: resultat.id,
           nom: fiche.nom.trim(),
-          telephone: fiche.telephone.trim() || null,
+          telephone: numeroInternational(fiche.indicatif, fiche.telephone),
           palier: (fiche.palier || null) as Palier | null,
           ...objectifs,
           est_admin: false,
@@ -163,7 +197,7 @@ export function ClientsClient({
     setEmailsConnus((prev) => ({ ...prev, [resultat.id]: resultat.email }));
     setFiche(null);
     setCopie(false);
-    setAcces({ nom: fiche.nom.trim(), email: resultat.email, motDePasse: resultat.motDePasse, telephone: fiche.telephone || null });
+    setAcces({ nom: fiche.nom.trim(), email: resultat.email, motDePasse: resultat.motDePasse, telephone: numeroInternational(fiche.indicatif, fiche.telephone) });
   }
 
   async function nouveauMotDePasse(c: Client) {
@@ -249,6 +283,14 @@ export function ClientsClient({
               className="btn-gold px-4 py-2.5 text-sm"
             >
               <MessageCircle size={16} /> Envoyer par WhatsApp
+            </a>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(texteAcces)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border-2 border-white/30 px-4 py-2 text-sm font-semibold"
+            >
+              Choisir le contact dans WhatsApp
             </a>
             <button
               onClick={async () => {
@@ -344,7 +386,21 @@ export function ClientsClient({
                   className="champ disabled:opacity-60"
                 />
               </Champ>
-              <div className="grid grid-cols-[1fr_auto] gap-2.5">
+              <div className="grid grid-cols-[auto_1fr] gap-2.5">
+                <Champ label="Pays">
+                  <select
+                    value={fiche.indicatif}
+                    onChange={(e) => setFiche({ ...fiche, indicatif: e.target.value })}
+                    className="champ w-[7.5rem] px-2"
+                    aria-label="Indicatif du pays"
+                  >
+                    {INDICATIFS.map((i) => (
+                      <option key={i.code} value={i.code}>
+                        {i.pays} {i.code}
+                      </option>
+                    ))}
+                  </select>
+                </Champ>
                 <Champ label="Téléphone (WhatsApp)">
                   <input
                     type="tel"
