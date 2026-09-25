@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
@@ -12,10 +12,67 @@ import { codeDepuisScan } from "@/lib/qr";
 import { estLiquide, portionsPour, type PortionUsuelle } from "@/lib/portions";
 import { nomSimple } from "@/lib/noms-aliments";
 import { BUCKET_PHOTOS } from "@/lib/photos";
+import { reduirePhoto } from "@/lib/image";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
-type Etape = "choix" | "mon_plat" | "favori_repas" | "favori_edition" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
+type Etape =
+  | "choix"
+  | "mon_plat"
+  | "favori_repas"
+  | "favori_edition"
+  | "scan_chef2box"
+  | "scan_barcode"
+  | "recherche_code"
+  | "etiquette" // produit scanné inconnu
+  | "etiquette_verif" // valeurs lues par l'IA ou tapées, à vérifier
+  | "analyse" // photo envoyée à l'IA
+  | "plat_resultat" // aliments reconnus sur la photo du plat
+  | "manuel"
+  | "confirmation"
+  | "erreur";
+
+// Produit ajouté par un client (code-barres inconnu d'Open Food Facts).
+interface ProduitPerso {
+  code_barres: string;
+  nom: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  liquide: boolean;
+  portion_libelle: string | null;
+  portion_grammes: number | null;
+}
+
+interface AlimentDetecte {
+  nom: string;
+  grammes: string; // saisie modifiable
+  coche: boolean;
+  liquide: boolean;
+  calories: number; // pour 100 g
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  reference: string | null; // aliment CIQUAL utilisé pour les valeurs
+}
+
+const ETIQUETTE_VIDE = {
+  nom: "",
+  marque: "",
+  calories: "",
+  proteines: "",
+  glucides: "",
+  lipides: "",
+  liquide: false,
+  portionLibelle: "",
+  portionGrammes: "",
+};
+
+const nombreSaisi = (t: string) => {
+  const n = parseFloat(t.replace(",", "."));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
 
 type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number];
 
@@ -103,6 +160,7 @@ export function AddMealModal({
   recents = [],
   onClose,
   onAjoute,
+  iaActive = false,
 }: {
   clientId: string;
   date: string;
@@ -112,6 +170,8 @@ export function AddMealModal({
   prefillTrouve?: Trouve;
   onClose: () => void;
   onAjoute: () => void;
+  // Clé Anthropic configurée : lecture d'étiquette et photo du plat.
+  iaActive?: boolean;
 }) {
   const supabase = createClient();
   const [etape, setEtape] = useState<Etape>(prefillTrouve ? "confirmation" : "choix");
@@ -155,6 +215,13 @@ export function AddMealModal({
   } | null>(null);
   const [monPlat, setMonPlat] = useState({ nom: "", calories: "", proteines: "", glucides: "", lipides: "" });
   const [origine, setOrigine] = useState<Etape>("choix");
+  // IA : produit inconnu (étiquette) et photo du plat.
+  const [codeInconnu, setCodeInconnu] = useState<string | null>(null);
+  const [etiquette, setEtiquette] = useState(ETIQUETTE_VIDE);
+  const [messageIA, setMessageIA] = useState("");
+  const [texteAnalyse, setTexteAnalyse] = useState("");
+  const [platDetecte, setPlatDetecte] = useState<{ aliments: AlimentDetecte[]; conseil: string } | null>(null);
+  const [restantIA, setRestantIA] = useState<number | null>(null);
 
   // Écran où revenir après un ajout ou un "Retour" depuis la confirmation.
   useEffect(() => {
@@ -595,6 +662,22 @@ export function AddMealModal({
 
   async function onScanBarcode(code: string) {
     setEtape("recherche_code");
+    // D'abord les produits déjà ajoutés par un client Chef2Box.
+    const { data: perso } = await supabase
+      .from("application_produits")
+      .select("*")
+      .eq("code_barres", code)
+      .maybeSingle<ProduitPerso>();
+    if (perso) {
+      choisirPour100g(perso.nom, perso, "code_barres", null, {
+        portionProduit:
+          perso.portion_libelle && perso.portion_grammes
+            ? { libelle: perso.portion_libelle, grammes: Number(perso.portion_grammes), ml: perso.liquide || undefined }
+            : null,
+      });
+      return;
+    }
+
     let produit = null;
     try {
       produit = await chercherProduitParCodeBarres(code);
@@ -604,14 +687,169 @@ export function AddMealModal({
       return;
     }
     if (!produit || produit.calories === 0) {
-      setMessageErreur(
-        `Produit ${code} introuvable ou sans valeurs nutritionnelles. Recherchez-le par son nom dans la saisie manuelle.`
-      );
-      setEtape("erreur");
+      // Inconnu : le client photographie l'étiquette (ou tape les valeurs) et
+      // le produit est gardé pour tout le monde.
+      setCodeInconnu(/^[0-9]{6,14}$/.test(code) ? code : null);
+      setEtiquette(ETIQUETTE_VIDE);
+      setMessageIA("");
+      setEtape("etiquette");
       return;
     }
 
     choisirPour100g(produit.nom, produit, "code_barres", null, { portionProduit: produit.portion });
+  }
+
+  // Photo réduite puis envoyée à l'IA ; les limites du jour sont vérifiées côté serveur.
+  async function analyserPhoto(route: "etiquette" | "plat", fichier: File) {
+    const image = await reduirePhoto(fichier).catch(() => {
+      throw new Error("Photo illisible. Réessayez avec une photo JPEG ou PNG.");
+    });
+    const res = await fetch(`/api/ia/${route}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) throw new Error(data?.erreur ?? "L'analyse n'a pas marché, réessayez.");
+    if (typeof data.restant === "number") setRestantIA(data.restant);
+    return data;
+  }
+
+  async function surPhotoEtiquette(e: React.ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0];
+    e.target.value = "";
+    if (!fichier) return;
+    setMessageIA("");
+    setTexteAnalyse("Lecture de l'étiquette...");
+    setEtape("analyse");
+    try {
+      const d = await analyserPhoto("etiquette", fichier);
+      if (!d.lisible) {
+        setMessageIA("Tableau illisible sur cette photo. Reprenez-le de plus près, bien à plat et sans reflet.");
+        setEtape("etiquette");
+        return;
+      }
+      const texte = (v: number) => String(v).replace(".", ",");
+      setEtiquette({
+        nom: d.nom ?? "",
+        marque: d.marque ?? "",
+        calories: texte(d.calories),
+        proteines: texte(d.proteines),
+        glucides: texte(d.glucides),
+        lipides: texte(d.lipides),
+        liquide: !!d.liquide,
+        portionLibelle: d.portion?.libelle ?? "",
+        portionGrammes: d.portion ? texte(d.portion.grammes) : "",
+      });
+      setEtape("etiquette_verif");
+    } catch (err) {
+      setMessageIA((err as Error).message);
+      setEtape("etiquette");
+    }
+  }
+
+  // Mêmes règles que la base : les kcal doivent coller aux macros.
+  const valeursEtiquette = {
+    calories: Math.round(nombreSaisi(etiquette.calories)),
+    proteines: nombreSaisi(etiquette.proteines),
+    glucides: nombreSaisi(etiquette.glucides),
+    lipides: nombreSaisi(etiquette.lipides),
+  };
+  const kcalDesMacros =
+    valeursEtiquette.proteines * 4 + valeursEtiquette.glucides * 4 + valeursEtiquette.lipides * 9;
+  const etiquetteIncoherente =
+    valeursEtiquette.calories > 950 ||
+    [valeursEtiquette.proteines, valeursEtiquette.glucides, valeursEtiquette.lipides].some((v) => v > 100) ||
+    valeursEtiquette.proteines + valeursEtiquette.glucides + valeursEtiquette.lipides > 105 ||
+    valeursEtiquette.calories > kcalDesMacros + 120 ||
+    valeursEtiquette.calories < kcalDesMacros * 0.6 - 20;
+
+  async function validerEtiquette() {
+    const nom = etiquette.nom.trim();
+    if (!nom) return setMessageIA("Donnez un nom au produit.");
+    if (!valeursEtiquette.calories) return setMessageIA("Indiquez au moins les calories.");
+    if (etiquetteIncoherente) return setMessageIA("Les calories ne collent pas avec les macros : vérifiez les chiffres.");
+    const portionGrammes = nombreSaisi(etiquette.portionGrammes);
+    const portion =
+      etiquette.portionLibelle.trim() && portionGrammes >= 1 && portionGrammes <= 2000
+        ? { libelle: etiquette.portionLibelle.trim().slice(0, 40), grammes: portionGrammes }
+        : null;
+    setEnregistrement(true);
+    if (codeInconnu) {
+      // Déjà ajouté par quelqu'un entre-temps (doublon) : sans importance.
+      await supabase.from("application_produits").insert({
+        code_barres: codeInconnu,
+        nom: nom.slice(0, 120),
+        marque: etiquette.marque.trim().slice(0, 80) || null,
+        ...valeursEtiquette,
+        liquide: etiquette.liquide,
+        portion_libelle: portion?.libelle ?? null,
+        portion_grammes: portion?.grammes ?? null,
+        ajoute_par: clientId,
+      });
+    }
+    setEnregistrement(false);
+    setMessageIA("");
+    choisirPour100g(nom, valeursEtiquette, "code_barres", null, {
+      portionProduit: portion ? { ...portion, ml: etiquette.liquide || undefined } : null,
+    });
+  }
+
+  async function surPhotoPlat(e: React.ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0];
+    e.target.value = "";
+    if (!fichier) return;
+    setMessageIA("");
+    setTexteAnalyse("Analyse de votre assiette...");
+    setEtape("analyse");
+    try {
+      const d = await analyserPhoto("plat", fichier);
+      const aliments = (d.aliments ?? []) as (Omit<AlimentDetecte, "grammes" | "coche"> & { grammes: number })[];
+      if (aliments.length === 0) {
+        setMessageIA("Je ne reconnais pas de repas sur cette photo. Prenez l'assiette entière, bien éclairée.");
+        setEtape("choix");
+        return;
+      }
+      setPlatDetecte({
+        aliments: aliments.map((a) => ({ ...a, grammes: String(a.grammes), coche: true })),
+        conseil: d.conseil ?? "",
+      });
+      setEtape("plat_resultat");
+    } catch (err) {
+      setMessageIA((err as Error).message);
+      setEtape("choix");
+    }
+  }
+
+  async function ajouterPlatDetecte() {
+    if (!platDetecte) return;
+    const choisis = platDetecte.aliments.filter((a) => a.coche && nombreSaisi(a.grammes) > 0);
+    if (choisis.length === 0) return;
+    setEnregistrement(true);
+    let ajoutesOk = 0;
+    for (const a of choisis) {
+      const id = await insererLigne({
+        nom: a.nom,
+        unite: "g",
+        quantite: nombreSaisi(a.grammes) / 100,
+        calories: Math.round(a.calories),
+        proteines: a.proteines,
+        glucides: a.glucides,
+        lipides: a.lipides,
+        source: "manuel",
+      });
+      if (id) ajoutesOk++;
+    }
+    setEnregistrement(false);
+    setPlatDetecte(null);
+    setBandeau({
+      id: "",
+      texte:
+        ajoutesOk === choisis.length
+          ? `✓ ${ajoutesOk} aliment${ajoutesOk > 1 ? "s" : ""} ajouté${ajoutesOk > 1 ? "s" : ""}`
+          : "Certains aliments n'ont pas pu être ajoutés, réessayez.",
+    });
+    setEtape("choix");
   }
 
   // Favori ou aliment récent : mêmes valeurs et même quantité que la dernière fois.
@@ -856,7 +1094,7 @@ export function AddMealModal({
 
         <div className="p-5">
           {/* Repas visé, choisi dès le début : les ajouts rapides (+) y vont directement. */}
-          {(etape === "choix" || etape === "manuel") && (
+          {(etape === "choix" || etape === "manuel" || etape === "plat_resultat") && (
             <div className="mb-4 grid grid-cols-4 gap-1.5">
               {ORDRE_REPAS.map((r) => (
                 <button
@@ -975,6 +1213,23 @@ export function AddMealModal({
                   <p className="text-xs text-c2b-muted">Produit du commerce</p>
                 </div>
               </button>
+
+              {iaActive && (
+                <label className="carte w-full flex items-center gap-4 p-5 text-left transition hover:border-c2b-gold/40 cursor-pointer">
+                  <Camera className="text-c2b-green" />
+                  <div className="flex-1">
+                    <p className="font-bold text-c2b-green flex items-center gap-1.5">
+                      Photo de mon assiette <Sparkles size={14} className="text-c2b-gold" />
+                    </p>
+                    <p className="text-xs text-c2b-muted">L&apos;IA reconnaît les aliments et estime les quantités</p>
+                  </div>
+                  {/* Sans « capture » : le téléphone propose l'appareil photo ou la galerie. */}
+                  <input type="file" accept="image/*" className="hidden" onChange={surPhotoPlat} />
+                </label>
+              )}
+              {messageIA && etape === "choix" && (
+                <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{messageIA}</p>
+              )}
 
               <button
                 onClick={() => setEtape("manuel")}
@@ -1231,6 +1486,244 @@ export function AddMealModal({
               Recherche du produit...
             </div>
           )}
+
+          {etape === "analyse" && (
+            <div className="flex flex-col items-center gap-3 py-12 text-sm font-semibold text-c2b-green/80">
+              <Sparkles className="text-c2b-gold animate-pulse" size={28} />
+              {texteAnalyse}
+              <span className="text-xs font-normal text-c2b-muted">Quelques secondes</span>
+            </div>
+          )}
+
+          {etape === "etiquette" && (
+            <div className="space-y-3">
+              <div className="carte p-4">
+                <p className="font-bold text-c2b-green">Produit pas encore connu</p>
+                <p className="mt-1 text-sm text-c2b-muted">
+                  {iaActive
+                    ? "Photographiez le tableau des valeurs nutritionnelles au dos : l'IA le lit pour vous. Le produit sera ensuite reconnu pour tous les clients Chef2Box."
+                    : "Recopiez le tableau des valeurs nutritionnelles au dos. Le produit sera ensuite reconnu pour tous les clients Chef2Box."}
+                </p>
+              </div>
+              {iaActive && (
+                <label className="btn-primary w-full cursor-pointer py-4">
+                  <Camera size={18} /> Photographier l&apos;étiquette
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={surPhotoEtiquette} />
+                </label>
+              )}
+              {messageIA && <p className="text-sm text-center font-semibold text-red-700">{messageIA}</p>}
+              <button
+                onClick={() => {
+                  setEtiquette(ETIQUETTE_VIDE);
+                  setMessageIA("");
+                  setEtape("etiquette_verif");
+                }}
+                className="btn-secondary w-full"
+              >
+                <PenLine size={16} /> Taper les valeurs moi-même
+              </button>
+              <button onClick={() => setEtape("manuel")} className="btn-secondary w-full">
+                <Search size={16} /> Chercher par nom
+              </button>
+              <button
+                onClick={() => {
+                  setMessageIA("");
+                  setEtape("choix");
+                }}
+                className="w-full text-sm font-semibold text-c2b-muted"
+              >
+                ← Retour
+              </button>
+            </div>
+          )}
+
+          {etape === "etiquette_verif" && (
+            <div className="space-y-4">
+              <p className="text-sm text-c2b-muted">
+                Vérifiez que les chiffres correspondent à l&apos;étiquette, puis choisissez la quantité mangée.
+              </p>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du produit</span>
+                <input
+                  value={etiquette.nom}
+                  onChange={(e) => setEtiquette({ ...etiquette, nom: e.target.value })}
+                  placeholder="Ex : Yaourt à boire fraise"
+                  maxLength={120}
+                  className="champ"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
+                  Marque <span className="normal-case font-semibold">(optionnel)</span>
+                </span>
+                <input
+                  value={etiquette.marque}
+                  onChange={(e) => setEtiquette({ ...etiquette, marque: e.target.value })}
+                  maxLength={80}
+                  className="champ"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <Pastille active={!etiquette.liquide} onClick={() => setEtiquette({ ...etiquette, liquide: false })}>
+                  Pour 100 g
+                </Pastille>
+                <Pastille active={etiquette.liquide} onClick={() => setEtiquette({ ...etiquette, liquide: true })}>
+                  Pour 100 ml
+                </Pastille>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {(
+                  [
+                    ["calories", "Calories (kcal)"],
+                    ["proteines", "Protéines (g)"],
+                    ["glucides", "Glucides (g)"],
+                    ["lipides", "Lipides (g)"],
+                  ] as const
+                ).map(([cle, label]) => (
+                  <label key={cle} className="block">
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={etiquette[cle]}
+                      onChange={(e) => {
+                        setEtiquette({ ...etiquette, [cle]: e.target.value.replace(/[^0-9.,]/g, "") });
+                        setMessageIA("");
+                      }}
+                      className="champ"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
+                  Portion indiquée <span className="normal-case font-semibold">(optionnel)</span>
+                </span>
+                <div className="grid grid-cols-[1fr_96px] gap-2">
+                  <input
+                    value={etiquette.portionLibelle}
+                    onChange={(e) => setEtiquette({ ...etiquette, portionLibelle: e.target.value })}
+                    placeholder="Ex : 1 pot, 1 biscuit"
+                    maxLength={40}
+                    className="champ"
+                    aria-label="Nom de la portion"
+                  />
+                  <div className="relative">
+                    <input
+                      inputMode="decimal"
+                      value={etiquette.portionGrammes}
+                      onChange={(e) =>
+                        setEtiquette({ ...etiquette, portionGrammes: e.target.value.replace(/[^0-9.,]/g, "") })
+                      }
+                      placeholder="125"
+                      className="champ pr-9"
+                      aria-label="Poids de la portion"
+                    />
+                    <span className="absolute right-3 top-3 text-xs text-c2b-muted">{etiquette.liquide ? "ml" : "g"}</span>
+                  </div>
+                </div>
+              </div>
+              {valeursEtiquette.calories > 0 && etiquetteIncoherente && (
+                <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Les calories ne collent pas avec les macros ({Math.round(kcalDesMacros)} kcal d&apos;après P/G/L) :
+                  vérifiez les chiffres.
+                </p>
+              )}
+              {messageIA && <p className="text-sm font-semibold text-red-700">{messageIA}</p>}
+              <button onClick={validerEtiquette} disabled={enregistrement} className="btn-primary w-full py-4">
+                {enregistrement ? "Enregistrement..." : "Valider et choisir la quantité"}
+              </button>
+              <button onClick={() => setEtape("etiquette")} className="w-full text-sm font-semibold text-c2b-muted">
+                ← Retour
+              </button>
+            </div>
+          )}
+
+          {etape === "plat_resultat" && platDetecte && (() => {
+            const choisis = platDetecte.aliments.filter((a) => a.coche);
+            const total = (cle: "calories" | "proteines" | "glucides" | "lipides") =>
+              choisis.reduce((t, a) => t + (a[cle] * nombreSaisi(a.grammes)) / 100, 0);
+            const modifier = (i: number, changement: Partial<AlimentDetecte>) => {
+              const aliments = [...platDetecte.aliments];
+              aliments[i] = { ...aliments[i], ...changement };
+              setPlatDetecte({ ...platDetecte, aliments });
+            };
+            return (
+              <div className="space-y-4">
+                <div>
+                  <p className="lbl mb-1 flex items-center gap-1.5">
+                    <Sparkles size={12} /> Votre assiette
+                  </p>
+                  <p className="text-sm text-c2b-muted">
+                    Estimation de l&apos;IA : ajustez les quantités si besoin, décochez ce qui est faux.
+                  </p>
+                </div>
+                <ul className="carte overflow-hidden divide-y divide-black/5">
+                  {platDetecte.aliments.map((a, i) => (
+                    <li key={i} className={`flex items-center gap-3 px-4 py-3 ${a.coche ? "" : "opacity-45"}`}>
+                      <input
+                        type="checkbox"
+                        checked={a.coche}
+                        onChange={() => modifier(i, { coche: !a.coche })}
+                        className="h-5 w-5 accent-c2b-green flex-shrink-0"
+                        aria-label={a.nom}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-c2b-green truncate">{a.nom}</p>
+                        <p className="text-[11px] text-c2b-muted">
+                          {Math.round((a.calories * nombreSaisi(a.grammes)) / 100)} kcal ·{" "}
+                          {Math.round((a.proteines * nombreSaisi(a.grammes)) / 10) / 10}g P
+                        </p>
+                      </div>
+                      <div className="relative w-[88px] flex-shrink-0">
+                        <input
+                          inputMode="decimal"
+                          value={a.grammes}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => modifier(i, { grammes: e.target.value.replace(/[^0-9.,]/g, "") })}
+                          className="champ py-2 pl-3 pr-8 text-right text-sm"
+                          aria-label={`Quantité de ${a.nom}`}
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-c2b-muted">{a.liquide ? "ml" : "g"}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="rounded-2xl bg-c2b-green px-4 py-3 text-c2b-cream">
+                  <p className="font-serif text-2xl">
+                    {Math.round(total("calories"))} <span className="font-sans text-sm text-c2b-cream/60">kcal</span>
+                  </p>
+                  <p className="text-xs text-c2b-cream/70">
+                    {Math.round(total("proteines"))} g protéines · {Math.round(total("glucides"))} g glucides ·{" "}
+                    {Math.round(total("lipides"))} g lipides
+                  </p>
+                </div>
+                {platDetecte.conseil && <p className="text-xs italic text-c2b-muted">💡 {platDetecte.conseil}</p>}
+                <button
+                  onClick={ajouterPlatDetecte}
+                  disabled={enregistrement || choisis.length === 0}
+                  className="btn-primary w-full py-4"
+                >
+                  {enregistrement
+                    ? "Ajout..."
+                    : `Ajouter ${choisis.length} aliment${choisis.length > 1 ? "s" : ""} · ${REPAS_TYPE_LABELS[repasType].toLowerCase()}`}
+                </button>
+                <p className="text-center text-[11px] text-c2b-muted">
+                  Un aliment manque ? Ajoutez-le ensuite avec la saisie manuelle.
+                  {restantIA !== null && ` · Encore ${restantIA} photo${restantIA > 1 ? "s" : ""} aujourd'hui.`}
+                </p>
+                <button
+                  onClick={() => {
+                    setPlatDetecte(null);
+                    setEtape("choix");
+                  }}
+                  className="w-full text-sm font-semibold text-c2b-muted"
+                >
+                  ← Annuler
+                </button>
+              </div>
+            );
+          })()}
 
           {etape === "erreur" && (
             <div className="space-y-3 text-center">

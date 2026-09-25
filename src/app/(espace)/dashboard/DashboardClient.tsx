@@ -383,6 +383,7 @@ export function DashboardClient({
       {modalOuverte && (
         <AddMealModal
           clientId={client.id}
+          iaActive={assistantActif}
           date={date}
           repasTypeParDefaut={repasCible}
           favoris={favoris}

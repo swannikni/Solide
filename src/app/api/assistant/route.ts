@@ -5,12 +5,12 @@ import {
   LONGUEUR_MAX_QUESTION,
   MESSAGES_HISTORIQUE,
   MODELE_ASSISTANT,
-  QUESTIONS_PAR_JOUR,
   SYSTEME_ASSISTANT,
   contexteClient,
 } from "@/lib/assistant";
 import type { Client, RepasJournal } from "@/lib/types";
-import { dateDuJour, debutDuJour } from "@/lib/dates";
+import { dateDuJour } from "@/lib/dates";
+import { rembourserIA, reserverIA } from "@/lib/ia";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +36,8 @@ export async function POST(request: NextRequest) {
 
   const aujourdhui = dateDuJour();
 
-  const [{ data: client }, { count }, { data: historique }, { data: repas }] = await Promise.all([
+  const [{ data: client }, { data: historique }, { data: repas }] = await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
-    supabase
-      .from("application_assistant_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("client_id", user.id)
-      .eq("role", "user")
-      .gte("created_at", debutDuJour(aujourdhui)),
     supabase
       .from("application_assistant_messages")
       .select("role, contenu")
@@ -61,10 +55,10 @@ export async function POST(request: NextRequest) {
   ]);
 
   if (!client) return erreur("Profil introuvable.", 403);
-  const questionsPosees = count ?? 0;
-  if (questionsPosees >= QUESTIONS_PAR_JOUR) {
-    return erreur(`Vous avez atteint la limite de ${QUESTIONS_PAR_JOUR} questions pour aujourd'hui. À demain !`, 429);
-  }
+  // Compteur en base, que le client ne peut pas remettre à zéro (effacer la
+  // conversation ne rend pas de questions).
+  const reservation = await reserverIA(supabase, "assistant");
+  if (!reservation.ok) return erreur(reservation.message, reservation.status);
 
   await supabase
     .from("application_assistant_messages")
@@ -108,6 +102,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         console.error("Assistant :", e);
+        if (!reponse) await rembourserIA(reservation.id);
         envoyer(
           reponse
             ? "\n\n(Réponse interrompue, réessayez.)"
@@ -131,7 +126,7 @@ export async function POST(request: NextRequest) {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
-      "X-Questions-Restantes": String(QUESTIONS_PAR_JOUR - questionsPosees - 1),
+      "X-Questions-Restantes": String(reservation.restant),
     },
   });
 }

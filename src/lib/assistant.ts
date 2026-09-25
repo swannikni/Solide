@@ -2,7 +2,6 @@ import type { Client, RepasJournal } from "@/lib/types";
 import { REPAS_TYPE_LABELS, totauxDuJour } from "@/lib/macros";
 
 export const MODELE_ASSISTANT = "claude-haiku-4-5";
-export const QUESTIONS_PAR_JOUR = 30;
 export const LONGUEUR_MAX_QUESTION = 1500;
 export const MESSAGES_HISTORIQUE = 16;
 

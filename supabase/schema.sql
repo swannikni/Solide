@@ -1024,3 +1024,116 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+-- ============ LIMITES D'UTILISATION DE L'IA ============
+-- Chaque appel à l'IA (assistant, lecture d'étiquette, photo du plat) est
+-- compté ici. Le client ne peut ni écrire ni effacer ces lignes : le compteur
+-- ne peut pas être remis à zéro. Seule la fonction ci-dessous les ajoute.
+create table if not exists public.application_usage_ia (
+  id bigint generated always as identity primary key,
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  type text not null check (type in ('assistant', 'etiquette', 'plat')),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_usage_ia_client_idx
+  on public.application_usage_ia (client_id, type, created_at);
+create index if not exists application_usage_ia_date_idx
+  on public.application_usage_ia (created_at);
+
+alter table public.application_usage_ia enable row level security;
+drop policy if exists "usage_ia_lecture" on public.application_usage_ia;
+create policy "usage_ia_lecture" on public.application_usage_ia
+  for select to authenticated using (client_id = auth.uid() or public.application_is_admin());
+
+-- Limites par jour (heure du Maroc), modifiables par l'admin dans
+-- application_parametres (clé « ia_limites »). « total » : plafond pour
+-- l'ensemble des clients, filet de sécurité sur la facture.
+insert into public.application_parametres (cle, valeur)
+values ('ia_limites', '{"assistant": 30, "etiquette": 5, "plat": 5, "total": 500}')
+on conflict (cle) do nothing;
+
+create or replace function public.application_reserver_ia(p_type text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_client uuid := auth.uid();
+  v_limites jsonb := coalesce(
+    (select valeur from public.application_parametres where cle = 'ia_limites'),
+    '{"assistant": 30, "etiquette": 5, "plat": 5, "total": 500}'::jsonb
+  );
+  v_limite int;
+  v_total int;
+  v_debut timestamptz := (date_trunc('day', now() at time zone 'Africa/Casablanca')) at time zone 'Africa/Casablanca';
+  v_utilises int;
+  v_id bigint;
+begin
+  if v_client is null then raise exception 'non connecté'; end if;
+  if p_type not in ('assistant', 'etiquette', 'plat') then raise exception 'type inconnu'; end if;
+  v_limite := coalesce((v_limites ->> p_type)::int, 5);
+  v_total := coalesce((v_limites ->> 'total')::int, 500);
+
+  perform pg_advisory_xact_lock(hashtext('ia:' || v_client::text));
+
+  -- Anti-rafale : une analyse de photo toutes les 5 secondes au plus.
+  if p_type <> 'assistant' and exists (
+    select 1 from public.application_usage_ia
+    where client_id = v_client and type <> 'assistant' and created_at > now() - interval '5 seconds'
+  ) then
+    raise exception 'trop_rapide';
+  end if;
+
+  select count(*) into v_utilises from public.application_usage_ia
+  where client_id = v_client and type = p_type and created_at >= v_debut;
+  if v_utilises >= v_limite then raise exception 'limite_jour'; end if;
+
+  if (select count(*) from public.application_usage_ia where created_at >= v_debut) >= v_total then
+    raise exception 'limite_globale';
+  end if;
+
+  insert into public.application_usage_ia (client_id, type) values (v_client, p_type)
+  returning id into v_id;
+  return jsonb_build_object('id', v_id, 'restant', v_limite - v_utilises - 1, 'limite', v_limite);
+end;
+$$;
+revoke execute on function public.application_reserver_ia(text) from public, anon;
+grant execute on function public.application_reserver_ia(text) to authenticated;
+
+-- ============ PRODUITS AJOUTÉS PAR LES CLIENTS ============
+-- Produit scanné introuvable dans Open Food Facts : le client photographie
+-- l'étiquette (lue par l'IA) ou tape les valeurs, puis le produit est gardé
+-- ici pour tous les clients. Valeurs pour 100 g (ou 100 ml).
+create table if not exists public.application_produits (
+  code_barres text primary key check (code_barres ~ '^[0-9]{6,14}$'),
+  nom text not null check (char_length(nom) between 1 and 120),
+  marque text check (marque is null or char_length(marque) <= 80),
+  calories numeric not null check (calories between 0 and 950),
+  proteines numeric not null check (proteines between 0 and 100),
+  glucides numeric not null check (glucides between 0 and 100),
+  lipides numeric not null check (lipides between 0 and 100),
+  liquide boolean not null default false,
+  portion_libelle text check (portion_libelle is null or char_length(portion_libelle) <= 40),
+  portion_grammes numeric check (portion_grammes is null or portion_grammes between 1 and 2000),
+  ajoute_par uuid references public.application_clients (id) on delete set null,
+  created_at timestamptz not null default now(),
+  -- Garde-fou contre les valeurs fantaisistes : les kcal doivent coller aux macros.
+  constraint application_produits_coherence check (
+    proteines + glucides + lipides <= 105
+    and calories <= proteines * 4 + glucides * 4 + lipides * 9 + 120
+    and calories >= (proteines * 4 + glucides * 4 + lipides * 9) * 0.6 - 20
+  )
+);
+
+alter table public.application_produits enable row level security;
+drop policy if exists "produits_lecture" on public.application_produits;
+create policy "produits_lecture" on public.application_produits
+  for select to authenticated using (true);
+-- Un client ajoute un produit inconnu, mais ne modifie pas ceux des autres.
+drop policy if exists "produits_ajout_client" on public.application_produits;
+create policy "produits_ajout_client" on public.application_produits
+  for insert to authenticated with check (ajoute_par = auth.uid());
+drop policy if exists "produits_admin" on public.application_produits;
+create policy "produits_admin" on public.application_produits
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
