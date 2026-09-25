@@ -6,8 +6,13 @@ export const metadata: Metadata = {
   description: "Prêt. Sain. Maîtrisé.",
 };
 
+// maximumScale : empêche Safari iOS de zoomer (et de rester zoomé) quand on
+// touche un champ de saisie ; le zoom manuel au pincement reste possible.
 export const viewport: Viewport = {
   themeColor: "#1c2e1e",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

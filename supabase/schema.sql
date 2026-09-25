@@ -202,35 +202,82 @@ drop policy if exists "aliments_admin_write" on public.application_aliments;
 create policy "aliments_admin_write" on public.application_aliments
   for all using (public.application_is_admin()) with check (public.application_is_admin());
 
--- Recherche multi-mots insensible aux accents : chaque mot doit apparaître.
+-- Recherche tolérante : sans accents, pluriels/féminins, synonymes du quotidien,
+-- pourcentages exacts ("5%" ne trouve pas "15%"), un mot manquant toléré.
 create or replace function public.application_rechercher_aliments(q text, limite int default 30)
 returns setof public.application_aliments
-language sql
+language plpgsql
 stable
 set search_path = public, extensions
 as $$
-  with requete as (
-    select lower(extensions.unaccent(trim(q))) as qn
-  ), mots as (
-    -- Pluriels : "amandes" doit trouver "Amande", "oeufs" trouver "Oeuf".
-    select array(
-      select case when length(w) > 3 and right(w, 1) in ('s', 'x') then left(w, -1) else w end
-      from unnest(string_to_array(qn, ' ')) w
-      where w <> ''
-    ) as liste, qn
-    from requete
-  )
+declare
+  qn text := ' ' || regexp_replace(lower(extensions.unaccent(coalesce(q, ''))), '[^a-z0-9% ]', ' ', 'g') || ' ';
+  syn record;
+  mot text;
+  racines text[] := '{}';
+  pourcents text[] := '{}';
+  n int;
+begin
+  -- Termes du quotidien -> vocabulaire de la table CIQUAL.
+  for syn in
+    select * from (values
+      (' blancs de poulet ', ' poulet filet '),
+      (' blanc de poulet ', ' poulet filet '),
+      (' blanc poulet ', ' poulet filet '),
+      (' filet de poulet ', ' poulet filet '),
+      (' escalope de poulet ', ' poulet filet '),
+      (' blanc de dinde ', ' dinde filet '),
+      (' escalope de dinde ', ' dinde filet '),
+      (' viande hachee ', ' boeuf hache '),
+      (' viande hache ', ' boeuf hache '),
+      (' pdt ', ' pomme de terre ')
+    ) as v(de, vers)
+  loop
+    qn := replace(qn, syn.de, syn.vers);
+  end loop;
+  qn := regexp_replace(qn, '([0-9]+) +%', '\1%', 'g');
+
+  foreach mot in array regexp_split_to_array(trim(qn), '\s+') loop
+    if mot = '' or mot = any (array['de','du','des','d','la','le','les','l','a','au','aux','et','en','un','une','avec']) then
+      continue;
+    end if;
+    if mot ~ '^[0-9]+%$' then
+      pourcents := pourcents || mot;
+      continue;
+    end if;
+    -- Pluriel puis féminin : "hachees" -> "hache", "cuite" -> "cuit".
+    if length(mot) > 3 and right(mot, 1) in ('s', 'x') then mot := left(mot, -1); end if;
+    if length(mot) > 3 and right(mot, 1) = 'e' then mot := left(mot, -1); end if;
+    racines := racines || mot;
+  end loop;
+
+  n := cardinality(racines);
+  if n = 0 and cardinality(pourcents) = 0 then
+    return;
+  end if;
+
+  return query
   select a.*
-  from public.application_aliments a, mots
-  where cardinality(mots.liste) > 0
+  from public.application_aliments a
+  cross join lateral (
+    select count(*) filter (
+      where a.nom_normalise like '%' || r || '%'
+         or (r = 'cuit' and a.nom_normalise ~ '(cuit|roti|poele|saute|grille|bouilli|vapeur|four)')
+    ) as nb
+    from unnest(racines) r
+  ) m
+  where (n = 0 or m.nb >= greatest(1, n - 1))
     and not exists (
-      select 1 from unnest(mots.liste) w where a.nom_normalise not like '%' || w || '%'
+      select 1 from unnest(pourcents) p
+      where a.nom_normalise !~ ('(^|[^0-9])' || replace(p, '%', '') || ' ?%')
     )
   order by
-    (a.nom_normalise like mots.liste[1] || '%') desc,
-    extensions.similarity(a.nom_normalise, mots.qn) desc,
+    m.nb desc,
+    (n > 0 and a.nom_normalise like racines[1] || '%') desc,
+    extensions.similarity(a.nom_normalise, trim(qn)) desc,
     length(a.nom)
   limit least(greatest(limite, 1), 100);
+end;
 $$;
 
 revoke execute on function public.application_rechercher_aliments(text, int) from public, anon;

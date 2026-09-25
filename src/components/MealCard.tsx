@@ -1,7 +1,6 @@
 import Image from "next/image";
 import { Trash2, UtensilsCrossed } from "lucide-react";
 import type { RepasJournal } from "@/lib/types";
-import { REPAS_TYPE_LABELS } from "@/lib/macros";
 
 const SOURCE_LABELS: Record<string, string> = {
   chef2box: "Box Chef2Box",
@@ -37,7 +36,7 @@ export function MealCard({
           </button>
         </div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-c2b-gold">
-          {REPAS_TYPE_LABELS[repas.repas_type]} · {SOURCE_LABELS[repas.source]}
+          {SOURCE_LABELS[repas.source]}
         </p>
         <p className="text-xs text-c2b-muted mt-0.5">
           {Math.round(repas.calories * repas.quantite)} kcal · {Math.round(repas.proteines * repas.quantite)}g P ·{" "}

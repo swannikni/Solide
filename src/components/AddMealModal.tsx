@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
-import { REPAS_TYPE_LABELS } from "@/lib/macros";
+import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, RepasType, SourceRepas } from "@/lib/types";
 
 type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
@@ -15,7 +15,11 @@ type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number
 
 const GRAMMES_RAPIDES = [50, 100, 150, 200, 250];
 
-const UNITES_GRAMMES = /^(kg|g|gr|grs|gramme|grammes)$/i;
+const RE_CRU = /\bcrue?s?\b/i;
+const RE_CUIT = /(cuit|rôti|poêlé|sauté|grillé|bouilli|vapeur|au four|frit)/i;
+const RE_GRAS = /(\d+)\s?% MG/i;
+
+const UNITES_GRAMMES =/^(kg|g|gr|grs|gramme|grammes)$/i;
 const NOMBRE_AVEC_UNITE = /^(\d+(?:[.,]\d+)?)(kg|g|gr|grs|gramme|grammes)?$/i;
 
 // "compote 45gr", "45 g compote", "riz 150" -> recherche sans le poids + grammes.
@@ -89,11 +93,32 @@ export function AddMealModal({
   const [resultatsMarques, setResultatsMarques] = useState<ProduitMarque[] | null>(null);
   const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [nomAffiche, setNomAffiche] = useState(prefillTrouve?.nom ?? "");
+  const [filtreCuisson, setFiltreCuisson] = useState<"tous" | "cru" | "cuit">("tous");
+  const [filtreGras, setFiltreGras] = useState<string | null>(null);
 
   const { termes: termesRecherche, grammes: grammesSaisis } = analyserRecherche(rechercheManuelle);
   const rechercheActive = termesRecherche.length >= 2;
 
+  // Variantes proposées en pastilles quand la recherche en contient plusieurs.
+  const aDesCrus = resultatsAliments.some((a) => RE_CRU.test(a.nom));
+  const aDesCuits = resultatsAliments.some((a) => RE_CUIT.test(a.nom));
+  const tauxGras = Array.from(
+    new Set(resultatsAliments.map((a) => a.nom.match(RE_GRAS)?.[1]).filter((t): t is string => !!t))
+  ).sort((x, y) => Number(x) - Number(y));
+  const alimentsAffiches = resultatsAliments.filter(
+    (a) =>
+      (filtreCuisson === "tous" || (filtreCuisson === "cru" ? RE_CRU : RE_CUIT).test(a.nom)) &&
+      (filtreGras === null || a.nom.match(RE_GRAS)?.[1] === filtreGras)
+  );
+
   useEffect(() => {
+    setNomAffiche(trouve?.nom ?? "");
+  }, [trouve]);
+
+  useEffect(() => {
+    setFiltreCuisson("tous");
+    setFiltreGras(null);
     setResultatsMarques(null);
     if (!rechercheActive) {
       setResultatsAliments([]);
@@ -260,7 +285,7 @@ export function AddMealModal({
       client_id: clientId,
       repas_type: repasType,
       source: trouve.source,
-      nom: trouve.nom,
+      nom: nomAffiche.trim() || trouve.nom,
       quantite: quantiteFinale,
       calories: trouve.calories,
       proteines: trouve.proteines,
@@ -285,8 +310,10 @@ export function AddMealModal({
   const facteur = trouve ? (trouve.paGrammes ? grammes / 100 : quantite) : 0;
 
   return (
-    <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-end md:items-center justify-center">
-      <div className="bg-c2b-cream w-full md:max-w-md md:rounded-[24px] rounded-t-[24px] max-h-[90vh] overflow-y-auto">
+    // Plein écran sur mobile : ancrée en haut, la barre de recherche reste
+    // visible au-dessus du clavier iOS.
+    <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-stretch md:items-center justify-center">
+      <div className="bg-c2b-cream w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-[24px] md:max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 sticky top-0 z-10 bg-c2b-cream">
           <h2 className="titre text-2xl">Ajouter un <em>repas</em></h2>
           <button onClick={onClose} className="text-c2b-green/60">
@@ -417,14 +444,35 @@ export function AddMealModal({
                       Aucun aliment générique trouvé.
                     </p>
                   ) : (
+                    <>
+                      {((aDesCrus && aDesCuits) || tauxGras.length > 1) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {aDesCrus && aDesCuits &&
+                            (["tous", "cru", "cuit"] as const).map((c) => (
+                              <Pastille key={c} active={filtreCuisson === c} onClick={() => setFiltreCuisson(c)}>
+                                {c === "tous" ? "Cru & cuit" : c === "cru" ? "Cru" : "Cuit"}
+                              </Pastille>
+                            ))}
+                          {tauxGras.length > 1 &&
+                            tauxGras.map((t) => (
+                              <Pastille
+                                key={t}
+                                active={filtreGras === t}
+                                onClick={() => setFiltreGras(filtreGras === t ? null : t)}
+                              >
+                                {t}% MG
+                              </Pastille>
+                            ))}
+                        </div>
+                      )}
                     <ul className="carte overflow-hidden divide-y divide-black/5">
-                      {resultatsAliments.map((a) => (
+                      {alimentsAffiches.map((a) => (
                         <li key={a.id}>
                           <button
                             onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
-                            className="w-full text-left px-3 py-2.5"
+                            className="w-full text-left px-4 py-3"
                           >
-                            <p className="text-sm text-c2b-green">{a.nom}</p>
+                            <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
                             <p className="text-[11px] text-c2b-muted">
                               100 g · {Math.round(a.calories)} kcal · {a.proteines}g P · {a.glucides}g G ·{" "}
                               {a.lipides}g L
@@ -433,6 +481,7 @@ export function AddMealModal({
                         </li>
                       ))}
                     </ul>
+                    </>
                   )}
 
                   {resultatsMarques === null ? (
@@ -530,27 +579,29 @@ export function AddMealModal({
 
           {etape === "confirmation" && trouve && (
             <div className="space-y-4">
-              <div className="carte p-4">
-                <p className="font-bold text-c2b-green">{trouve.nom}</p>
-                <p className="text-xs text-c2b-muted">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom</label>
+                <input
+                  value={nomAffiche}
+                  onChange={(e) => setNomAffiche(e.target.value)}
+                  placeholder={trouve.nom}
+                  className="champ font-semibold"
+                />
+                <p className="text-xs text-c2b-muted mt-1.5">
                   {trouve.calories} kcal · {trouve.proteines}g P · {trouve.glucides}g G · {trouve.lipides}g L
-                  {trouve.paGrammes ? " (pour 100g)" : " (par portion)"}
+                  {trouve.paGrammes ? " pour 100 g" : " par portion"}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Repas</label>
-                <select
-                  value={repasType}
-                  onChange={(e) => setRepasType(e.target.value as RepasType)}
-                  className="champ"
-                >
-                  {Object.entries(REPAS_TYPE_LABELS).map(([valeur, label]) => (
-                    <option key={valeur} value={valeur}>
-                      {label}
-                    </option>
+                <div className="grid grid-cols-2 gap-2">
+                  {ORDRE_REPAS.map((r) => (
+                    <Pastille key={r} active={repasType === r} onClick={() => setRepasType(r)} large>
+                      {REPAS_TYPE_LABELS[r]}
+                    </Pastille>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div>
@@ -625,5 +676,33 @@ export function AddMealModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function Pastille({
+  active,
+  onClick,
+  large = false,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  large?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border-[1.5px] font-semibold transition ${
+        large ? "py-2.5 text-sm" : "px-3.5 py-1.5 text-[13px]"
+      } ${
+        active
+          ? "bg-c2b-green border-c2b-green text-white"
+          : "bg-white border-c2b-green/15 text-c2b-green hover:border-c2b-gold/60"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

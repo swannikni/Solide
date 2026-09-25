@@ -9,8 +9,8 @@ import { MacroBar } from "@/components/MacroBar";
 import { BoxDuJourCard } from "@/components/BoxDuJourCard";
 import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
-import { totauxDuJour } from "@/lib/macros";
-import type { Client, Commande, RepasJournal } from "@/lib/types";
+import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
+import type { Client, Commande, RepasJournal, RepasType } from "@/lib/types";
 
 export function DashboardClient({
   client,
@@ -28,6 +28,7 @@ export function DashboardClient({
     commande: Commande;
     editable: boolean;
   } | null>(null);
+  const [repasCible, setRepasCible] = useState<RepasType>("dejeuner");
 
   const totaux = totauxDuJour(repasDuJour);
 
@@ -42,13 +43,20 @@ export function DashboardClient({
 
   function ouvrirDepuisBox(commande: Commande) {
     setPrefillBox({ commande, editable: true });
+    setRepasCible(commande.repas_type);
+    setModalOuverte(true);
+  }
+
+  function ouvrirAjout(type: RepasType) {
+    setPrefillBox(null);
+    setRepasCible(type);
     setModalOuverte(true);
   }
 
   const idsCommandesAjoutees = new Set(repasDuJour.map((r) => r.commande_id).filter(Boolean));
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-7 space-y-6">
+    <main className="max-w-2xl mx-auto px-4 pt-7 pb-20 space-y-6">
       <header>
         <span className="lbl mb-2">
           {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
@@ -82,36 +90,45 @@ export function DashboardClient({
         </section>
       )}
 
-      <section className="space-y-3">
-        <span className="lbl">Repas du jour</span>
-        {repasDuJour.length === 0 ? (
-          <div className="carte px-6 py-8 text-center">
-            <p className="font-serif text-xl text-c2b-green mb-1">Rien pour l&apos;instant.</p>
-            <p className="text-sm text-c2b-muted mb-5">Ajoutez votre premier repas de la journée.</p>
-            <button
-              onClick={() => {
-                setPrefillBox(null);
-                setModalOuverte(true);
-              }}
-              className="btn-primary"
-            >
-              <Plus size={18} /> Ajouter un repas
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {repasDuJour.map((r) => (
-              <MealCard key={r.id} repas={r} onSupprimer={supprimerRepas} />
-            ))}
-          </div>
-        )}
-      </section>
+      {ORDRE_REPAS.map((type) => {
+        const repasSection = repasDuJour.filter((r) => r.repas_type === type);
+        const kcalSection = totauxDuJour(repasSection).calories;
+        return (
+          <section key={type} className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-baseline gap-2">
+                <h2 className="font-serif text-[22px] text-c2b-green">{REPAS_TYPE_LABELS[type]}</h2>
+                {repasSection.length > 0 && (
+                  <span className="text-xs font-bold text-c2b-gold">{Math.round(kcalSection)} kcal</span>
+                )}
+              </div>
+              <button
+                onClick={() => ouvrirAjout(type)}
+                className="inline-flex items-center gap-1 rounded-full bg-white border border-black/5 px-3 py-1.5 text-[13px] font-bold text-c2b-green hover:border-c2b-gold/50"
+              >
+                <Plus size={15} /> Ajouter
+              </button>
+            </div>
+            {repasSection.length === 0 ? (
+              <button
+                onClick={() => ouvrirAjout(type)}
+                className="w-full rounded-[20px] border-2 border-dashed border-c2b-green/10 py-4 text-sm text-c2b-muted hover:border-c2b-gold/40"
+              >
+                Rien pour l&apos;instant
+              </button>
+            ) : (
+              <div className="space-y-2">
+                {repasSection.map((r) => (
+                  <MealCard key={r.id} repas={r} onSupprimer={supprimerRepas} />
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
 
       <button
-        onClick={() => {
-          setPrefillBox(null);
-          setModalOuverte(true);
-        }}
+        onClick={() => ouvrirAjout(repasSelonHeure())}
         className="fixed bottom-[92px] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-gold hover:bg-c2b-gold-light text-c2b-green rounded-full w-14 h-14 flex items-center justify-center shadow-[0_8px_24px_rgba(201,151,58,0.45)] transition"
         aria-label="Ajouter un repas"
       >
@@ -122,7 +139,7 @@ export function DashboardClient({
         <AddMealModal
           clientId={client.id}
           commandeId={prefillBox?.commande.id}
-          repasTypeParDefaut={prefillBox?.commande.repas_type ?? "dejeuner"}
+          repasTypeParDefaut={repasCible}
           prefillTrouve={
             prefillBox?.commande.plats
               ? {

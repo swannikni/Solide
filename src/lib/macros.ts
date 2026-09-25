@@ -1,4 +1,4 @@
-import type { RepasJournal } from "@/lib/types";
+import type { RepasJournal, RepasType } from "@/lib/types";
 
 export interface Totaux {
   calories: number;
@@ -22,6 +22,16 @@ export function totauxDuJour(repas: RepasJournal[]): Totaux {
 export const REPAS_TYPE_LABELS: Record<string, string> = {
   petit_dejeuner: "Petit-déjeuner",
   dejeuner: "Déjeuner",
-  diner: "Dîner",
   collation: "Collation",
+  diner: "Dîner",
 };
+
+export const ORDRE_REPAS: RepasType[] = ["petit_dejeuner", "dejeuner", "collation", "diner"];
+
+export function repasSelonHeure(date = new Date()): RepasType {
+  const h = date.getHours() + date.getMinutes() / 60;
+  if (h < 10.5) return "petit_dejeuner";
+  if (h < 15) return "dejeuner";
+  if (h < 18.5) return "collation";
+  return "diner";
+}

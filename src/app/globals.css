@@ -32,7 +32,7 @@
     @apply inline-flex items-center justify-center gap-2 rounded-full bg-c2b-gold px-6 py-3 text-[15px] font-extrabold text-c2b-green transition hover:bg-c2b-gold-light;
   }
   .champ {
-    @apply w-full rounded-xl border border-c2b-cream-2 bg-white px-4 py-3 text-[15px] font-medium text-c2b-text placeholder:text-c2b-muted/60 focus:border-c2b-gold focus:outline-none;
+    @apply w-full rounded-xl border border-c2b-cream-2 bg-white px-4 py-3 text-base font-medium text-c2b-text placeholder:text-c2b-muted/60 focus:border-c2b-gold focus:outline-none;
   }
   .pastille {
     @apply inline-flex items-center gap-2 rounded-full bg-c2b-gold/[0.12] px-3.5 py-1.5 text-xs font-bold tracking-wide text-c2b-gold;
