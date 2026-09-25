@@ -360,6 +360,79 @@ drop policy if exists "poids_self_write" on public.application_poids;
 create policy "poids_self_write" on public.application_poids
   for all using (auth.uid() = client_id) with check (auth.uid() = client_id);
 
+-- ============ RESTAURANTS & FAST-FOOD ============
+-- Valeurs officielles publiées par les enseignes (par portion). Données
+-- dans supabase/data/restaurants.json (McDonald's Suisse, Burger King France).
+create table if not exists public.application_restaurants (
+  id bigint generated always as identity primary key,
+  enseigne text not null,
+  nom text not null,
+  nom_normalise text not null,
+  calories numeric not null,
+  proteines numeric not null,
+  glucides numeric not null,
+  lipides numeric not null,
+  portion_g numeric,
+  pays text not null,
+  source_url text not null,
+  maj date not null default current_date,
+  unique (enseigne, nom)
+);
+
+alter table public.application_restaurants enable row level security;
+
+drop policy if exists "restaurants_read_authenticated" on public.application_restaurants;
+create policy "restaurants_read_authenticated" on public.application_restaurants
+  for select to authenticated using (true);
+
+drop policy if exists "restaurants_admin_write" on public.application_restaurants;
+create policy "restaurants_admin_write" on public.application_restaurants
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+create index if not exists application_restaurants_nom_trgm
+  on public.application_restaurants using gin (nom_normalise extensions.gin_trgm_ops);
+
+create or replace function public.application_rechercher_restaurants(q text, limite int default 20)
+returns setof public.application_restaurants
+language plpgsql
+stable
+set search_path = public, extensions
+as $$
+declare
+  qn text := trim(regexp_replace(lower(extensions.unaccent(coalesce(q, ''))), '[^a-z0-9 ]', ' ', 'g'));
+  racines text[] := '{}';
+  mot text;
+  n int;
+begin
+  qn := replace(' ' || qn || ' ', ' mc do ', ' mcdonald ');
+  qn := replace(qn, ' mcdo ', ' mcdonald ');
+  qn := replace(qn, ' mac do ', ' mcdonald ');
+  qn := replace(qn, ' bk ', ' burger king ');
+  foreach mot in array regexp_split_to_array(trim(qn), '\s+') loop
+    if mot = '' or mot = any (array['de','du','des','la','le','les','a','au','aux','et','en','un','une','avec']) then
+      continue;
+    end if;
+    if length(mot) > 3 and right(mot, 1) in ('s', 'x') then mot := left(mot, -1); end if;
+    racines := racines || mot;
+  end loop;
+  n := cardinality(racines);
+  if n = 0 then return; end if;
+
+  return query
+  select r.*
+  from public.application_restaurants r
+  cross join lateral (
+    select count(*) filter (where r.nom_normalise like '%' || x || '%') as nb from unnest(racines) x
+  ) m
+  where m.nb >= greatest(1, n - 1)
+  order by m.nb desc, extensions.similarity(r.nom_normalise, qn) desc, length(r.nom)
+  limit least(greatest(limite, 1), 50);
+end;
+$$;
+
+revoke execute on function public.application_rechercher_restaurants(text, int) from public, anon;
+grant execute on function public.application_rechercher_restaurants(text, int) to authenticated;
+
 -- ============ STORAGE (photos de repas) ============
 -- Bucket privé : les photos s'affichent via des liens signés (1 h).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

@@ -67,6 +67,31 @@ on conflict (code_ciqual) do nothing;
 drop extension http;
 ```
 
+### 2 bis bis. Restaurants et fast-food
+
+La table `application_restaurants` contient les produits de McDonald's
+(valeurs officielles McDonald's Suisse, en français) et de Burger King (site
+Burger King France), par portion. Le Maroc ne publie pas ces valeurs. Les
+produits apparaissent dans la saisie manuelle, rubrique « Restaurants &
+fast-food ». Pour les réimporter depuis
+[`supabase/data/restaurants.json`](./supabase/data/restaurants.json) :
+
+```sql
+create extension if not exists http with schema extensions;
+
+insert into public.application_restaurants (enseigne, nom, nom_normalise, calories, proteines, glucides, lipides, portion_g, pays, source_url)
+select enseigne, nom,
+  trim(regexp_replace(lower(extensions.unaccent(
+    case enseigne when 'McDonald''s' then 'mcdonald mcdo ' when 'Burger King' then 'burger king bk ' else lower(enseigne) || ' ' end || nom
+  )), '[^a-z0-9]+', ' ', 'g')),
+  calories, proteines, glucides, lipides, portion_g, pays, source_url
+from extensions.http_get('https://raw.githubusercontent.com/swannikni/Solide/claude/comment-ca-marche-h8u2w9/supabase/data/restaurants.json') r,
+     jsonb_to_recordset(r.content::jsonb) as x(enseigne text, nom text, calories numeric, proteines numeric, glucides numeric, lipides numeric, portion_g numeric, pays text, source_url text)
+on conflict (enseigne, nom) do nothing;
+
+drop extension http;
+```
+
 ### 2 ter. Activer l'assistant IA
 
 L'onglet « Assistant » utilise Claude Haiku 4.5 (Anthropic) via la route

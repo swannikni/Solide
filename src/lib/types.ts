@@ -102,3 +102,17 @@ export interface Poids {
   poids_kg: number;
   created_at: string;
 }
+
+// Produit d'une chaîne de restauration, valeurs officielles par portion.
+export interface ProduitRestaurant {
+  id: number;
+  enseigne: string;
+  nom: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  portion_g: number | null;
+  pays: string;
+  source_url: string;
+}

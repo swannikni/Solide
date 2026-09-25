@@ -10,7 +10,7 @@ import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
-import type { Aliment, Favori, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
+import type { Aliment, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
 type Etape = "choix" | "scan_chef2box" | "scan_barcode" | "recherche_code" | "manuel" | "confirmation" | "erreur";
 
@@ -99,6 +99,7 @@ export function AddMealModal({
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [rechercheManuelle, setRechercheManuelle] = useState("");
   const [resultatsAliments, setResultatsAliments] = useState<Aliment[]>([]);
+  const [resultatsRestaurants, setResultatsRestaurants] = useState<ProduitRestaurant[]>([]);
   const [rechercheEnCours, setRechercheEnCours] = useState(false);
   const [resultatsMarques, setResultatsMarques] = useState<ProduitMarque[] | null>(null);
   const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
@@ -150,18 +151,20 @@ export function AddMealModal({
     setTousLesAliments(false);
     if (!rechercheActive) {
       setResultatsAliments([]);
+      setResultatsRestaurants([]);
       setRechercheMarquesEnCours(false);
       return;
     }
     let annule = false;
     setRechercheEnCours(true);
     const minuteur = setTimeout(async () => {
-      const { data } = await supabase.rpc("application_rechercher_aliments", {
-        q: termesRecherche,
-        limite: 30,
-      });
+      const [{ data }, { data: restaurants }] = await Promise.all([
+        supabase.rpc("application_rechercher_aliments", { q: termesRecherche, limite: 30 }),
+        supabase.rpc("application_rechercher_restaurants", { q: termesRecherche, limite: 8 }),
+      ]);
       if (!annule) {
         setResultatsAliments((data as Aliment[] | null) ?? []);
+        setResultatsRestaurants((restaurants as ProduitRestaurant[] | null) ?? []);
         setRechercheEnCours(false);
       }
     }, 300);
@@ -284,6 +287,21 @@ export function AddMealModal({
     });
     if (enGrammes) setGrammes(Math.round(Number(m.quantite) * 100));
     else setQuantite(Number(m.quantite) || 1);
+    setSaisieQuantite(null);
+    setEtape("confirmation");
+  }
+
+  function choisirRestaurant(r: ProduitRestaurant) {
+    setTrouve({
+      nom: `${r.nom} (${r.enseigne})`,
+      calories: Math.round(Number(r.calories)),
+      proteines: Number(r.proteines),
+      glucides: Number(r.glucides),
+      lipides: Number(r.lipides),
+      source: "manuel",
+      quantiteParDefaut: 1,
+    });
+    setQuantite(1);
     setSaisieQuantite(null);
     setEtape("confirmation");
   }
@@ -589,6 +607,33 @@ export function AddMealModal({
                 </>
               )}
 
+              {rechercheActive && !rechercheEnCours && resultatsRestaurants.length > 0 && (
+                <div className="space-y-2">
+                  <p className="lbl pt-1">Restaurants &amp; fast-food</p>
+                  <ul className="carte overflow-hidden divide-y divide-black/5">
+                    {resultatsRestaurants.map((r) => (
+                      <li key={r.id}>
+                        <button onClick={() => choisirRestaurant(r)} className="w-full text-left px-4 py-3">
+                          <p className="text-[15px] font-semibold text-c2b-green">
+                            {r.nom}
+                            <span className="font-medium text-c2b-muted"> · {r.enseigne}</span>
+                          </p>
+                          <p className="text-[11px] text-c2b-muted">
+                            1 portion{r.portion_g ? ` (${Math.round(Number(r.portion_g))} g)` : ""} ·{" "}
+                            {Math.round(Number(r.calories))} kcal · {Number(r.proteines)}g P · {Number(r.glucides)}g G ·{" "}
+                            {Number(r.lipides)}g L
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-c2b-muted">
+                    Valeurs officielles publiées par l&apos;enseigne ({sourcesRestaurants(resultatsRestaurants)}). Les
+                    recettes au Maroc peuvent légèrement varier.
+                  </p>
+                </div>
+              )}
+
               {rechercheActive && (
                 <div className="space-y-2">
                   <p className="lbl pt-1">Aliments</p>
@@ -885,4 +930,10 @@ function LigneMemorisee({ nom, detail, onClick }: { nom: string; detail: string;
       <span className="text-[11px] text-c2b-muted flex-shrink-0">{detail}</span>
     </button>
   );
+}
+
+const PAYS: Record<string, string> = { FR: "France", CH: "Suisse", MA: "Maroc", UK: "Royaume-Uni" };
+
+function sourcesRestaurants(produits: ProduitRestaurant[]) {
+  return Array.from(new Set(produits.map((p) => `${p.enseigne} ${PAYS[p.pays] ?? p.pays}`))).join(", ");
 }
