@@ -528,7 +528,7 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
 .q-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .q-full { grid-column: 1 / -1; }
 .q-field label { display: block; font-size: 12px; font-weight: 700; color: rgba(245,240,232,0.6); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-.q-field input[type="text"], .q-field input[type="number"], .q-field input[type="email"] {
+.q-field input[type="text"], .q-field input[type="number"], .q-field input[type="email"], .q-field input[type="tel"], .q-field select {
   width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 12px; padding: 14px 16px; font-size: 15px; font-weight: 600;
   color: var(--cream); font-family: inherit; transition: border-color 0.2s;
@@ -1003,7 +1003,7 @@ HA
     <div class="q-grid">
       <div class="q-field"><label>Prénom & Nom *</label><input type="text" id="q-nom" placeholder=""></div>
       <div class="q-field"><label>Email *</label><input type="email" id="q-email" placeholder="" autocomplete="off"></div>
-      <div class="q-field q-full"><label>WhatsApp</label><input type="tel" id="q-tel" placeholder="+212 6XX XXX XXX"></div>
+      <div class="q-field q-full"><label>WhatsApp</label><div style="display:flex;gap:8px"><select id="q-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="q-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
       <div class="q-field"><label>Âge *</label><input type="number" id="q-age" placeholder="ex. 32" min="16" max="80" inputmode="numeric"></div>
       <div class="q-field"><label>Taille (cm) *</label><input type="number" id="q-taille" placeholder="ex. 175" min="130" max="220" inputmode="numeric"></div>
       <div class="q-field"><label>Poids (kg) *</label><input type="number" id="q-poids" placeholder="ex. 72" min="35" max="250" inputmode="numeric"></div>
@@ -1305,6 +1305,15 @@ function genererBilan() {
   var plaisir  = getR('plaisir') || '—';
   var emailVal = getV('q-email');
   var tel      = getV('q-tel');
+  // Numéro au format international (+33…, +212…) : sinon le lien WhatsApp
+  // du bilan (wa.me/0629…) ne s'ouvre pas.
+  if (tel !== '—') {
+    var brutTel = tel.replace(/[^0-9+]/g, '');
+    var paysEl = document.getElementById('q-tel-pays');
+    if (brutTel.indexOf('+') === 0) tel = '+' + brutTel.replace(/[^0-9]/g, '');
+    else if (brutTel.indexOf('00') === 0) tel = '+' + brutTel.slice(2);
+    else tel = (paysEl ? paysEl.value : '+212') + brutTel.replace(/^0/, '');
+  }
   var sport    = getV('q-sport');
   var duree    = getR('duree') || '—';
   var objTexte = getV('q-obj-texte');
@@ -1489,6 +1498,7 @@ function genererBilan() {
       var date = new Date().toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
       emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
       client_nom: nom, client_email: emailVal, client_tel: tel, client_date: date,
+      client_whatsapp: tel !== '—' ? 'https://wa.me/' + tel.replace(/[^0-9]/g, '') : '',
       client_age: age, client_sexe: sexe, client_taille: taille, client_poids: poids,
       objectif: objectif, objectif_texte: objTexte, seances: seances, sport: sport,
       duree: duree, job: job, repas: repas, repartition: repartition,

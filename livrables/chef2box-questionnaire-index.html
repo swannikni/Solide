@@ -120,7 +120,7 @@ body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(-
 /* CHAMPS */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
-.field input[type="text"], .field input[type="number"], .field input[type="email"], .field input[type="tel"], .field textarea {
+.field input[type="text"], .field input[type="number"], .field input[type="email"], .field input[type="tel"], .field select, .field textarea {
   width: 100%; background: var(--white); border: 2px solid var(--cream-dark);
   border-radius: 10px; padding: 11px 13px;
   font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700; color: var(--green);
@@ -412,7 +412,7 @@ body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(-
       </div>
       <div class="field-row">
         <div class="field"><label>Email</label><input type="email" id="f-email" placeholder="votre@email.com" autocomplete="off"></div>
-        <div class="field"><label>WhatsApp</label><input type="tel" id="f-tel" placeholder="ex. +212 6 00 00 00 00" style="width:100%"></div>
+        <div class="field"><label>WhatsApp</label><div style="display:flex;gap:8px"><select id="f-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="f-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -999,6 +999,15 @@ function getCheckboxes(name) {
   const vals = Array.from(els).map(e => e.value);
   return vals.length ? vals.join(', ') : '—';
 }
+// Numéro au format international (+33…, +212…) pour que le lien WhatsApp s'ouvre.
+function telInternational(tel, indicatif) {
+  if (!tel || tel === '—') return tel;
+  const brut = tel.replace(/[^0-9+]/g, '');
+  if (brut.startsWith('+')) return '+' + brut.replace(/[^0-9]/g, '');
+  if (brut.startsWith('00')) return '+' + brut.slice(2);
+  return indicatif + brut.replace(/^0/, '');
+}
+
 function getVal(id) {
   const el = document.getElementById(id);
   return el && el.value.trim() ? el.value.trim() : '—';
@@ -1079,7 +1088,7 @@ function submitForm() {
   const data = {
     nom,
     email:       getVal('f-email'),
-    tel:         getVal('f-tel'),
+    tel:         telInternational(getVal('f-tel'), (document.getElementById('f-tel-pays') || {}).value || '+212'),
     age:         getVal('f-age'),
     sexe:        getRadio('sexe'),
     taille:      getVal('f-taille'),
@@ -1181,7 +1190,7 @@ Date : ${data.date}
 👤 PROFIL
 Âge : ${data.age} ans | Sexe : ${data.sexe} | Taille : ${data.taille} cm | Poids : ${data.poids} kg
 Email : ${data.email} | WhatsApp : ${data.tel}
-🔗 Ouvrir WhatsApp : https://wa.me/${data.tel.replace(/[^0-9+]/g, '')}
+🔗 Ouvrir WhatsApp : https://wa.me/${data.tel.replace(/[^0-9]/g, '')}
 
 🎯 OBJECTIFS
 ${data.objectif}
