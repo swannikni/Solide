@@ -273,7 +273,7 @@ export function DashboardClient({
         <span className="lbl mb-4">{estAujourdhui ? "Objectif du jour" : "Bilan de la journée"}</span>
         <CalorieRing consommees={totaux.calories} objectif={client.objectif_calories} />
         <div className="grid grid-cols-3 gap-2.5 mt-6">
-          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#f7f3ec" />
+          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#f7f3ec" depassementOk />
           <MacroBar label="Glucides" consomme={totaux.glucides} objectif={client.objectif_glucides} couleur="#c9973a" />
           <MacroBar label="Lipides" consomme={totaux.lipides} objectif={client.objectif_lipides} couleur="#9db8a0" />
         </div>
