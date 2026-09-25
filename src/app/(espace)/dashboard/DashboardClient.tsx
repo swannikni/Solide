@@ -119,6 +119,9 @@ export function DashboardClient({
     rafraichir();
   }
 
+  const portionsBox: Record<string, number> = {};
+  for (const c of commandesDuJour) if (c.plat_id) portionsBox[c.plat_id] = Number(c.portion ?? 1);
+
   const idsCommandesAjoutees = new Set(repasDuJour.map((r) => r.commande_id).filter(Boolean));
   const veille = decalerDate(date, -1);
 
@@ -267,15 +270,19 @@ export function DashboardClient({
           repasTypeParDefaut={repasCible}
           favoris={favoris}
           recents={recents}
+          portionsBox={portionsBox}
           prefillTrouve={(() => {
             const plat = prefillBox?.commande.plats ?? platPrerempli;
+            // Box adaptée au palier : macros de la portion du client, comptées comme 1 box.
+            const portion = plat ? (portionsBox[plat.id] ?? 1) : 1;
+            const arrondi = (v: number) => Math.round(v * portion * 10) / 10;
             return plat
               ? {
                   nom: plat.nom,
-                  calories: plat.calories,
-                  proteines: plat.proteines,
-                  glucides: plat.glucides,
-                  lipides: plat.lipides,
+                  calories: Math.round(plat.calories * portion),
+                  proteines: arrondi(plat.proteines),
+                  glucides: arrondi(plat.glucides),
+                  lipides: arrondi(plat.lipides),
                   source: "chef2box" as const,
                   plat_id: plat.id,
                   quantiteParDefaut: 1,

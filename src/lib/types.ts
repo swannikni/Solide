@@ -26,6 +26,8 @@ export interface Plat {
   glucides: number;
   lipides: number;
   photo_url: string | null;
+  ingredients: string | null;
+  recette: string | null;
   actif: boolean;
   created_at: string;
 }
@@ -48,6 +50,8 @@ export interface Commande {
   date_livraison: string;
   repas_type: "dejeuner" | "diner";
   statut: "confirmee" | "annulee" | "livree";
+  // Multiplicateur des macros standard du plat (1 = box standard).
+  portion: number;
   created_at: string;
   plats?: Plat | null;
 }

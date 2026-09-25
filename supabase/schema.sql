@@ -499,6 +499,40 @@ create policy "application_photos_insert" on storage.objects
     )
   );
 
+-- ============ BOX DU JOUR : fiche du plat + portion par client ============
+-- Le plat a des macros standard ; chaque box assignée peut être adaptée au
+-- palier du client (portion = multiplicateur des macros standard, 1 par défaut).
+alter table public.application_plats add column if not exists ingredients text;
+alter table public.application_plats add column if not exists recette text;
+alter table public.application_commandes
+  add column if not exists portion numeric not null default 1 check (portion between 0.3 and 3);
+
+-- Photos des plats : publiques (ce sont les photos du menu), seul l'admin en dépose.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'application-plats-photos', 'application-plats-photos', true, 5242880,
+  array['image/jpeg','image/png','image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "application_plats_photos_insert" on storage.objects;
+create policy "application_plats_photos_insert" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'application-plats-photos' and public.application_is_admin());
+
+drop policy if exists "application_plats_photos_update" on storage.objects;
+create policy "application_plats_photos_update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'application-plats-photos' and public.application_is_admin());
+
+drop policy if exists "application_plats_photos_delete" on storage.objects;
+create policy "application_plats_photos_delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'application-plats-photos' and public.application_is_admin());
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$

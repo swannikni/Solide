@@ -70,6 +70,7 @@ export function AddMealModal({
   clientId,
   repasTypeParDefaut = "dejeuner",
   prefillTrouve,
+  portionsBox,
   commandeId,
   date,
   favoris = [],
@@ -83,6 +84,8 @@ export function AddMealModal({
   recents?: RepasJournal[];
   repasTypeParDefaut?: RepasType;
   prefillTrouve?: Trouve;
+  // Box du jour adaptée au palier : multiplicateur des macros par plat.
+  portionsBox?: Record<string, number>;
   commandeId?: string;
   onClose: () => void;
   onAjoute: () => void;
@@ -233,12 +236,13 @@ export function AddMealModal({
       return;
     }
 
+    const portion = portionsBox?.[data.id] ?? 1;
     setTrouve({
       nom: data.nom,
-      calories: data.calories,
-      proteines: data.proteines,
-      glucides: data.glucides,
-      lipides: data.lipides,
+      calories: Math.round(data.calories * portion),
+      proteines: Math.round(data.proteines * portion * 10) / 10,
+      glucides: Math.round(data.glucides * portion * 10) / 10,
+      lipides: Math.round(data.lipides * portion * 10) / 10,
       source: "chef2box",
       plat_id: data.id,
       quantiteParDefaut: 1,
