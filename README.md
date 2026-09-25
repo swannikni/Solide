@@ -96,10 +96,18 @@ drop extension http;
 
 L'onglet « Assistant » utilise Claude Haiku 4.5 (Anthropic) via la route
 serveur `/api/assistant` (30 questions par client et par jour). Il lui faut
-une clé API Anthropic (console.anthropic.com → API Keys), à déclarer
-uniquement côté serveur dans les variables d'environnement Netlify :
-`ANTHROPIC_API_KEY` (jamais préfixée `NEXT_PUBLIC_`). Sans clé, l'onglet
-affiche « L'assistant n'est pas encore activé ».
+une clé API Anthropic, à déclarer uniquement côté serveur dans les variables
+d'environnement Netlify : `ANTHROPIC_API_KEY` (jamais préfixée `NEXT_PUBLIC_`).
+Sans clé, l'onglet Assistant est masqué.
+
+1. console.anthropic.com → Billing : ajouter du crédit.
+2. API Keys → Create Key → « Continuer avec une clé API » (pas la fédération
+   d'identité, qui ne fonctionne pas avec Netlify) → copier la clé `sk-ant-…`.
+3. Netlify, projet chef2box-appli → Project configuration → Environment
+   variables → Add a variable → `ANTHROPIC_API_KEY`, « Contains secret
+   values », valeur en Production.
+4. Redéployer : Deploys → Trigger deploy (ou n'importe quel envoi sur la
+   branche, Netlify redéploie tout seul).
 
 ### 2 quater. Créer les comptes clients depuis l'appli
 
