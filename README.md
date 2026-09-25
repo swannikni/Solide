@@ -4,11 +4,15 @@ Nom du projet (npm / Netlify) : `chef2box-appli`, pour le distinguer des
 autres projets Chef2Box (`chef2box`, `chef2box-cuisine`,
 `chef2box-questionnaire`, `chef2box-client`).
 
-Web app de suivi macro pour les clients Chef2Box : dashboard calories/macros,
-3 modes d'ajout de repas (scan étiquette Chef2Box, scan code-barres commerce,
-saisie manuelle), photo par repas, historique, messagerie avec Swann, et
-côté admin la possibilité de pré-remplir la box du jour de chaque client à
-partir de sa commande connue.
+Web app de suivi macro pour les clients Chef2Box : dashboard calories/macros
+(navigation jour par jour), 3 modes d'ajout de repas (scan étiquette Chef2Box,
+scan code-barres commerce, saisie manuelle), favoris et aliments récents,
+modification d'un aliment déjà ajouté, photo par repas, suivi du poids et
+graphiques de progrès, messagerie avec Swann, assistant IA, installable sur le
+téléphone (PWA).
+
+Côté admin : box du jour de chaque client, création des comptes clients et de
+leurs objectifs, menu des plats avec QR codes et étiquettes à imprimer.
 
 Hors scope V1 : paiement, facturation automatique, commande en ligne.
 
@@ -72,7 +76,15 @@ uniquement côté serveur dans les variables d'environnement Netlify :
 `ANTHROPIC_API_KEY` (jamais préfixée `NEXT_PUBLIC_`). Sans clé, l'onglet
 affiche « L'assistant n'est pas encore activé ».
 
-### 3. Créer les comptes
+### 2 quater. Créer les comptes clients depuis l'appli
+
+L'onglet **Admin → Clients** crée le compte (email + mot de passe généré) et la
+fiche objectifs en une fois, puis propose d'envoyer les accès par WhatsApp. Il
+utilise la clé secrète Supabase, à déclarer uniquement côté serveur dans
+Netlify : `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Project Settings → API Keys →
+clé *secret*). Sans elle, on peut modifier les objectifs mais pas créer de compte.
+
+### 3. Créer les comptes (sans la clé secrète)
 
 Il n'y a pas d'auto-inscription (accès réservé aux clients Chef2Box) :
 
@@ -83,6 +95,14 @@ Il n'y a pas d'auto-inscription (accès réservé aux clients Chef2Box) :
    objectifs caloriques/macros et son palier.
 3. Pour **votre** compte admin (Swann), mettez `est_admin = true` sur votre
    ligne `application_clients`.
+
+### QR codes des plats
+
+Chaque plat du menu (Admin → Menu & QR) reçoit un code `C2B-XXXXXX`. Le QR
+imprimé contient l'adresse `<site>/p/<code>` : scanné avec l'appareil photo
+du téléphone, il ouvre l'appli sur le plat pré-rempli (après connexion si
+besoin). Le scanner intégré accepte le lien comme le code seul. Les
+étiquettes sont au format planche A4 de 21 (63,5 × 38,1 mm).
 
 ### 4. Lancer en local
 
@@ -96,8 +116,9 @@ Ouvrez [http://localhost:3000](http://localhost:3000).
 
 Le projet est un Next.js standard : déployable sur Netlify (comme les autres
 outils Chef2Box) ou Vercel. Pensez à renseigner les mêmes variables
-d'environnement (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-dans les paramètres du site de déploiement.
+d'environnement (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+et côté serveur `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`) dans les
+paramètres du site de déploiement.
 
 ## Structure
 
@@ -105,11 +126,15 @@ dans les paramètres du site de déploiement.
 src/
   app/
     login/          Connexion (Supabase Auth)
-    dashboard/       Dashboard client (anneau calories, box du jour, journal)
-    history/         Historique des repas par jour
+    dashboard/       Dashboard client (anneau calories, box du jour, journal, ?date=)
+    history/         Progrès (poids, calories 7 jours) et journal des repas
     messages/         Messagerie client <-> admin
-    admin/           Assignation de la box du jour par client (Swann)
-  components/         CalorieRing, MacroBar, AddMealModal (3 modes), Scanner...
+    assistant/       Assistant IA nutrition
+    admin/           Box du jour, clients/, menu/ (QR + etiquettes/)
+    p/[code]/        Lien des QR d'étiquettes -> accueil avec le plat pré-rempli
+    api/             produits (Open Food Facts), assistant, admin/clients
+    manifest.ts      Installation sur l'écran d'accueil (PWA)
+  components/         CalorieRing, MacroBar, AddMealModal, EditMealModal, Scanner, Graphiques...
   lib/
     supabase/         Clients Supabase (browser/server)
     openfoodfacts.ts  Recherche produit par code-barres
