@@ -15,6 +15,38 @@ type ProduitMarque = Awaited<ReturnType<typeof rechercherProduitsParNom>>[number
 
 const GRAMMES_RAPIDES = [50, 100, 150, 200, 250];
 
+const UNITES_GRAMMES = /^(kg|g|gr|grs|gramme|grammes)$/i;
+const NOMBRE_AVEC_UNITE = /^(\d+(?:[.,]\d+)?)(kg|g|gr|grs|gramme|grammes)?$/i;
+
+// "compote 45gr", "45 g compote", "riz 150" -> recherche sans le poids + grammes.
+// Un nombre sans unité n'est un poids qu'en fin de recherche ("pain 7 céréales"
+// garde son 7).
+function analyserRecherche(texte: string): { termes: string; grammes: number | null } {
+  const mots = texte.trim().split(/\s+/).filter(Boolean);
+  const versGrammes = (nombre: string, unite?: string) => {
+    const valeur = Number(nombre.replace(",", "."));
+    return unite?.toLowerCase() === "kg" ? valeur * 1000 : valeur;
+  };
+
+  for (let i = 0; i < mots.length; i++) {
+    const m = mots[i].match(NOMBRE_AVEC_UNITE);
+    if (!m) continue;
+    const uniteSeparee = !m[2] && mots[i + 1] && UNITES_GRAMMES.test(mots[i + 1]);
+    if (m[2] || uniteSeparee) {
+      const grammes = versGrammes(m[1], m[2] ?? mots[i + 1]);
+      const termes = mots.filter((_, j) => j !== i && !(uniteSeparee && j === i + 1));
+      return { termes: termes.join(" "), grammes: grammes > 0 ? grammes : null };
+    }
+  }
+
+  const dernier = mots.length > 1 ? mots[mots.length - 1].match(/^\d+(?:[.,]\d+)?$/) : null;
+  if (dernier) {
+    const grammes = versGrammes(dernier[0]);
+    return { termes: mots.slice(0, -1).join(" "), grammes: grammes > 0 ? grammes : null };
+  }
+  return { termes: mots.join(" "), grammes: null };
+}
+
 interface Trouve {
   nom: string;
   calories: number;
@@ -58,7 +90,8 @@ export function AddMealModal({
   const [rechercheMarquesEnCours, setRechercheMarquesEnCours] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
 
-  const rechercheActive = rechercheManuelle.trim().length >= 2;
+  const { termes: termesRecherche, grammes: grammesSaisis } = analyserRecherche(rechercheManuelle);
+  const rechercheActive = termesRecherche.length >= 2;
 
   useEffect(() => {
     setResultatsMarques(null);
@@ -70,7 +103,7 @@ export function AddMealModal({
     setRechercheEnCours(true);
     const minuteur = setTimeout(async () => {
       const { data } = await supabase.rpc("application_rechercher_aliments", {
-        q: rechercheManuelle,
+        q: termesRecherche,
         limite: 30,
       });
       if (!annule) {
@@ -83,12 +116,12 @@ export function AddMealModal({
       clearTimeout(minuteur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rechercheManuelle]);
+  }, [termesRecherche]);
 
   async function chercherMarques() {
     setRechercheMarquesEnCours(true);
     try {
-      setResultatsMarques(await rechercherProduitsParNom(rechercheManuelle.trim()));
+      setResultatsMarques(await rechercherProduitsParNom(termesRecherche));
     } catch {
       setResultatsMarques([]);
     } finally {
@@ -99,7 +132,8 @@ export function AddMealModal({
   function choisirPour100g(
     nom: string,
     valeurs: { calories: number; proteines: number; glucides: number; lipides: number },
-    source: SourceRepas
+    source: SourceRepas,
+    grammesPreremplis: number | null = null
   ) {
     setTrouve({
       nom,
@@ -111,7 +145,7 @@ export function AddMealModal({
       quantiteParDefaut: 1,
       paGrammes: true,
     });
-    setGrammes(100);
+    setGrammes(grammesPreremplis ?? 100);
     setEtape("confirmation");
   }
 
@@ -337,11 +371,20 @@ export function AddMealModal({
                 <input
                   value={rechercheManuelle}
                   onChange={(e) => setRechercheManuelle(e.target.value)}
-                  placeholder="Rechercher un aliment (ex : poulet rôti, riz...)"
+                  placeholder="Ex : compote 45g, riz 150g, poulet rôti..."
                   autoFocus
                   className="w-full rounded-lg border border-c2b-green/20 pl-9 pr-3 py-2 text-sm"
                 />
               </div>
+              {grammesSaisis !== null ? (
+                <p className="text-xs text-c2b-green/70 -mt-2">
+                  Quantité détectée : <span className="font-medium text-c2b-green">{grammesSaisis} g</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-c2b-green/50 -mt-2">
+                  Astuce : ajoutez le poids à la recherche (« compote 45g ») pour le pré-remplir.
+                </p>
+              )}
 
               {!rechercheActive && (
                 <>
@@ -378,7 +421,7 @@ export function AddMealModal({
                       {resultatsAliments.map((a) => (
                         <li key={a.id}>
                           <button
-                            onClick={() => choisirPour100g(a.nom, a, "manuel")}
+                            onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
                             className="w-full text-left px-3 py-2.5"
                           >
                             <p className="text-sm text-c2b-green">{a.nom}</p>
@@ -411,7 +454,9 @@ export function AddMealModal({
                           {resultatsMarques.map((p, i) => (
                             <li key={`${p.nom}-${i}`}>
                               <button
-                                onClick={() => choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel")}
+                                onClick={() =>
+                                  choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis)
+                                }
                                 className="w-full text-left px-3 py-2.5"
                               >
                                 <p className="text-sm text-c2b-green">
@@ -514,8 +559,10 @@ export function AddMealModal({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   min={0}
-                  step={trouve.paGrammes ? 10 : 0.5}
+                  step={trouve.paGrammes ? 1 : 0.5}
+                  onFocus={(e) => e.target.select()}
                   value={trouve.paGrammes ? grammes : quantite}
                   onChange={(e) =>
                     trouve.paGrammes
