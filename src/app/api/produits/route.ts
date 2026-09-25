@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { portionDuProduit } from "@/lib/openfoodfacts";
 
 // Relais vers la recherche Open Food Facts : l'API search.openfoodfacts.org
 // ne renvoie pas d'en-tête CORS, elle ne peut pas être appelée depuis le
 // navigateur. Les produits vendus au Maroc sont remontés en premier.
 
 const API = "https://search.openfoodfacts.org/search";
-const CHAMPS = "code,product_name,product_name_fr,brands,countries_tags,nutriments,image_front_small_url";
+const CHAMPS =
+  "code,product_name,product_name_fr,brands,countries_tags,nutriments,image_front_small_url,serving_size,serving_quantity,quantity,product_quantity";
 
 interface Hit {
   code?: string;
@@ -15,6 +17,10 @@ interface Hit {
   countries_tags?: string[];
   nutriments?: Record<string, number | undefined>;
   image_front_small_url?: string;
+  serving_size?: string;
+  serving_quantity?: number | string;
+  quantity?: string;
+  product_quantity?: number | string;
 }
 
 async function chercher(q: string, taille: number): Promise<Hit[]> {
@@ -82,6 +88,7 @@ export async function GET(request: NextRequest) {
       glucides: arrondi(hit.nutriments?.["carbohydrates_100g"]),
       lipides: arrondi(hit.nutriments?.["fat_100g"]),
       photo_url: hit.image_front_small_url ?? null,
+      portion: portionDuProduit(hit),
     });
     if (produits.length >= 25) break;
   }

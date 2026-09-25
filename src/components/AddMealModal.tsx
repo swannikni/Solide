@@ -5,10 +5,11 @@ import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, Ut
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
+import { Portail } from "@/components/Portail";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
-import { estLiquide, grammesParDefaut, portionsUsuelles } from "@/lib/portions";
+import { estLiquide, portionsPour, type PortionUsuelle } from "@/lib/portions";
 import { nomSimple } from "@/lib/noms-aliments";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
@@ -68,6 +69,8 @@ function sansAccents(texte: string) {
   return texte.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/œ/g, "oe");
 }
 
+type ContextePortion = { groupe?: string | null; portionProduit?: PortionUsuelle | null };
+
 interface Ajoute {
   id: string;
   nom: string;
@@ -87,6 +90,8 @@ interface Trouve {
   plat_id?: string;
   quantiteParDefaut: number;
   paGrammes?: boolean; // true si quantite = grammes / 100 (produit du commerce)
+  portions?: PortionUsuelle[]; // portions proposées (fabricant, nom ou famille)
+  liquide?: boolean; // boisson : quantités en ml
 }
 
 export function AddMealModal({
@@ -318,20 +323,37 @@ export function AddMealModal({
     });
   }
 
-  // Quantité utilisée par le bouton + (affichée sous le bouton).
-  const quantiteRapide = (nom: string) => {
-    const unite = estLiquide(nom) ? "ml" : "g";
+  // Quantité utilisée par le bouton + (affichée sous le bouton) : poids tapé dans
+  // la recherche, sinon la première portion (fabricant, nom ou famille), sinon 100 g.
+  const quantiteRapide = (nom: string, contexte: ContextePortion = {}) => {
+    const p = portionsPour(nom, contexte)[0];
+    const unite = p?.ml ? "ml" : "g";
     if (grammesSaisis) return `${grammesSaisis} ${unite}`;
-    const d = grammesParDefaut(nom);
-    return d.libelle ?? `${d.grammes} ${unite}`;
+    return p ? p.libelle : `100 ${unite}`;
+  };
+
+  // Ligne de résultat : valeurs pour la portion que le + ajoutera (comme MyFitnessPal).
+  const resumePortion = (
+    nom: string,
+    v: { calories: number; proteines: number; glucides: number; lipides: number },
+    contexte: ContextePortion = {}
+  ) => {
+    const p = portionsPour(nom, contexte)[0];
+    const unite = p?.ml ? "ml" : "g";
+    const grammes = grammesSaisis ?? p?.grammes ?? 100;
+    const f = grammes / 100;
+    const arrondi = (x: number) => Math.round(x * f * 10) / 10;
+    const quantite = !grammesSaisis && p ? `${p.libelle} (${grammes} ${unite})` : `${grammes} ${unite}`;
+    return `${quantite} · ${Math.round(v.calories * f)} kcal · ${arrondi(v.proteines)}g P · ${arrondi(v.glucides)}g G · ${arrondi(v.lipides)}g L`;
   };
 
   function ajoutRapide100g(
     nom: string,
     v: { calories: number; proteines: number; glucides: number; lipides: number },
-    source: SourceRepas
+    source: SourceRepas,
+    contexte: ContextePortion = {}
   ) {
-    const grammes = grammesSaisis ?? grammesParDefaut(nom).grammes;
+    const grammes = grammesSaisis ?? portionsPour(nom, contexte)[0]?.grammes ?? 100;
     return ajoutRapide({
       nom,
       unite: "g",
@@ -375,8 +397,10 @@ export function AddMealModal({
     nom: string,
     valeurs: { calories: number; proteines: number; glucides: number; lipides: number },
     source: SourceRepas,
-    grammesPreremplis: number | null = null
+    grammesPreremplis: number | null = null,
+    contexte: ContextePortion = {}
   ) {
+    const portions = portionsPour(nom, contexte);
     setTrouve({
       nom,
       calories: Math.round(valeurs.calories),
@@ -386,9 +410,11 @@ export function AddMealModal({
       source,
       quantiteParDefaut: 1,
       paGrammes: true,
+      portions,
+      liquide: portions[0]?.ml === true,
     });
-    // Poids tapé dans la recherche, sinon la portion habituelle (1 œuf, 1 tranche...), sinon 100 g.
-    setGrammes(grammesPreremplis ?? grammesParDefaut(nom).grammes);
+    // Poids tapé dans la recherche, sinon la première portion (fabricant, 1 œuf, 1 pot...), sinon 100 g.
+    setGrammes(grammesPreremplis ?? portions[0]?.grammes ?? 100);
     setEtape("confirmation");
   }
 
@@ -585,7 +611,7 @@ export function AddMealModal({
       return;
     }
 
-    choisirPour100g(produit.nom, produit, "code_barres");
+    choisirPour100g(produit.nom, produit, "code_barres", null, { portionProduit: produit.portion });
   }
 
   // Favori ou aliment récent : mêmes valeurs et même quantité que la dernière fois.
@@ -810,8 +836,9 @@ export function AddMealModal({
   );
 
   return (
-    // Plein écran sur mobile : ancrée en haut, la barre de recherche reste
-    // visible au-dessus du clavier iOS.
+    <Portail>
+    {/* Plein écran sur mobile : ancrée en haut, la barre de recherche reste
+        visible au-dessus du clavier iOS. */}
     <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-stretch md:items-center justify-center">
       <div className="bg-c2b-cream w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-[24px] md:max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 sticky top-0 z-10 bg-c2b-cream">
@@ -1397,20 +1424,16 @@ export function AddMealModal({
                         {(tousLesAliments ? alimentsAffiches : alimentsAffiches.slice(0, 5)).map((a) => (
                           <li key={a.id} className="flex items-center">
                             <button
-                              onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis)}
+                              onClick={() => choisirPour100g(a.nom, a, "manuel", grammesSaisis, { groupe: a.groupe })}
                               className="flex-1 min-w-0 text-left pl-4 py-3"
                             >
                               <p className="text-[15px] font-semibold text-c2b-green">{a.nom}</p>
-                              <p className="text-[11px] text-c2b-muted">
-                                100 {estLiquide(a.nom) ? "ml" : "g"} · {Math.round(a.calories)} kcal · {a.proteines}g P ·{" "}
-                                {a.glucides}g G ·{" "}
-                                {a.lipides}g L
-                              </p>
+                              <p className="text-[11px] text-c2b-muted">{resumePortion(a.nom, a, { groupe: a.groupe })}</p>
                             </button>
                             <BoutonPlus
                               libelle={`Ajouter ${a.nom}`}
-                              detail={quantiteRapide(a.nom)}
-                              onClick={() => ajoutRapide100g(a.nom, a, "manuel")}
+                              detail={quantiteRapide(a.nom, { groupe: a.groupe })}
+                              onClick={() => ajoutRapide100g(a.nom, a, "manuel", { groupe: a.groupe })}
                             />
                           </li>
                         ))}
@@ -1444,7 +1467,9 @@ export function AddMealModal({
                         <li key={`${p.nom}-${p.marque}-${i}`} className="flex items-center">
                           <button
                             onClick={() =>
-                              choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis)
+                              choisirPour100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", grammesSaisis, {
+                                portionProduit: p.portion,
+                              })
                             }
                             className="flex-1 min-w-0 text-left pl-4 py-3"
                           >
@@ -1458,14 +1483,17 @@ export function AddMealModal({
                                   Maroc
                                 </span>
                               )}
-                              100 {estLiquide(p.nom) ? "ml" : "g"} · {p.calories} kcal · {p.proteines}g P · {p.glucides}g G ·{" "}
-                              {p.lipides}g L
+                              {resumePortion(p.nom, p, { portionProduit: p.portion })}
                             </p>
                           </button>
                           <BoutonPlus
                             libelle={`Ajouter ${p.nom}`}
-                            detail={quantiteRapide(p.nom)}
-                            onClick={() => ajoutRapide100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel")}
+                            detail={quantiteRapide(p.nom, { portionProduit: p.portion })}
+                            onClick={() =>
+                              ajoutRapide100g(p.marque ? `${p.nom} (${p.marque})` : p.nom, p, "manuel", {
+                                portionProduit: p.portion,
+                              })
+                            }
                           />
                         </li>
                       ))}
@@ -1556,7 +1584,7 @@ export function AddMealModal({
                 </div>
                 <p className="text-xs text-c2b-muted mt-1.5">
                   {trouve.calories} kcal · {trouve.proteines}g P · {trouve.glucides}g G · {trouve.lipides}g L
-                  {trouve.paGrammes ? (estLiquide(trouve.nom) ? " pour 100 ml" : " pour 100 g") : " par portion"}
+                  {trouve.paGrammes ? (trouve.liquide || estLiquide(trouve.nom) ? " pour 100 ml" : " pour 100 g") : " par portion"}
                 </p>
               </div>
 
@@ -1573,7 +1601,11 @@ export function AddMealModal({
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
-                  {trouve.paGrammes ? (estLiquide(trouve.nom) ? "Quantité (ml)" : "Quantité (grammes)") : "Quantité (portions)"}
+                  {trouve.paGrammes
+                    ? trouve.liquide || estLiquide(trouve.nom)
+                      ? "Quantité (ml)"
+                      : "Quantité (grammes)"
+                    : "Quantité (portions)"}
                 </label>
                 {/* Champ texte (et non number) : garde la saisie telle quelle,
                     vide possible, virgule acceptée, pas de "0" collé devant. */}
@@ -1594,9 +1626,9 @@ export function AddMealModal({
                   placeholder={trouve.paGrammes ? "100" : "1"}
                   className="champ"
                 />
-                {trouve.paGrammes && portionsUsuelles(trouve.nom).length > 0 && (
+                {trouve.paGrammes && (trouve.portions ?? portionsPour(trouve.nom)).length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {portionsUsuelles(trouve.nom).map((pu) => (
+                    {(trouve.portions ?? portionsPour(trouve.nom)).map((pu) => (
                       <button
                         key={pu.libelle}
                         onClick={() => {
@@ -1625,7 +1657,7 @@ export function AddMealModal({
                           grammes === g ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                         }`}
                       >
-                        {g} {estLiquide(trouve.nom) ? "ml" : "g"}
+                        {g} {trouve.liquide || estLiquide(trouve.nom) ? "ml" : "g"}
                       </button>
                     ))}
                   </div>
@@ -1689,6 +1721,7 @@ export function AddMealModal({
         </div>
       )}
     </div>
+    </Portail>
   );
 }
 

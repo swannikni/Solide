@@ -31,6 +31,18 @@ const REGLES: { motif: RegExp; portions: PortionUsuelle[] }[] = [
   { motif: /^(boisson|smoothie|nectar)\b/, portions: [ml("1 verre", 250)] },
   { motif: /^oeufs?\b/, portions: [{ libelle: "1 œuf", grammes: 55 }, { libelle: "2 œufs", grammes: 110 }] },
   { motif: /^banane/, portions: [{ libelle: "1 banane", grammes: 120 }] },
+  { motif: /^croissant/, portions: [{ libelle: "1 croissant", grammes: 45 }] },
+  { motif: /^pain au chocolat|^chocolatine/, portions: [{ libelle: "1 pain au chocolat", grammes: 65 }] },
+  { motif: /^pain au lait/, portions: [{ libelle: "1 pain au lait", grammes: 35 }] },
+  { motif: /^brioche/, portions: [{ libelle: "1 tranche", grammes: 35 }] },
+  { motif: /^madeleine/, portions: [{ libelle: "1 madeleine", grammes: 25 }] },
+  { motif: /^(cookie|muffin)/, portions: [{ libelle: "1 pièce", grammes: 60 }] },
+  { motif: /^crepe/, portions: [{ libelle: "1 crêpe", grammes: 60 }] },
+  { motif: /^msemen|^m.?semen|^harcha|^baghrir/, portions: [{ libelle: "1 pièce", grammes: 80 }] },
+  { motif: /^petit.suisse/, portions: [{ libelle: "1 pot", grammes: 60 }] },
+  { motif: /^jambon/, portions: [{ libelle: "1 tranche", grammes: 40 }] },
+  { motif: /^(saucisse|merguez)/, portions: [{ libelle: "1 saucisse", grammes: 50 }] },
+  { motif: /^pizza/, portions: [{ libelle: "1 part", grammes: 150 }, { libelle: "1 pizza", grammes: 400 }] },
   { motif: /^(pommes? de terre|patate)/, portions: [{ libelle: "1 moyenne", grammes: 150 }] },
   { motif: /^pomme\b/, portions: [{ libelle: "1 pomme", grammes: 150 }] },
   { motif: /^poire\b/, portions: [{ libelle: "1 poire", grammes: 150 }] },
@@ -93,6 +105,87 @@ export function grammesParDefaut(nom: string): { grammes: number; libelle: strin
 }
 
 // Boisson : quantités affichées en ml plutôt qu'en g.
-export function estLiquide(nom: string): boolean {
-  return portionsUsuelles(nom)[0]?.ml === true;
+export function estLiquide(nom: string, groupe?: string | null): boolean {
+  return portionsPour(nom, { groupe })[0]?.ml === true;
+}
+
+// Portions par famille d'aliments (groupes de la table CIQUAL), quand aucune
+// règle plus précise ne s'applique au nom.
+const PAR_GROUPE: { motif: RegExp; portions: PortionUsuelle[] }[] = [
+  { motif: /^eaux$/, portions: [ml("1 verre", 250), ml("1 bouteille", 500)] },
+  { motif: /^boissons sans alcool$/, portions: [ml("1 verre", 250), ml("1 canette", 330)] },
+  { motif: /^boisson alcoolis/, portions: [ml("1 verre", 125), ml("1 canette", 330)] },
+  { motif: /^laits$/, portions: [ml("1 verre", 200), ml("1 bol", 250)] },
+  { motif: /^soupes$/, portions: [ml("1 bol", 250)] },
+  { motif: /^produits laitiers frais/, portions: [{ libelle: "1 pot", grammes: 125 }] },
+  { motif: /^fromages/, portions: [{ libelle: "1 portion", grammes: 30 }] },
+  { motif: /^(crèmes|creme)/, portions: [{ libelle: "1 c. à soupe", grammes: 15 }] },
+  { motif: /^(beurres|margarines|autres matières grasses)/, portions: [{ libelle: "1 noisette", grammes: 10 }] },
+  { motif: /^huiles/, portions: [{ libelle: "1 c. à soupe", grammes: 10 }] },
+  { motif: /^sauces$/, portions: [{ libelle: "1 c. à soupe", grammes: 15 }, { libelle: "1 portion", grammes: 40 }] },
+  { motif: /^condiments$/, portions: [{ libelle: "1 c. à café", grammes: 5 }] },
+  { motif: /^(épices|herbes|sels)$/, portions: [{ libelle: "1 pincée", grammes: 1 }] },
+  { motif: /^sucres, miels/, portions: [{ libelle: "1 c. à café", grammes: 6 }] },
+  { motif: /^confitures/, portions: [{ libelle: "1 c. à soupe", grammes: 15 }] },
+  { motif: /^fruits$/, portions: [{ libelle: "1 fruit moyen", grammes: 150 }] },
+  { motif: /^fruits à coque/, portions: [{ libelle: "1 poignée", grammes: 30 }] },
+  { motif: /^légumes$/, portions: [{ libelle: "1 portion", grammes: 150 }] },
+  { motif: /^légumineuses$/, portions: [{ libelle: "1 portion", grammes: 150 }] },
+  { motif: /^pommes de terre/, portions: [{ libelle: "1 portion", grammes: 200 }] },
+  { motif: /^pâtes, riz et céréales$/, portions: [{ libelle: "1 portion", grammes: 150 }] },
+  { motif: /^pains/, portions: [{ libelle: "1 tranche", grammes: 40 }] },
+  { motif: /^viennoiseries$/, portions: [{ libelle: "1 pièce", grammes: 60 }] },
+  { motif: /^gâteaux et pâtisseries$/, portions: [{ libelle: "1 part", grammes: 80 }] },
+  { motif: /^biscuits sucrés$/, portions: [{ libelle: "2 biscuits", grammes: 20 }, { libelle: "4 biscuits", grammes: 40 }] },
+  { motif: /^biscuits apéritifs$/, portions: [{ libelle: "1 poignée", grammes: 30 }] },
+  { motif: /^céréales de petit-déjeuner$/, portions: [{ libelle: "1 bol", grammes: 40 }] },
+  { motif: /^barres céréalières$/, portions: [{ libelle: "1 barre", grammes: 25 }] },
+  { motif: /^chocolats/, portions: [{ libelle: "4 carrés", grammes: 20 }] },
+  { motif: /^confiseries/, portions: [{ libelle: "1 portion", grammes: 20 }] },
+  { motif: /^(glaces|sorbets|desserts glacés|glaces et sorbets)/, portions: [{ libelle: "1 boule", grammes: 50 }, { libelle: "2 boules", grammes: 100 }] },
+  { motif: /^(viandes|poissons|mollusques)/, portions: [{ libelle: "1 portion", grammes: 120 }] },
+  { motif: /^charcuteries/, portions: [{ libelle: "1 tranche", grammes: 40 }, { libelle: "1 portion", grammes: 80 }] },
+  { motif: /^(produits à base de poissons|autres produits à base de viande|substitus)/, portions: [{ libelle: "1 portion", grammes: 100 }] },
+  { motif: /^œufs$/, portions: [{ libelle: "1 œuf", grammes: 55 }] },
+  { motif: /^plats composés$/, portions: [{ libelle: "1 assiette", grammes: 300 }] },
+  { motif: /^pizzas, tartes et crêpes salées$/, portions: [{ libelle: "1 part", grammes: 150 }] },
+  { motif: /^sandwichs$/, portions: [{ libelle: "1 sandwich", grammes: 200 }] },
+  { motif: /^salades composées/, portions: [{ libelle: "1 assiette", grammes: 250 }] },
+  { motif: /^feuilletées et autres entrées$/, portions: [{ libelle: "1 pièce", grammes: 100 }] },
+];
+
+// Toutes les portions proposées pour un aliment : celle du fabricant (produit
+// de marque) d'abord, puis celles du nom, sinon celles de sa famille.
+export function portionsPour(
+  nom: string,
+  options: { groupe?: string | null; portionProduit?: PortionUsuelle | null } = {}
+): PortionUsuelle[] {
+  const parNom = portionsUsuelles(nom);
+  const parGroupe =
+    parNom.length === 0 && options.groupe
+      ? PAR_GROUPE.find((r) => r.motif.test(options.groupe!.toLowerCase()))?.portions ?? []
+      : [];
+  const liste = [...(options.portionProduit ? [options.portionProduit] : []), ...parNom, ...parGroupe];
+  // Sans doublon de poids (la portion du fabricant peut égaler une portion connue).
+  return liste.filter((p, i) => liste.findIndex((q) => q.grammes === p.grammes) === i);
+}
+
+// Portion donnée par Open Food Facts : « 1 pot (125 g) », « 250 ml », « 33 cl »...
+export function portionDepuisTexte(texte: string | null | undefined, quantite?: number | null): PortionUsuelle | null {
+  const t = (texte ?? "").toLowerCase();
+  const nombre = (s: string) => parseFloat(s.replace(",", "."));
+  let valeur = quantite && quantite > 0 ? quantite : NaN;
+  let enMl = /\b(ml|cl|l)\b/.test(t);
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  if (m) {
+    const v = nombre(m[1]);
+    const unite = m[2];
+    enMl = unite === "ml" || unite === "cl" || unite === "l";
+    if (Number.isNaN(valeur)) valeur = unite === "kg" || unite === "l" ? v * 1000 : unite === "cl" ? v * 10 : v;
+  }
+  if (!Number.isFinite(valeur) || valeur <= 0 || valeur > 1000) return null;
+  // Libellé court : « 1 pot », « 1 barre »… si le fabricant le précise, sinon « 1 portion ».
+  const compte = t.match(/^\s*(\d+)\s+([a-zà-ÿ]+)/);
+  const libelle = compte && !/^(g|ml|cl|l|kg)$/.test(compte[2]) ? `${compte[1]} ${compte[2]}` : "1 portion";
+  return { libelle, grammes: Math.round(valeur), ml: enMl || undefined };
 }

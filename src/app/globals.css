@@ -50,8 +50,11 @@
   }
 }
 @layer utilities {
+  /* Sans « fill-mode » : une fois l'animation finie, plus aucun effet sur la page.
+     (Avec « both », la page restait dans un calque à part et les fenêtres
+     d'ajout passaient sous la barre du haut : bouton « Terminer » inaccessible.) */
   .animate-apparition {
-    animation: apparition 0.18s ease-out both;
+    animation: apparition 0.18s ease-out;
   }
 }
 @media (prefers-reduced-motion: reduce) {

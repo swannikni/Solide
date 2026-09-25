@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Trash2, Star, Copy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Pastille } from "@/components/Pastille";
+import { Portail } from "@/components/Portail";
 import { GRAMMES_RAPIDES } from "@/components/AddMealModal";
 import { estLiquide, portionsUsuelles } from "@/lib/portions";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
@@ -130,6 +131,7 @@ export function EditMealModal({
   }
 
   return (
+    <Portail>
     <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-stretch md:items-center justify-center">
       <div className="bg-c2b-cream w-full h-[100dvh] md:h-auto md:max-w-md md:rounded-[24px] md:max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 sticky top-0 z-10 bg-c2b-cream">
@@ -297,5 +299,6 @@ export function EditMealModal({
         </div>
       </div>
     </div>
+    </Portail>
   );
 }
