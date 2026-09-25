@@ -9,6 +9,7 @@ import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/op
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
 import { codeDepuisScan } from "@/lib/qr";
 import { grammesParDefaut, portionsUsuelles } from "@/lib/portions";
+import { nomSimple } from "@/lib/noms-aliments";
 import { BUCKET_PHOTOS } from "@/lib/photos";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
@@ -157,16 +158,29 @@ export function AddMealModal({
   const rechercheActive = termesRecherche.length >= 2;
 
   // Variantes proposées en pastilles quand la recherche en contient plusieurs.
-  const aDesCrus = resultatsAliments.some((a) => RE_CRU.test(a.nom));
-  const aDesCuits = resultatsAliments.some((a) => RE_CUIT.test(a.nom));
+  // Cru / cuit n'a pas de sens pour les fruits : on ne regarde que les autres aliments.
+  const horsFruits = resultatsAliments.filter((a) => a.groupe !== "fruits");
+  const aDesCrus = horsFruits.some((a) => RE_CRU.test(a.nom));
+  const aDesCuits = horsFruits.some((a) => RE_CUIT.test(a.nom));
   const tauxGras = Array.from(
     new Set(resultatsAliments.map((a) => a.nom.match(RE_GRAS)?.[1]).filter((t): t is string => !!t))
   ).sort((x, y) => Number(x) - Number(y));
-  const alimentsAffiches = resultatsAliments.filter(
-    (a) =>
-      (filtreCuisson === "tous" || (filtreCuisson === "cru" ? RE_CRU : RE_CUIT).test(a.nom)) &&
-      (filtreGras === null || a.nom.match(RE_GRAS)?.[1] === filtreGras)
-  );
+  // Filtres sur le nom officiel, puis affichage du nom simplifié (sans doublons :
+  // « Pomme, pulpe, crue » et « Pomme, pulpe et peau, crue » deviennent « Pomme »).
+  const nomsVusAliments = new Set<string>();
+  const alimentsAffiches = resultatsAliments
+    .filter(
+      (a) =>
+        (filtreCuisson === "tous" || (filtreCuisson === "cru" ? RE_CRU : RE_CUIT).test(a.nom)) &&
+        (filtreGras === null || a.nom.match(RE_GRAS)?.[1] === filtreGras)
+    )
+    .map((a) => ({ ...a, nom: nomSimple(a.nom, a.groupe) }))
+    .filter((a) => {
+      const cle = a.nom.toLowerCase();
+      if (nomsVusAliments.has(cle)) return false;
+      nomsVusAliments.add(cle);
+      return true;
+    });
 
   const nomsFavoris = new Set(favoris.map((f) => f.nom.toLowerCase()));
   const [favoriCoche, setFavoriCoche] = useState(false);

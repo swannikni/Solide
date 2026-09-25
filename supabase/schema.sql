@@ -311,7 +311,12 @@ begin
     )
   order by
     m.nb desc,
+    -- Échantillons de laboratoire (« prélevé à la Martinique »...) et produits
+    -- pour bébé en dernier.
+    (a.nom_normalise like '%prelev%' or coalesce(a.groupe, '') like '%infantile%') asc,
     (n > 0 and a.nom_normalise like racines[1] || '%') desc,
+    -- Fruits : la version crue (celle qu'on mange) d'abord.
+    (a.groupe = 'fruits' and a.nom_normalise ~ '(^| )crue?s?( |$)') desc,
     extensions.similarity(a.nom_normalise, trim(qn)) desc,
     length(a.nom)
   limit least(greatest(limite, 1), 100);
