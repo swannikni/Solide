@@ -141,3 +141,48 @@ export interface Questionnaire {
   statut: "nouveau" | "compte_cree" | "ignore";
   client_id: string | null;
 }
+
+export interface Points {
+  jours: number;
+  jours_calories: number;
+  jours_proteines: number;
+  bonus_series: number;
+  defis: number;
+  gagnes: number;
+  depenses: number;
+  solde: number;
+}
+
+export interface Recompense {
+  id: string;
+  emoji: string;
+  titre: string;
+  cout: number;
+  actif: boolean;
+  ordre: number;
+}
+
+export interface DemandeRecompense {
+  id: string;
+  client_id: string;
+  recompense_id: string | null;
+  titre: string;
+  cout: number;
+  statut: "en_attente" | "remise" | "refusee";
+  created_at: string;
+  traite_le: string | null;
+}
+
+export type TypeDefi = "jours_notes" | "jours_calories" | "jours_proteines";
+
+export interface Defi {
+  id: string;
+  titre: string;
+  type: TypeDefi;
+  cible: number;
+  date_debut: string;
+  date_fin: string;
+  points: number;
+  // Avancement du client (jours validés sur la période).
+  fait?: number;
+}

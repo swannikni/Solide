@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const ONGLETS = [
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/menu", label: "Menu & QR" },
+  { href: "/admin/recompenses", label: "Récompenses" },
 ];
 
 export function AdminOnglets() {

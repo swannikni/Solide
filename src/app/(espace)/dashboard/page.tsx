@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
-import type { Client, Favori, Plat, RepasJournal } from "@/lib/types";
+import type { Client, Defi, Favori, Plat, Points, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
 import { bilanSemaine, semaineAResumer, serieActuelle, totauxParJour } from "@/lib/progres";
@@ -17,7 +17,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }] =
+  const [{ data: client }, { data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: pointsBruts }, { data: defisBruts }] =
     await Promise.all([
     supabase.from("application_clients").select("*").eq("id", user.id).single<Client>(),
     supabase
@@ -62,6 +62,8 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       .gte("date", decalerDate(aujourdhui, -45))
       .order("date", { ascending: true })
       .returns<{ date: string; poids_kg: number }[]>(),
+    supabase.rpc("application_points"),
+    supabase.rpc("application_defis_client"),
   ]);
 
   // Récents : derniers aliments distincts (par nom), hors box Chef2Box du jour.
@@ -76,6 +78,9 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   }
 
   if (!client) redirect("/login");
+  // Fonctions SQL (application_points / application_defis_client) : types déclarés ici.
+  const points = pointsBruts as Points | null;
+  const defis = defisBruts as Defi[] | null;
 
   const jours = totauxParJour(journalRecent ?? []);
   const semaine = date === aujourdhui ? semaineAResumer(aujourdhui) : null;
@@ -108,6 +113,8 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         recents={recents}
         serie={serieActuelle(new Set(jours.keys()), aujourdhui)}
         statsSemaine={statsSemaine}
+        points={points?.solde ?? null}
+        defiEnCours={(defis ?? []).find((d) => d.date_debut <= aujourdhui && d.date_fin >= aujourdhui) ?? null}
         platScanne={platScanne}
         codePlatInconnu={codePlat && !platScanne ? codePlat : null}
       />

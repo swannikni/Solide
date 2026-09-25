@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { totauxDuJour } from "@/lib/macros";
-import type { Client, Poids, RepasJournal } from "@/lib/types";
+import type { Client, Defi, DemandeRecompense, Points, Poids, Recompense, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
 import { Motivation } from "@/components/Motivation";
 import { RappelSoir } from "@/components/RappelSoir";
+import { Recompenses } from "@/components/Recompenses";
 import { calculerBadges, meilleureSerie, serieActuelle, totauxParJour } from "@/lib/progres";
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { signerPhotos } from "@/lib/photos";
@@ -25,7 +26,8 @@ export default async function HistoryPage() {
   const aujourdhui = dateDuJour();
   const debutSemaine = decalerDate(aujourdhui, -6);
 
-  const [{ data: repas }, { data: lignes }, { data: poids }] = await Promise.all([
+  const [{ data: repas }, { data: lignes }, { data: poids }, { data: pointsBruts }, { data: defisBruts }, { data: catalogue }, { data: demandes }] =
+    await Promise.all([
     supabase
       .from("application_repas_journal")
       .select("*")
@@ -51,8 +53,21 @@ export default async function HistoryPage() {
       .gte("date", decalerDate(aujourdhui, -365))
       .order("date", { ascending: true })
       .returns<Pick<Poids, "date" | "poids_kg">[]>(),
+    supabase.rpc("application_points"),
+    supabase.rpc("application_defis_client"),
+    supabase.from("application_recompenses").select("*").eq("actif", true).order("cout").returns<Recompense[]>(),
+    supabase
+      .from("application_recompenses_demandes")
+      .select("*")
+      .eq("client_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10)
+      .returns<DemandeRecompense[]>(),
   ]);
 
+  // Fonctions SQL (application_points / application_defis_client) : types déclarés ici.
+  const points = pointsBruts as Points | null;
+  const defis = defisBruts as Defi[] | null;
   const jours = totauxParJour(lignes ?? []);
   const caloriesSemaine = Array.from({ length: 7 }, (_, i) => {
     const date = decalerDate(debutSemaine, i);
@@ -114,6 +129,16 @@ export default async function HistoryPage() {
           objectifProteines={client.objectif_proteines}
           badges={badges}
         />
+
+        {points && (
+          <Recompenses
+            points={points}
+            defis={defis ?? []}
+            catalogue={catalogue ?? []}
+            demandes={demandes ?? []}
+            aujourdhui={aujourdhui}
+          />
+        )}
 
         <RappelSoir clientId={client.id} />
 

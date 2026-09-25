@@ -572,6 +572,214 @@ create extension if not exists pg_cron;
 --   body := '{"type":"soir"}'::jsonb, timeout_milliseconds := 30000); $$);
 -- select cron.schedule('chef2box-bilan-lundi', '0 8 * * 1', ... body := '{"type":"bilan"}' ...);
 
+-- ============ POINTS, RÉCOMPENSES ET DÉFIS ============
+-- Points gagnés (calculés côté serveur, impossibles à trafiquer) :
+--   +10 par jour avec au moins un repas noté
+--   +10 par jour dans l'objectif calories (±10 %)
+--   +10 par jour objectif protéines atteint (≥ 90 %)
+--   +50 par tranche de 7 jours d'affilée
+--   + les points de chaque défi réussi
+-- Dépensés : récompenses réclamées (sauf refusées).
+
+-- Catalogue des récompenses, modifiable par l'admin.
+create table if not exists public.application_recompenses (
+  id text primary key,
+  emoji text not null default '🎁',
+  titre text not null,
+  cout int not null check (cout between 1 and 100000),
+  actif boolean not null default true,
+  ordre int not null default 0
+);
+insert into public.application_recompenses (id, emoji, titre, cout, ordre) values
+  ('boisson', '🥤', 'Boisson offerte', 300, 1),
+  ('dessert', '🍰', 'Dessert offert', 600, 2),
+  ('remise10', '💸', '−10 % sur la prochaine commande', 1000, 3),
+  ('box', '🎁', 'Une box offerte', 2000, 4)
+on conflict (id) do nothing;
+
+-- Récompenses réclamées par les clients (traitées par l'admin).
+create table if not exists public.application_recompenses_demandes (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.application_clients (id) on delete cascade,
+  recompense_id text references public.application_recompenses (id) on delete set null,
+  titre text not null,
+  cout int not null,
+  statut text not null default 'en_attente' check (statut in ('en_attente', 'remise', 'refusee')),
+  created_at timestamptz not null default now(),
+  traite_le timestamptz
+);
+create index if not exists application_recompenses_demandes_client_idx
+  on public.application_recompenses_demandes (client_id, created_at desc);
+
+-- Défis lancés par l'admin (ex. « 5 jours à l'objectif protéines cette semaine »).
+create table if not exists public.application_defis (
+  id uuid primary key default gen_random_uuid(),
+  titre text not null,
+  type text not null check (type in ('jours_notes', 'jours_calories', 'jours_proteines')),
+  cible int not null check (cible between 1 and 31),
+  date_debut date not null,
+  date_fin date not null check (date_fin >= date_debut),
+  points int not null default 100 check (points between 0 and 10000),
+  created_at timestamptz not null default now()
+);
+
+alter table public.application_recompenses enable row level security;
+alter table public.application_recompenses_demandes enable row level security;
+alter table public.application_defis enable row level security;
+
+drop policy if exists "recompenses_lecture" on public.application_recompenses;
+create policy "recompenses_lecture" on public.application_recompenses
+  for select to authenticated using (true);
+drop policy if exists "recompenses_admin" on public.application_recompenses;
+create policy "recompenses_admin" on public.application_recompenses
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Les clients voient leurs demandes ; seules les fonctions ci-dessous en créent.
+drop policy if exists "demandes_lecture" on public.application_recompenses_demandes;
+create policy "demandes_lecture" on public.application_recompenses_demandes
+  for select to authenticated using (client_id = auth.uid() or public.application_is_admin());
+drop policy if exists "demandes_admin_maj" on public.application_recompenses_demandes;
+create policy "demandes_admin_maj" on public.application_recompenses_demandes
+  for update to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+drop policy if exists "defis_lecture" on public.application_defis;
+create policy "defis_lecture" on public.application_defis
+  for select to authenticated using (true);
+drop policy if exists "defis_admin" on public.application_defis;
+create policy "defis_admin" on public.application_defis
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Totaux par jour d'un client.
+create or replace function public.application_jours_client(p_client uuid)
+returns table (jour date, calories numeric, proteines numeric)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select r.date, sum(r.calories * r.quantite), sum(r.proteines * r.quantite)
+  from public.application_repas_journal r
+  where r.client_id = p_client
+  group by r.date;
+$$;
+revoke execute on function public.application_jours_client(uuid) from public, anon, authenticated;
+
+-- Avancement de chaque défi pour un client.
+create or replace function public.application_defis_client(p_client uuid default auth.uid())
+returns table (id uuid, titre text, type text, cible int, date_debut date, date_fin date, points int, fait int)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if p_client is distinct from auth.uid() and not public.application_is_admin() then
+    raise exception 'accès refusé';
+  end if;
+  return query
+  with c as (
+    select objectif_calories as cal, objectif_proteines as prot from public.application_clients where application_clients.id = p_client
+  ), j as (select * from public.application_jours_client(p_client))
+  select d.id, d.titre, d.type, d.cible, d.date_debut, d.date_fin, d.points,
+    (select count(*)::int from j, c
+      where j.jour between d.date_debut and d.date_fin
+        and case d.type
+          when 'jours_notes' then true
+          when 'jours_calories' then c.cal > 0 and abs(j.calories - c.cal) <= c.cal * 0.1
+          else c.prot > 0 and j.proteines >= c.prot * 0.9
+        end)
+  from public.application_defis d
+  order by d.date_debut desc;
+end;
+$$;
+revoke execute on function public.application_defis_client(uuid) from public, anon;
+grant execute on function public.application_defis_client(uuid) to authenticated;
+
+-- Solde de points d'un client (le sien, ou n'importe lequel pour l'admin).
+create or replace function public.application_points(p_client uuid default auth.uid())
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_jours int; v_cal int; v_prot int; v_series int; v_defis int; v_depenses int;
+  c record;
+begin
+  if p_client is distinct from auth.uid() and not public.application_is_admin() then
+    raise exception 'accès refusé';
+  end if;
+  select objectif_calories as cal, objectif_proteines as prot into c
+  from public.application_clients where id = p_client;
+
+  select count(*),
+         count(*) filter (where c.cal > 0 and abs(calories - c.cal) <= c.cal * 0.1),
+         count(*) filter (where c.prot > 0 and proteines >= c.prot * 0.9)
+  into v_jours, v_cal, v_prot
+  from public.application_jours_client(p_client);
+
+  -- Séries : jours consécutifs regroupés (îlots), 50 points par tranche de 7.
+  select coalesce(sum(floor(n / 7.0)), 0) into v_series
+  from (
+    select count(*) as n
+    from (select jour, jour - (row_number() over (order by jour))::int as ilot
+          from public.application_jours_client(p_client)) t
+    group by ilot
+  ) s;
+
+  select coalesce(sum(points), 0) into v_defis
+  from public.application_defis_client(p_client) where fait >= cible;
+
+  select coalesce(sum(cout), 0) into v_depenses
+  from public.application_recompenses_demandes where client_id = p_client and statut <> 'refusee';
+
+  return jsonb_build_object(
+    'jours', v_jours, 'jours_calories', v_cal, 'jours_proteines', v_prot,
+    'bonus_series', v_series * 50, 'defis', v_defis,
+    'gagnes', v_jours * 10 + v_cal * 10 + v_prot * 10 + v_series * 50 + v_defis,
+    'depenses', v_depenses,
+    'solde', v_jours * 10 + v_cal * 10 + v_prot * 10 + v_series * 50 + v_defis - v_depenses
+  );
+end;
+$$;
+revoke execute on function public.application_points(uuid) from public, anon;
+grant execute on function public.application_points(uuid) to authenticated;
+
+-- Réclamer une récompense : vérifie le solde, enregistre la demande et
+-- prévient l'admin dans la messagerie du client.
+create or replace function public.application_reclamer_recompense(p_recompense text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_client uuid := auth.uid();
+  r record;
+  v_solde int;
+  v_id uuid;
+begin
+  if v_client is null then raise exception 'non connecté'; end if;
+  perform pg_advisory_xact_lock(hashtext('recompense:' || v_client::text));
+  select * into r from public.application_recompenses where id = p_recompense and actif;
+  if not found then raise exception 'récompense indisponible'; end if;
+  v_solde := (public.application_points(v_client) ->> 'solde')::int;
+  if v_solde < r.cout then raise exception 'points insuffisants'; end if;
+
+  insert into public.application_recompenses_demandes (client_id, recompense_id, titre, cout)
+  values (v_client, r.id, r.emoji || ' ' || r.titre, r.cout)
+  returning id into v_id;
+
+  insert into public.application_messages (client_id, expediteur, contenu)
+  values (v_client, 'client',
+    '🎁 J''ai débloqué une récompense : ' || r.emoji || ' ' || r.titre || ' (' || r.cout || ' points). Merci de me la réserver !');
+  return v_id;
+end;
+$$;
+revoke execute on function public.application_reclamer_recompense(text) from public, anon;
+grant execute on function public.application_reclamer_recompense(text) to authenticated;
+
 -- ============ REALTIME ============
 -- Pour que la messagerie se mette à jour en direct.
 do $$

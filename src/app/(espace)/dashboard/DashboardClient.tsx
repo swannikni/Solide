@@ -15,7 +15,7 @@ import { RappelSoir } from "@/components/RappelSoir";
 import { BilanSemaine, type StatsSemaine } from "@/components/BilanSemaine";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
-import type { Client, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
+import type { Client, Defi, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
 
 function lienJour(date: string, aujourdhui: string) {
   return date === aujourdhui ? "/dashboard" : `/dashboard?date=${date}`;
@@ -31,6 +31,8 @@ export function DashboardClient({
   recents,
   serie,
   statsSemaine,
+  points,
+  defiEnCours,
   platScanne,
   codePlatInconnu,
 }: {
@@ -43,6 +45,8 @@ export function DashboardClient({
   recents: RepasJournal[];
   serie: number;
   statsSemaine: StatsSemaine | null;
+  points: number | null;
+  defiEnCours: Defi | null;
   platScanne: Plat | null;
   codePlatInconnu: string | null;
 }) {
@@ -190,14 +194,34 @@ export function DashboardClient({
             </>
           )}
         </h1>
-        {estAujourdhui && serie > 0 && (
-          <Link
-            href="/history"
-            className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-c2b-gold/[0.14] px-3 py-1 text-[13px] font-bold text-c2b-green"
-          >
-            🔥 {serie} jour{serie > 1 ? "s" : ""} d&apos;affilée
-            {repasDuJour.length === 0 && <span className="font-medium text-c2b-muted">· notez un repas pour la garder</span>}
-          </Link>
+        {estAujourdhui && (serie > 0 || points !== null || defiEnCours) && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {serie > 0 && (
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1.5 rounded-full bg-c2b-gold/[0.14] px-3 py-1 text-[13px] font-bold text-c2b-green"
+              >
+                🔥 {serie} jour{serie > 1 ? "s" : ""}
+                {repasDuJour.length === 0 && <span className="font-medium text-c2b-muted">· notez un repas pour la garder</span>}
+              </Link>
+            )}
+            {points !== null && (
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1 rounded-full bg-c2b-gold/[0.14] px-3 py-1 text-[13px] font-bold text-c2b-green"
+              >
+                ⭐ {points.toLocaleString("fr-FR")} pts
+              </Link>
+            )}
+            {defiEnCours && (
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1 rounded-full bg-c2b-green px-3 py-1 text-[13px] font-bold text-c2b-cream"
+              >
+                🏁 Défi {Math.min(defiEnCours.fait ?? 0, defiEnCours.cible)}/{defiEnCours.cible}
+              </Link>
+            )}
+          </div>
         )}
         {!estAujourdhui && (
           <Link href="/dashboard" className="inline-block mt-1 text-sm font-semibold text-c2b-gold">
