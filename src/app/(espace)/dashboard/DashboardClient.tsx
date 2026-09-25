@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Copy, Plus, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CalorieRing } from "@/components/CalorieRing";
 import { MacroBar } from "@/components/MacroBar";
+import { DetailNutrition, type Nutriment } from "@/components/DetailNutrition";
 import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
 import { EditMealModal } from "@/components/EditMealModal";
@@ -58,6 +59,8 @@ export function DashboardClient({
   const [copieEnCours, setCopieEnCours] = useState<RepasType | null>(null);
   const [platPrerempli, setPlatPrerempli] = useState<Plat | null>(null);
   const [alerteQr, setAlerteQr] = useState<string | null>(null);
+  // Détail du jour ouvert en touchant l'anneau ou une case de macro.
+  const [detail, setDetail] = useState<Nutriment | null>(null);
   // Enregistrer un repas complet en favori : section concernée et nom choisi.
   const [favoriRepas, setFavoriRepas] = useState<{ type: RepasType; nom: string } | null>(null);
   const [messageFavori, setMessageFavori] = useState<{ type: RepasType; texte: string } | null>(null);
@@ -271,11 +274,18 @@ export function DashboardClient({
 
       <section className="rounded-[20px] bg-c2b-green p-6 md:p-8">
         <span className="lbl mb-4">{estAujourdhui ? "Objectif du jour" : "Bilan de la journée"}</span>
-        <CalorieRing consommees={totaux.calories} objectif={client.objectif_calories} />
+        <button
+          type="button"
+          onClick={() => setDetail("calories")}
+          className="block mx-auto rounded-full transition active:scale-[0.98]"
+          aria-label="Détail des calories du jour"
+        >
+          <CalorieRing consommees={totaux.calories} objectif={client.objectif_calories} />
+        </button>
         <div className="grid grid-cols-3 gap-2.5 mt-6">
-          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#f7f3ec" depassementOk />
-          <MacroBar label="Glucides" consomme={totaux.glucides} objectif={client.objectif_glucides} couleur="#c9973a" />
-          <MacroBar label="Lipides" consomme={totaux.lipides} objectif={client.objectif_lipides} couleur="#9db8a0" />
+          <MacroBar label="Protéines" consomme={totaux.proteines} objectif={client.objectif_proteines} couleur="#f7f3ec" depassementOk onClick={() => setDetail("proteines")} />
+          <MacroBar label="Glucides" consomme={totaux.glucides} objectif={client.objectif_glucides} couleur="#c9973a" onClick={() => setDetail("glucides")} />
+          <MacroBar label="Lipides" consomme={totaux.lipides} objectif={client.objectif_lipides} couleur="#9db8a0" onClick={() => setDetail("lipides")} />
         </div>
       </section>
 
@@ -392,6 +402,20 @@ export function DashboardClient({
           })()}
           onClose={() => setModalOuverte(false)}
           onAjoute={rafraichir}
+        />
+      )}
+
+      {detail && (
+        <DetailNutrition
+          repas={repasDuJour}
+          objectifs={{
+            calories: client.objectif_calories,
+            proteines: client.objectif_proteines,
+            glucides: client.objectif_glucides,
+            lipides: client.objectif_lipides,
+          }}
+          initial={detail}
+          onClose={() => setDetail(null)}
         />
       )}
 

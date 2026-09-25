@@ -7,12 +7,14 @@ export function MacroBar({
   objectif,
   couleur = "#c9973a",
   depassementOk = false,
+  onClick,
 }: {
   label: string;
   consomme: number;
   objectif: number;
   couleur?: string;
   depassementOk?: boolean;
+  onClick?: () => void;
 }) {
   const ratio = objectif > 0 ? Math.min(consomme / objectif, 1) : 0;
   const exces = Math.round(consomme - objectif);
@@ -20,7 +22,12 @@ export function MacroBar({
   const depasse = objectif > 0 && consomme > objectif * 1.1;
 
   return (
-    <div className="rounded-[10px] bg-white/[0.07] px-2 py-3 text-center">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Détail ${label.toLowerCase()}`}
+      className="rounded-[10px] bg-white/[0.07] px-2 py-3 text-center transition hover:bg-white/[0.12] active:scale-[0.97]"
+    >
       <div className="font-serif text-[26px] leading-none text-c2b-cream">
         {Math.round(consomme)}
         <span className="ml-0.5 font-sans text-xs font-semibold text-c2b-gold">g</span>
@@ -41,6 +48,6 @@ export function MacroBar({
           style={{ width: `${ratio * 100}%`, backgroundColor: depasse && !depassementOk ? "#e07a5f" : couleur }}
         />
       </div>
-    </div>
+    </button>
   );
 }
