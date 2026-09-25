@@ -30,7 +30,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/");
+    // Seulement un chemin interne ("/..." mais pas "//autre-site" ni "/\autre-site").
+    const suite = new URLSearchParams(window.location.search).get("suite");
+    router.replace(suite && /^\/(?![\/\\])/.test(suite) ? suite : "/");
     router.refresh();
   }
 

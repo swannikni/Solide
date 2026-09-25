@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, Commande, Plat } from "@/lib/types";
-import { Check, Plus } from "lucide-react";
+import { Check } from "lucide-react";
+import { AdminOnglets } from "@/app/admin/AdminOnglets";
 
 export function AdminClient({
   clients,
@@ -20,7 +22,18 @@ export function AdminClient({
   const [date, setDate] = useState(dateDuJour);
   const [commandes, setCommandes] = useState(commandesInitiales);
   const [enregistrementId, setEnregistrementId] = useState<string | null>(null);
-  const [afficherAjoutPlat, setAfficherAjoutPlat] = useState(false);
+
+  // Changer de date recharge les box déjà assignées pour ce jour-là.
+  async function changerDate(nouvelleDate: string) {
+    setDate(nouvelleDate);
+    if (!nouvelleDate) return;
+    const { data } = await supabase
+      .from("application_commandes")
+      .select("*, plats:application_plats(*)")
+      .eq("date_livraison", nouvelleDate)
+      .returns<Commande[]>();
+    setCommandes(data ?? []);
+  }
 
   function commandePour(clientId: string, repasType: "dejeuner" | "diner") {
     return commandes.find((c) => c.client_id === clientId && c.repas_type === repasType);
@@ -53,6 +66,7 @@ export function AdminClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
+      <AdminOnglets />
       <header className="flex items-center justify-between">
         <div>
           <span className="lbl mb-2">Espace admin</span>
@@ -63,12 +77,33 @@ export function AdminClient({
         <input
           type="date"
           value={date}
-          onChange={(e) => setDate(e.target.value)}
+          onChange={(e) => changerDate(e.target.value)}
           className="champ w-auto py-2"
         />
       </header>
 
-      <div className="carte overflow-hidden">
+      {(clients.length === 0 || plats.length === 0) && (
+        <div className="carte p-5 text-sm text-c2b-green space-y-1.5">
+          {clients.length === 0 && (
+            <p>
+              Aucun client pour l&apos;instant.{" "}
+              <Link href="/admin/clients" className="font-bold text-c2b-gold">
+                Créer un client →
+              </Link>
+            </p>
+          )}
+          {plats.length === 0 && (
+            <p>
+              Aucun plat au menu.{" "}
+              <Link href="/admin/menu" className="font-bold text-c2b-gold">
+                Ajouter des plats →
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="carte overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-c2b-green text-c2b-cream text-left">
             <tr>
@@ -113,73 +148,6 @@ export function AdminClient({
           </tbody>
         </table>
       </div>
-
-      <section>
-        <button
-          onClick={() => setAfficherAjoutPlat((v) => !v)}
-          className="btn-secondary"
-        >
-          <Plus size={16} /> Ajouter un plat au menu
-        </button>
-        {afficherAjoutPlat && <FormulaireNouveauPlat onCree={() => setAfficherAjoutPlat(false)} />}
-      </section>
     </main>
-  );
-}
-
-function FormulaireNouveauPlat({ onCree }: { onCree: () => void }) {
-  const supabase = createClient();
-  const [nom, setNom] = useState("");
-  const [qrCode, setQrCode] = useState("");
-  const [calories, setCalories] = useState("");
-  const [proteines, setProteines] = useState("");
-  const [glucides, setGlucides] = useState("");
-  const [lipides, setLipides] = useState("");
-  const [enregistrement, setEnregistrement] = useState(false);
-
-  async function creer() {
-    if (!nom || !qrCode || !calories) return;
-    setEnregistrement(true);
-    await supabase.from("application_plats").insert({
-      nom,
-      qr_code: qrCode,
-      calories: Number(calories),
-      proteines: Number(proteines) || 0,
-      glucides: Number(glucides) || 0,
-      lipides: Number(lipides) || 0,
-    });
-    setEnregistrement(false);
-    onCree();
-    window.location.reload();
-  }
-
-  return (
-    <div className="mt-3 carte p-5 space-y-2.5">
-      <input
-        value={nom}
-        onChange={(e) => setNom(e.target.value)}
-        placeholder="Nom du plat"
-        className="champ"
-      />
-      <input
-        value={qrCode}
-        onChange={(e) => setQrCode(e.target.value)}
-        placeholder="Code QR (identifiant unique de l'étiquette)"
-        className="champ"
-      />
-      <div className="grid grid-cols-4 gap-2">
-        <input value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="kcal" type="number" className="champ px-2.5" />
-        <input value={proteines} onChange={(e) => setProteines(e.target.value)} placeholder="P (g)" type="number" className="champ px-2.5" />
-        <input value={glucides} onChange={(e) => setGlucides(e.target.value)} placeholder="G (g)" type="number" className="champ px-2.5" />
-        <input value={lipides} onChange={(e) => setLipides(e.target.value)} placeholder="L (g)" type="number" className="champ px-2.5" />
-      </div>
-      <button
-        onClick={creer}
-        disabled={enregistrement}
-        className="w-full rounded-lg bg-c2b-green text-c2b-cream py-2 text-sm disabled:opacity-60"
-      >
-        {enregistrement ? "Création..." : "Créer le plat"}
-      </button>
-    </div>
   );
 }

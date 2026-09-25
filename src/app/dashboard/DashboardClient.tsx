@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
@@ -13,7 +13,7 @@ import { AddMealModal } from "@/components/AddMealModal";
 import { EditMealModal } from "@/components/EditMealModal";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
-import type { Client, Commande, Favori, RepasJournal, RepasType } from "@/lib/types";
+import type { Client, Commande, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
 
 function lienJour(date: string, aujourdhui: string) {
   return date === aujourdhui ? "/dashboard" : `/dashboard?date=${date}`;
@@ -28,6 +28,8 @@ export function DashboardClient({
   repasVeille,
   favoris,
   recents,
+  platScanne,
+  codePlatInconnu,
 }: {
   client: Client;
   date: string;
@@ -37,6 +39,8 @@ export function DashboardClient({
   repasVeille: RepasJournal[];
   favoris: Favori[];
   recents: RepasJournal[];
+  platScanne: Plat | null;
+  codePlatInconnu: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -48,6 +52,24 @@ export function DashboardClient({
   const [repasCible, setRepasCible] = useState<RepasType>("dejeuner");
   const [repasEnEdition, setRepasEnEdition] = useState<RepasJournal | null>(null);
   const [copieEnCours, setCopieEnCours] = useState<RepasType | null>(null);
+  const [platPrerempli, setPlatPrerempli] = useState<Plat | null>(null);
+  const [alerteQr, setAlerteQr] = useState<string | null>(null);
+
+  // QR d'étiquette scanné avec l'appareil photo : on ouvre l'ajout pré-rempli,
+  // puis on nettoie l'adresse pour ne pas le rouvrir à chaque rafraîchissement.
+  useEffect(() => {
+    if (!platScanne && !codePlatInconnu) return;
+    if (platScanne) {
+      setPrefillBox(null);
+      setPlatPrerempli(platScanne);
+      setRepasCible(repasSelonHeure());
+      setModalOuverte(true);
+    } else {
+      setAlerteQr("Cette étiquette n'est reconnue dans aucun plat Chef2Box.");
+    }
+    router.replace(lienJour(date, aujourdhui));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [platScanne, codePlatInconnu]);
 
   const totaux = totauxDuJour(repasDuJour);
   const estAujourdhui = date === aujourdhui;
@@ -58,12 +80,14 @@ export function DashboardClient({
   }
 
   function ouvrirDepuisBox(commande: Commande) {
+    setPlatPrerempli(null);
     setPrefillBox({ commande, editable: true });
     setRepasCible(commande.repas_type);
     setModalOuverte(true);
   }
 
   function ouvrirAjout(type: RepasType) {
+    setPlatPrerempli(null);
     setPrefillBox(null);
     setRepasCible(type);
     setModalOuverte(true);
@@ -138,6 +162,15 @@ export function DashboardClient({
           </Link>
         )}
       </header>
+
+      {alerteQr && (
+        <button
+          onClick={() => setAlerteQr(null)}
+          className="w-full rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-left text-sm text-red-700"
+        >
+          {alerteQr} <span className="font-semibold">Fermer</span>
+        </button>
+      )}
 
       <section className="rounded-[20px] bg-c2b-green p-6 md:p-8">
         <span className="lbl mb-4">{estAujourdhui ? "Objectif du jour" : "Bilan de la journée"}</span>
@@ -231,20 +264,21 @@ export function DashboardClient({
           repasTypeParDefaut={repasCible}
           favoris={favoris}
           recents={recents}
-          prefillTrouve={
-            prefillBox?.commande.plats
+          prefillTrouve={(() => {
+            const plat = prefillBox?.commande.plats ?? platPrerempli;
+            return plat
               ? {
-                  nom: prefillBox.commande.plats.nom,
-                  calories: prefillBox.commande.plats.calories,
-                  proteines: prefillBox.commande.plats.proteines,
-                  glucides: prefillBox.commande.plats.glucides,
-                  lipides: prefillBox.commande.plats.lipides,
-                  source: "chef2box",
-                  plat_id: prefillBox.commande.plats.id,
+                  nom: plat.nom,
+                  calories: plat.calories,
+                  proteines: plat.proteines,
+                  glucides: plat.glucides,
+                  lipides: plat.lipides,
+                  source: "chef2box" as const,
+                  plat_id: plat.id,
                   quantiteParDefaut: 1,
                 }
-              : undefined
-          }
+              : undefined;
+          })()}
           onClose={() => setModalOuverte(false)}
           onAjoute={rafraichir}
         />

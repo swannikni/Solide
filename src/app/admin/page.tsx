@@ -1,19 +1,11 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { exigerAdmin } from "@/lib/admin";
 import { Nav } from "@/components/Nav";
 import { AdminClient } from "@/app/admin/AdminClient";
 import type { Client, Commande, Plat } from "@/lib/types";
 import { dateDuJour } from "@/lib/dates";
 
 export default async function AdminPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: moi } = await supabase.from("application_clients").select("*").eq("id", user.id).single<Client>();
-  if (!moi?.est_admin) redirect("/dashboard");
+  const { supabase } = await exigerAdmin();
 
   const aujourdhui = dateDuJour();
 

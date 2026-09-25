@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/Nav";
 import { DashboardClient } from "@/app/dashboard/DashboardClient";
-import type { Client, Commande, Favori, RepasJournal } from "@/lib/types";
+import type { Client, Commande, Favori, Plat, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 
-export default async function DashboardPage({ searchParams }: { searchParams: { date?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { date?: string; plat?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -66,6 +66,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   if (!client) redirect("/login");
 
+  // Arrivée par le QR d'une étiquette (/p/<code>).
+  const codePlat = searchParams.plat?.slice(0, 64);
+  const { data: platScanne } = codePlat
+    ? await supabase.from("application_plats").select("*").eq("qr_code", codePlat).eq("actif", true).maybeSingle<Plat>()
+    : { data: null };
+
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <Nav estAdmin={client.est_admin} />
@@ -79,6 +85,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}
         recents={recents}
+        platScanne={platScanne}
+        codePlatInconnu={codePlat && !platScanne ? codePlat : null}
       />
     </div>
   );

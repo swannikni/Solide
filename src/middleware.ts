@@ -40,6 +40,10 @@ export async function middleware(request: NextRequest) {
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    // Après connexion, on revient là où on allait (ex. le QR d'une étiquette).
+    const suite = request.nextUrl.pathname + request.nextUrl.search;
+    if (suite !== "/") url.searchParams.set("suite", suite);
     return NextResponse.redirect(url);
   }
 

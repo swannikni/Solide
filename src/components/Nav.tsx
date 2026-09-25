@@ -13,6 +13,10 @@ const LIENS_CLIENT = [
   { href: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
+function estActif(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Nav({ estAdmin }: { estAdmin: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -41,7 +45,7 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
                 key={href}
                 href={href}
                 className={`text-[13px] font-medium transition ${
-                  pathname === href ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
+                  estActif(pathname, href) ? "text-c2b-green font-bold" : "text-[#555] hover:text-c2b-green"
                 }`}
               >
                 {label}
@@ -64,7 +68,7 @@ export function Nav({ estAdmin }: { estAdmin: boolean }) {
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch justify-around">
           {liens.map(({ href, label, icon: Icon }) => {
-            const actif = pathname === href;
+            const actif = estActif(pathname, href);
             return (
               <Link
                 key={href}

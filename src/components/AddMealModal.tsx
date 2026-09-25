@@ -7,6 +7,7 @@ import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
 import { chercherProduitParCodeBarres, rechercherProduitsParNom } from "@/lib/openfoodfacts";
 import { ALIMENTS_POPULAIRES } from "@/lib/aliments-populaires";
+import { codeDepuisScan } from "@/lib/qr";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, Favori, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 
@@ -214,11 +215,11 @@ export function AddMealModal({
   const [glucidesLibre, setGlucidesLibre] = useState("");
   const [lipidesLibre, setLipidesLibre] = useState("");
 
-  async function onScanChef2Box(qrCode: string) {
+  async function onScanChef2Box(texteScanne: string) {
     const { data, error } = await supabase
       .from("application_plats")
       .select("*")
-      .eq("qr_code", qrCode)
+      .eq("qr_code", codeDepuisScan(texteScanne))
       .eq("actif", true)
       .maybeSingle();
 
