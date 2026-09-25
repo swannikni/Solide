@@ -11,6 +11,7 @@ import { BoxDuJourCard } from "@/components/BoxDuJourCard";
 import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
 import { EditMealModal } from "@/components/EditMealModal";
+import { InstallerAppli } from "@/components/InstallerAppli";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { Client, Commande, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
@@ -162,6 +163,8 @@ export function DashboardClient({
           </Link>
         )}
       </header>
+
+      {estAujourdhui && <InstallerAppli />}
 
       {alerteQr && (
         <button

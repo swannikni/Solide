@@ -4,6 +4,17 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Chef2Box Appli",
   description: "Prêt. Sain. Maîtrisé.",
+  applicationName: "Chef2Box",
+  icons: {
+    icon: [
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  // Ouverte depuis l'écran d'accueil de l'iPhone : plein écran, sans barre Safari.
+  appleWebApp: { capable: true, title: "Chef2Box", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 // maximumScale : empêche Safari iOS de zoomer (et de rester zoomé) quand on
