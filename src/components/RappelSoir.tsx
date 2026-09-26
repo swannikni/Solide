@@ -131,7 +131,7 @@ export function RappelSoir({ clientId, compact = false }: { clientId: string; co
           <BellOff size={22} className="text-c2b-muted flex-shrink-0 mt-0.5" />
         )}
         <div className="flex-1">
-          <h2 className="font-serif text-xl text-c2b-green">Rappel du soir</h2>
+          <h2 className="font-bold tracking-tight text-xl text-c2b-green">Rappel du soir</h2>
           <p className="text-sm text-c2b-muted mt-0.5">
             {etat === "actif"
               ? "Activé : à 20 h, une notification si vous n'avez rien noté dans la journée."

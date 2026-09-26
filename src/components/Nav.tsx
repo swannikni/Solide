@@ -3,14 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, ShieldCheck, Sparkles, TrendingUp, UserRound } from "lucide-react";
+import { ChefHat, House, LineChart, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 // racine : partie de l'adresse qui allume l'onglet (Admin couvre /admin/...).
 const LIENS_CLIENT = [
-  { href: "/dashboard", racine: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
-  { href: "/assistant", racine: "/assistant", label: "Assistant", icon: Sparkles },
-  { href: "/history", racine: "/history", label: "Progrès", icon: TrendingUp },
+  { href: "/dashboard", racine: "/dashboard", label: "Aujourd'hui", icon: House },
+  { href: "/assistant", racine: "/assistant", label: "Assistant", icon: ChefHat },
+  { href: "/history", racine: "/history", label: "Progrès", icon: LineChart },
   { href: "/messages", racine: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
@@ -49,7 +49,7 @@ export function Nav({
 
   return (
     <>
-      <header className="print:hidden fixed top-0 inset-x-0 z-20 h-[68px] md:h-20 bg-white/95 backdrop-blur-lg border-b border-black/[0.06]">
+      <header className="print:hidden fixed top-0 inset-x-0 z-20 h-[68px] md:h-20 bg-white/90 backdrop-blur-xl border-b border-c2b-cream-2">
         <div className="max-w-3xl mx-auto h-full px-4 md:px-6 flex items-center justify-between">
           <Link href="/" aria-label="Accueil">
             <Logo className="h-11 md:h-[52px] w-auto" />
@@ -86,7 +86,7 @@ export function Nav({
             href="/profil"
             onClick={() => setCible("/profil")}
             className={`md:hidden w-10 h-10 -mr-1.5 rounded-full flex items-center justify-center transition ${
-              actifSur("/profil", "/profil") ? "bg-c2b-green text-c2b-cream" : "bg-c2b-green/[0.06] text-c2b-green"
+              actifSur("/profil", "/profil") ? "bg-c2b-green text-white" : "bg-c2b-cream text-c2b-green"
             }`}
             aria-label="Mon profil"
           >
@@ -95,8 +95,8 @@ export function Nav({
         </div>
       </header>
 
-      <nav className="print:hidden md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-stretch justify-around">
+      <nav className="print:hidden md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/90 backdrop-blur-xl border-t border-c2b-cream-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-stretch justify-around px-2">
           {liens.map(({ href, racine, label, icon: Icon }) => {
             const actif = actifSur(href, racine);
             return (
@@ -104,15 +104,19 @@ export function Nav({
                 key={href}
                 href={href}
                 onClick={() => setCible(href)}
-                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors active:scale-95 [-webkit-tap-highlight-color:transparent] ${
-                  actif ? "text-c2b-green" : "text-c2b-muted"
+                className={`flex flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] transition-colors active:scale-95 [-webkit-tap-highlight-color:transparent] ${
+                  actif ? "font-semibold text-c2b-green" : "font-medium text-[#9aa39c]"
                 }`}
               >
-                <span className="relative">
-                  <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
+                <span
+                  className={`relative flex h-8 w-14 items-center justify-center rounded-full transition-colors ${
+                    actif ? "bg-c2b-green/[0.09]" : ""
+                  }`}
+                >
+                  <Icon size={21} strokeWidth={actif ? 2.2 : 1.8} />
                   {pastille(href) > 0 && (
                     <span
-                      className="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] rounded-full bg-c2b-gold px-1 text-[10px] font-bold leading-[17px] text-c2b-green text-center"
+                      className="absolute -top-1 right-1.5 min-w-[17px] h-[17px] rounded-full bg-c2b-lip px-1 text-[10px] font-bold leading-[17px] text-white text-center ring-2 ring-white"
                       aria-label={`${pastille(href)} en attente`}
                     >
                       {pastille(href) > 9 ? "9+" : pastille(href)}
@@ -120,7 +124,6 @@ export function Nav({
                   )}
                 </span>
                 <span>{label}</span>
-                <span className={`h-1 w-1 rounded-full ${actif ? "bg-c2b-gold" : "bg-transparent"}`} />
               </Link>
             );
           })}

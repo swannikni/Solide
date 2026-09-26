@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Copy, Plus, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Flame, Plus, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { EtiquetteJour } from "@/components/EtiquetteJour";
+import { ResumeJour } from "@/components/ResumeJour";
 import { DetailNutrition, type Nutriment } from "@/components/DetailNutrition";
 import { MealCard } from "@/components/MealCard";
 import { AddMealModal } from "@/components/AddMealModal";
@@ -188,62 +188,73 @@ export function DashboardClient({
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-6 pb-20 space-y-7" onTouchStart={debutGlisse} onTouchEnd={finGlisse}>
+    <main className="max-w-2xl mx-auto px-4 pt-6 pb-24 space-y-4" onTouchStart={debutGlisse} onTouchEnd={finGlisse}>
       {/* En-tête de carnet : la date en grand, les flèches pour changer de jour. */}
-      <header className="border-b-[1.5px] border-c2b-green pb-3">
-        <div className="flex items-end justify-between gap-3">
+      <header>
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="lbl mb-1">{estAujourdhui ? "Aujourd'hui" : libelleDate(date, aujourdhui) === "Hier" ? "Hier" : "Journée"}</p>
-            <h1 className="font-serif text-[44px] leading-[0.95] text-c2b-green first-letter:uppercase">{jourSemaine} {jourMois}</h1>
-            <p className="mt-1 text-sm text-c2b-muted">
-              {mois}
-              {estAujourdhui && <> · Bonjour {client.nom.split(" ")[0]}</>}
+            <h1 className="text-[28px] font-bold leading-tight tracking-tight text-c2b-green first-letter:uppercase">
+              {estAujourdhui ? "Aujourd'hui" : libelleDate(date, aujourdhui) === "Hier" ? "Hier" : jourSemaine}
+            </h1>
+            <p className="text-[15px] text-c2b-muted first-letter:uppercase">
+              {jourSemaine} {jourMois} {mois}
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-1.5 pb-1">
+          <div className="flex flex-shrink-0 gap-2">
             <Link
               href={lienJour(veille, aujourdhui)}
-              className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-c2b-green/20 text-c2b-green"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-c2b-green shadow-[0_1px_3px_rgba(20,35,25,0.1)]"
               aria-label="Jour précédent"
             >
               <ChevronLeft size={20} />
             </Link>
-            {!estAujourdhui && (
-              <Link
-                href={lienJour(decalerDate(date, 1), aujourdhui)}
-                className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-c2b-green/20 text-c2b-green"
-                aria-label="Jour suivant"
-              >
-                <ChevronRight size={20} />
-              </Link>
-            )}
+            <Link
+              href={estAujourdhui ? "#" : lienJour(decalerDate(date, 1), aujourdhui)}
+              aria-disabled={estAujourdhui}
+              className={`flex h-10 w-10 items-center justify-center rounded-full bg-white text-c2b-green shadow-[0_1px_3px_rgba(20,35,25,0.1)] ${
+                estAujourdhui ? "pointer-events-none opacity-35" : ""
+              }`}
+              aria-label="Jour suivant"
+            >
+              <ChevronRight size={20} />
+            </Link>
           </div>
         </div>
         {estAujourdhui && (serie > 0 || points !== null || defiEnCours) && (
-          <Link href="/history" className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-c2b-green">
+          <div className="mt-3 flex flex-wrap gap-2">
             {serie > 0 && (
-              <span>
-                <strong className="tabular-nums text-c2b-gold">{serie}</strong> jour{serie > 1 ? "s" : ""} d&apos;affilée
-                {repasDuJour.length === 0 && <span className="text-c2b-muted"> · notez un repas pour continuer</span>}
-              </span>
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[13px] font-semibold text-c2b-green shadow-[0_1px_3px_rgba(20,35,25,0.08)]"
+              >
+                <Flame size={15} className="text-c2b-lip" />
+                {serie} jour{serie > 1 ? "s" : ""} d&apos;affilée
+              </Link>
             )}
             {points !== null && (
-              <span>
-                <strong className="tabular-nums text-c2b-gold">{points.toLocaleString("fr-FR")}</strong> points
-              </span>
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[13px] font-semibold text-c2b-green shadow-[0_1px_3px_rgba(20,35,25,0.08)]"
+              >
+                <Star size={14} className="text-c2b-gluc" />
+                {points.toLocaleString("fr-FR")} points
+              </Link>
             )}
             {defiEnCours && (
-              <span>
-                Défi{" "}
-                <strong className="tabular-nums text-c2b-gold">
-                  {Math.min(defiEnCours.fait ?? 0, defiEnCours.cible)}/{defiEnCours.cible}
-                </strong>
-              </span>
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-1.5 rounded-full bg-c2b-green px-3 py-1.5 text-[13px] font-semibold text-white"
+              >
+                Défi {Math.min(defiEnCours.fait ?? 0, defiEnCours.cible)}/{defiEnCours.cible}
+              </Link>
             )}
-          </Link>
+          </div>
+        )}
+        {estAujourdhui && serie > 0 && repasDuJour.length === 0 && (
+          <p className="mt-2 text-[13px] text-c2b-muted">Notez un repas aujourd&apos;hui pour garder votre série.</p>
         )}
         {!estAujourdhui && (
-          <Link href="/dashboard" className="mt-2 inline-block text-sm font-semibold text-c2b-gold">
+          <Link href="/dashboard" className="mt-2 inline-block text-sm font-semibold text-c2b-green">
             Revenir à aujourd&apos;hui →
           </Link>
         )}
@@ -270,8 +281,7 @@ export function DashboardClient({
         </button>
       )}
 
-      <EtiquetteJour
-        titre={estAujourdhui ? "Bilan du jour" : "Bilan de la journée"}
+      <ResumeJour
         totaux={totaux}
         objectifs={{
           calories: client.objectif_calories,
@@ -287,82 +297,84 @@ export function DashboardClient({
         const kcalSection = totauxDuJour(repasSection).calories;
         const veilleSection = repasVeille.filter((r) => r.repas_type === type);
         return (
-          <section key={type}>
-            <div className="flex items-baseline justify-between border-b-[1.5px] border-c2b-green pb-1.5">
-              <h2 className="font-serif text-[26px] leading-none text-c2b-green">{REPAS_TYPE_LABELS[type]}</h2>
-              <span className="text-sm tabular-nums text-c2b-muted">
-                {repasSection.length > 0 ? (
-                  <>
-                    <strong className="text-c2b-green">{Math.round(kcalSection)}</strong> kcal
-                  </>
-                ) : (
-                  "—"
-                )}
-              </span>
-            </div>
-            {repasSection.map((r) => (
-              <MealCard key={r.id} repas={r} onModifier={setRepasEnEdition} />
-            ))}
-            {repasSection.length === 0 && (
-              <p className="border-b border-c2b-green/15 py-3 text-sm italic text-c2b-muted">Rien de noté pour l&apos;instant</p>
-            )}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2.5">
-              <button
-                onClick={() => ouvrirAjout(type)}
-                className="inline-flex items-center gap-1 text-[14px] font-bold text-c2b-gold"
-              >
-                <Plus size={16} /> Ajouter
-              </button>
-              {repasSection.length === 0 && veilleSection.length > 0 && (
-                <button
-                  onClick={() => copierVeille(type)}
-                  disabled={copieEnCours !== null}
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-c2b-green disabled:opacity-60"
-                >
-                  <Copy size={14} />
-                  {copieEnCours === type
-                    ? "Copie..."
-                    : `Comme hier · ${Math.round(totauxDuJour(veilleSection).calories)} kcal`}
-                </button>
-              )}
-              {repasSection.length > 0 &&
-                (favoriRepas?.type === type ? (
-                  <div className="flex w-full gap-2">
-                    <input
-                      autoFocus
-                      value={favoriRepas.nom}
-                      onChange={(e) => setFavoriRepas({ type, nom: e.target.value })}
-                      placeholder="Nom du repas favori"
-                      className="champ py-2.5 text-sm"
-                    />
-                    <button onClick={enregistrerRepasFavori} className="btn-primary px-4 text-sm flex-shrink-0">
-                      OK
-                    </button>
-                    <button onClick={() => setFavoriRepas(null)} className="text-sm text-c2b-muted px-1 flex-shrink-0">
-                      Annuler
-                    </button>
-                  </div>
-                ) : messageFavori?.type === type ? (
-                  <p className="text-[13px] font-semibold text-c2b-green">{messageFavori.texte}</p>
-                ) : (
+          <section key={type} className="carte px-4 pb-3 pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[17px] font-semibold text-c2b-green">{REPAS_TYPE_LABELS[type]}</h2>
+                <p className="text-[13px] text-c2b-muted tabular-nums">
+                  {repasSection.length > 0
+                    ? `${Math.round(kcalSection)} kcal · ${repasSection.length} aliment${repasSection.length > 1 ? "s" : ""}`
+                    : "Rien de noté"}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-1.5">
+                {repasSection.length > 0 && favoriRepas?.type !== type && (
                   <button
                     onClick={() => {
                       setMessageFavori(null);
                       setFavoriRepas({ type, nom: `${type === "collation" ? "Ma" : "Mon"} ${REPAS_TYPE_LABELS[type].toLowerCase()}` });
                     }}
-                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-c2b-muted"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-c2b-muted transition active:scale-95"
+                    aria-label={`Enregistrer le ${REPAS_TYPE_LABELS[type].toLowerCase()} en favori`}
                   >
-                    <Star size={14} /> En favori
+                    <Star size={18} />
                   </button>
-                ))}
+                )}
+                <button
+                  onClick={() => ouvrirAjout(type)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-c2b-green/[0.08] text-c2b-green transition active:scale-95"
+                  aria-label={`Ajouter au ${REPAS_TYPE_LABELS[type].toLowerCase()}`}
+                >
+                  <Plus size={19} />
+                </button>
+              </div>
             </div>
+            {repasSection.length > 0 && (
+              <div className="mt-2">
+                {repasSection.map((r) => (
+                  <MealCard key={r.id} repas={r} onModifier={setRepasEnEdition} />
+                ))}
+              </div>
+            )}
+            {repasSection.length === 0 && veilleSection.length > 0 && (
+              <button
+                onClick={() => copierVeille(type)}
+                disabled={copieEnCours !== null}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-c2b-green/[0.07] px-3 py-1.5 text-[13px] font-semibold text-c2b-green disabled:opacity-60"
+              >
+                <Copy size={14} />
+                {copieEnCours === type ? "Copie..." : `Comme hier · ${Math.round(totauxDuJour(veilleSection).calories)} kcal`}
+              </button>
+            )}
+            {repasSection.length > 0 &&
+              (favoriRepas?.type === type ? (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    autoFocus
+                    value={favoriRepas.nom}
+                    onChange={(e) => setFavoriRepas({ type, nom: e.target.value })}
+                    placeholder="Nom du repas favori"
+                    className="champ py-2.5 text-sm"
+                  />
+                  <button onClick={enregistrerRepasFavori} className="btn-primary px-4 text-sm flex-shrink-0">
+                    OK
+                  </button>
+                  <button onClick={() => setFavoriRepas(null)} className="text-sm text-c2b-muted px-1 flex-shrink-0">
+                    Annuler
+                  </button>
+                </div>
+              ) : (
+                messageFavori?.type === type && (
+                  <p className="mt-2 text-[13px] font-semibold text-c2b-green">{messageFavori.texte}</p>
+                )
+              ))}
           </section>
         );
       })}
 
       <button
         onClick={() => ouvrirAjout(repasSelonHeure())}
-        className="fixed bottom-[92px] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-gold hover:bg-c2b-gold-light text-c2b-green rounded-[16px] w-14 h-14 flex items-center justify-center shadow-[0_6px_18px_rgba(28,46,30,0.25)] transition"
+        className="fixed bottom-[92px] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-green hover:bg-c2b-green-mid text-white rounded-full w-14 h-14 flex items-center justify-center shadow-[0_6px_20px_rgba(28,46,30,0.3)] transition"
         aria-label="Ajouter un repas"
       >
         <Plus size={26} />

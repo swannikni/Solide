@@ -91,7 +91,7 @@ export function Progres({
       <section className="carte p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h2 className="font-serif text-xl text-c2b-green">Poids</h2>
+            <h2 className="font-bold tracking-tight text-xl text-c2b-green">Poids</h2>
             {actuel && (
               <p className="mt-1">
                 <span className="text-[32px] font-semibold text-c2b-text leading-none">
@@ -128,7 +128,7 @@ export function Progres({
           />
         ) : editionObjectif ? (
           <form onSubmit={enregistrerObjectif} className="mb-4 rounded-2xl bg-c2b-cream p-3.5">
-            <label htmlFor="objectif-poids" className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
+            <label htmlFor="objectif-poids" className="block text-xs font-bold text-c2b-muted mb-2">
               Mon objectif de poids (kg)
             </label>
             <div className="flex gap-2">
@@ -190,7 +190,7 @@ export function Progres({
       <section className="carte p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h2 className="font-serif text-xl text-c2b-green">Calories · 7 jours</h2>
+            <h2 className="font-bold tracking-tight text-xl text-c2b-green">Calories · 7 jours</h2>
             {moyenne !== null && (
               <p className="text-sm text-c2b-muted mt-0.5">
                 Moyenne <span className="font-semibold text-c2b-text">{moyenne.toLocaleString("fr-FR")} kcal</span>{" "}

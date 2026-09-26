@@ -54,7 +54,7 @@ export default function LoginPage() {
 
         <form onSubmit={seConnecter} className="carte p-6 space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Email</label>
+            <label className="block text-xs font-bold text-c2b-muted mb-2">Email</label>
             <input
               type="email"
               required
@@ -67,7 +67,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
+            <label className="block text-xs font-bold text-c2b-muted mb-2">
               Mot de passe
             </label>
             <div className="relative">

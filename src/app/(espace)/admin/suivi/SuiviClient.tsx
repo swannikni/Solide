@@ -102,7 +102,7 @@ export function SuiviClient({ lignes, aujourdhui }: { lignes: LigneSuivi[]; aujo
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
         {chiffres.map((c) => (
           <div key={c.libelle} className={`carte p-4 ${c.alerte ? "border-red-200" : ""}`}>
-            <p className={`font-serif text-3xl ${c.alerte ? "text-red-700" : "text-c2b-green"}`}>{c.valeur}</p>
+            <p className={`font-bold tracking-tight text-3xl ${c.alerte ? "text-red-700" : "text-c2b-green"}`}>{c.valeur}</p>
             <p className="mt-1 text-xs text-c2b-muted">{c.libelle}</p>
           </div>
         ))}

@@ -183,7 +183,7 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
       </div>
 
       <section className="carte p-5">
-        <h2 className="font-serif text-xl text-c2b-green">Mes objectifs du jour</h2>
+        <h2 className="font-bold tracking-tight text-xl text-c2b-green">Mes objectifs du jour</h2>
         <div className="grid grid-cols-4 gap-2 mt-3 text-center">
           <Valeur valeur={client.objectif_calories} unite="kcal" />
           <Valeur valeur={client.objectif_proteines} unite="g prot." />
@@ -206,7 +206,7 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
 
             <div className="rounded-2xl bg-c2b-cream p-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted">Nouveaux objectifs</p>
+                <p className="text-xs font-bold text-c2b-muted">Nouveaux objectifs</p>
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-c2b-green">
                   <input
                     type="checkbox"
@@ -238,7 +238,7 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
                     ] as const
                   ).map(([cle, label]) => (
                     <label key={cle} className="block">
-                      <span className="block text-[10px] font-bold uppercase tracking-wider text-c2b-muted mb-1">{label}</span>
+                      <span className="block text-[10px] font-bold text-c2b-muted mb-1">{label}</span>
                       <input
                         inputMode="numeric"
                         value={macros[cle]}
@@ -284,7 +284,7 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
       </section>
 
       <section className="carte p-5 space-y-5">
-        <h2 className="font-serif text-xl text-c2b-green">Mes informations</h2>
+        <h2 className="font-bold tracking-tight text-xl text-c2b-green">Mes informations</h2>
 
         <div>
           <Etiquette>Nom</Etiquette>
@@ -407,7 +407,7 @@ function Valeur({ valeur, unite }: { valeur: number; unite: string }) {
 }
 
 function Etiquette({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">{children}</p>;
+  return <p className="text-xs font-bold text-c2b-muted mb-2">{children}</p>;
 }
 
 function LienListe({ href, externe, children }: { href: string; externe?: boolean; children: React.ReactNode }) {

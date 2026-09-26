@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { Send, ChefHat } from "lucide-react";
 
 interface MessageChat {
   id: string;
@@ -37,7 +37,7 @@ export function TexteFormate({ texte }: { texte: string }) {
         const titre = brute.match(/^#{1,4}\s+(.*)$/);
         if (titre) {
           return (
-            <p key={i} className="font-serif text-lg text-c2b-green pt-1">
+            <p key={i} className="font-bold tracking-tight text-lg text-c2b-green pt-1">
               {enGras(titre[1])}
             </p>
           );
@@ -145,7 +145,7 @@ export function AssistantChat({ prenom, messagesInitiaux }: { prenom: string; me
                 onClick={() => envoyer(s)}
                 className="carte flex items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-c2b-green transition hover:border-c2b-gold/40"
               >
-                <Sparkles size={16} className="text-c2b-gold flex-shrink-0" />
+                <ChefHat size={16} className="text-c2b-gold flex-shrink-0" />
                 {s}
               </button>
             ))}

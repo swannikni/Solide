@@ -203,7 +203,7 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
                   className="champ resize-none"
                 />
               </Champ>
-              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Macros pour une box</p>
+              <p className="text-xs font-bold text-c2b-muted pt-1">Macros pour une box</p>
               <div className="grid grid-cols-2 gap-2.5">
                 {(
                   [
@@ -250,7 +250,7 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
 function Champ({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
+      <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">{label}</span>
       {children}
     </label>
   );

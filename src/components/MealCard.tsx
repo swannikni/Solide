@@ -15,39 +15,36 @@ export function libelleQuantite(repas: Pick<RepasJournal, "quantite" | "unite"> 
   return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
 }
 
-// Ligne de repas façon carte de restaurant : nom, points de conduite, kcal.
+// Ligne d'aliment dans la carte d'un repas : nom et détail à gauche, kcal à droite.
 export function MealCard({ repas, onModifier }: { repas: RepasJournal; onModifier: (repas: RepasJournal) => void }) {
   const kcal = Math.round(repas.calories * repas.quantite);
   return (
     <button
       onClick={() => onModifier(repas)}
-      className="w-full flex gap-3 items-center border-b border-c2b-green/15 py-3 text-left transition active:bg-c2b-green/[0.03]"
+      className="w-full flex gap-3 items-center border-t border-c2b-cream-2 py-2.5 text-left transition active:opacity-70"
     >
       {repas.photo_url && (
         <Image
           src={repas.photo_url}
           alt={repas.nom}
-          width={44}
-          height={44}
-          className="h-11 w-11 flex-shrink-0 rounded-[6px] object-cover"
+          width={40}
+          height={40}
+          className="h-10 w-10 flex-shrink-0 rounded-lg object-cover"
         />
       )}
       <div className="flex-1 min-w-0">
-        <p className="flex items-baseline gap-2">
-          <span className="truncate text-[15px] font-semibold text-c2b-green">{repas.nom}</span>
-          <span className="min-w-[16px] flex-1 translate-y-[-3px] border-b-2 border-dotted border-c2b-green/20" />
-          <span className="flex-shrink-0 font-serif text-[18px] leading-none tabular-nums text-c2b-green">{kcal}</span>
-        </p>
-        <p className="mt-1 text-xs text-c2b-muted tabular-nums">
+        <p className="truncate text-[15px] font-medium text-c2b-text">{repas.nom}</p>
+        <p className="mt-0.5 text-[13px] text-c2b-muted tabular-nums">
           {[
             SOURCE_LABELS[repas.source],
             libelleQuantite(repas),
-            `${Math.round(repas.proteines * repas.quantite)} P · ${Math.round(repas.glucides * repas.quantite)} G · ${Math.round(repas.lipides * repas.quantite)} L`,
+            `P ${Math.round(repas.proteines * repas.quantite)} · G ${Math.round(repas.glucides * repas.quantite)} · L ${Math.round(repas.lipides * repas.quantite)}`,
           ]
             .filter(Boolean)
             .join(" · ")}
         </p>
       </div>
+      <span className="flex-shrink-0 text-[15px] font-semibold tabular-nums text-c2b-green">{kcal}</span>
     </button>
   );
 }
