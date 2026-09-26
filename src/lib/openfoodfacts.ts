@@ -23,7 +23,9 @@ export function portionDuProduit(p: ChampsPortion): PortionUsuelle | null {
   if (parPortion) return parPortion;
   // Sinon l'emballage entier s'il est petit (canette 33 cl, barre 45 g...).
   const emballage = portionDepuisTexte(p.quantity, Number(p.product_quantity) || null);
-  return emballage && emballage.grammes <= 500 ? { ...emballage, libelle: "1 emballage" } : null;
+  if (!emballage || emballage.grammes > 500) return null;
+  // Lot (« 4 x 60 g ») : la portion est l'unité, pas le lot entier.
+  return emballage.libelle === "1 unité" ? emballage : { ...emballage, libelle: "1 emballage" };
 }
 
 interface ProduitOFF extends ChampsPortion {

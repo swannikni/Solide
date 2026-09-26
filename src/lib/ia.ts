@@ -10,7 +10,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type TypeIA = "assistant" | "etiquette" | "plat";
 
+// Lecture d'étiquette : recopier des chiffres, le petit modèle suffit.
 export const MODELE_VISION = "claude-haiku-4-5";
+// Photo du plat : reconnaître les aliments et estimer les quantités demande
+// un meilleur modèle (~0,01 $ la photo, 5 photos par jour et par client).
+export const MODELE_PLAT = "claude-sonnet-5";
 
 const MESSAGES: Record<string, (type: TypeIA) => string> = {
   limite_jour: (type) =>

@@ -174,18 +174,23 @@ export function portionsPour(
 export function portionDepuisTexte(texte: string | null | undefined, quantite?: number | null): PortionUsuelle | null {
   const t = (texte ?? "").toLowerCase();
   const nombre = (s: string) => parseFloat(s.replace(",", "."));
-  let valeur = quantite && quantite > 0 ? quantite : NaN;
-  let enMl = /\b(ml|cl|l)\b/.test(t);
-  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/);
-  if (m) {
-    const v = nombre(m[1]);
-    const unite = m[2];
-    enMl = unite === "ml" || unite === "cl" || unite === "l";
-    if (Number.isNaN(valeur)) valeur = unite === "kg" || unite === "l" ? v * 1000 : unite === "cl" ? v * 10 : v;
-  }
-  if (!Number.isFinite(valeur) || valeur <= 0 || valeur > 1000) return null;
+  // Sans poids ni volume écrit (« 1 donut », « 1 portion »), Open Food Facts
+  // met parfois serving_quantity = 1 : on ne devine pas, pas de portion.
+  const multi = t.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/);
+  const m = multi ? { 1: multi[2], 2: multi[3] } : t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|gr|ml|cl|l)\b/);
+  if (!m) return null;
+  const unite = m[2] === "gr" ? "g" : m[2];
+  const enMl = unite === "ml" || unite === "cl" || unite === "l";
+  const ecrit = nombre(m[1]) * (unite === "kg" || unite === "l" ? 1000 : unite === "cl" ? 10 : 1);
+  // Le poids écrit fait foi ; serving_quantity ne sert que s'il concorde.
+  const valeur = quantite && quantite > 0 && Math.abs(quantite - ecrit) <= ecrit * 0.1 ? quantite : ecrit;
+  if (!Number.isFinite(valeur) || valeur < 2 || valeur > 1000) return null;
   // Libellé court : « 1 pot », « 1 barre »… si le fabricant le précise, sinon « 1 portion ».
   const compte = t.match(/^\s*(\d+)\s+([a-zà-ÿ]+)/);
-  const libelle = compte && !/^(g|ml|cl|l|kg)$/.test(compte[2]) ? `${compte[1]} ${compte[2]}` : "1 portion";
+  const libelle = multi
+    ? "1 unité"
+    : compte && !/^(g|gr|ml|cl|l|kg|x)$/.test(compte[2])
+      ? `${compte[1]} ${compte[2]}`
+      : "1 portion";
   return { libelle, grammes: Math.round(valeur), ml: enMl || undefined };
 }

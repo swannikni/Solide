@@ -1,68 +1,76 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { MODELE_VISION, lireImage, nombre, signalerEchecIA, reserverIA } from "@/lib/ia";
+import { MODELE_PLAT, MODELE_VISION, lireImage, nombre, signalerEchecIA, reserverIA } from "@/lib/ia";
 import { nomSimple } from "@/lib/noms-aliments";
 import type { Aliment } from "@/lib/types";
 
-// Photo de l'assiette : l'IA reconnaît les aliments et estime les grammes.
-// Les macros viennent de préférence de la table CIQUAL (valeurs officielles),
-// l'estimation de l'IA ne sert que si aucun aliment proche n'est trouvé.
+// Photo de l'assiette : l'IA reconnaît les aliments, estime les grammes et
+// les macros. On garde la valeur officielle CIQUAL quand l'aliment trouvé
+// colle à l'estimation, sinon celle de l'IA (plats composés, sauces...).
 
 export const dynamic = "force-dynamic";
 
 const erreur = (message: string, status: number) => NextResponse.json({ erreur: message }, { status });
 
-const OUTIL: Anthropic.Tool = {
-  name: "aliments_du_plat",
-  description: "Aliments visibles dans l'assiette avec leur poids estimé.",
-  input_schema: {
-    type: "object",
-    properties: {
-      est_un_repas: { type: "boolean", description: "false si la photo ne montre pas de nourriture" },
-      aliments: {
-        type: "array",
-        maxItems: 10,
-        items: {
-          type: "object",
-          properties: {
-            nom: { type: "string", description: "Nom court en français (« Riz blanc », « Blanc de poulet grillé »)" },
-            recherche: {
-              type: "string",
-              description: "2 à 4 mots pour chercher l'aliment dans la table CIQUAL (« riz blanc cuit », « poulet filet grille »)",
-            },
-            grammes: { type: "number", description: "Poids estimé dans l'assiette (ml pour une boisson)" },
-            liquide: { type: "boolean" },
-            calories: { type: "number", description: "Estimation kcal pour 100 g" },
-            proteines: { type: "number", description: "Estimation g pour 100 g" },
-            glucides: { type: "number", description: "Estimation g pour 100 g" },
-            lipides: { type: "number", description: "Estimation g pour 100 g" },
-          },
-          required: ["nom", "recherche", "grammes", "liquide", "calories", "proteines", "glucides", "lipides"],
+// Réponse JSON imposée (structured outputs) : le schéma est toujours respecté.
+const SCHEMA = {
+  type: "object",
+  properties: {
+    est_un_repas: { type: "boolean" },
+    aliments: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          nom: { type: "string" },
+          recherche: { type: "string" },
+          grammes: { type: "number" },
+          liquide: { type: "boolean" },
+          confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
+          calories: { type: "number" },
+          proteines: { type: "number" },
+          glucides: { type: "number" },
+          lipides: { type: "number" },
         },
-      },
-      conseil: {
-        type: "string",
-        description: "Une phrase courte sur ce qui est difficile à estimer (huile, sauce cachée...), sinon chaîne vide",
+        required: ["nom", "recherche", "grammes", "liquide", "confiance", "calories", "proteines", "glucides", "lipides"],
+        additionalProperties: false,
       },
     },
-    required: ["est_un_repas", "aliments", "conseil"],
+    conseil: { type: "string" },
   },
+  required: ["est_un_repas", "aliments", "conseil"],
+  additionalProperties: false,
 };
 
-const CONSIGNES = `Tu analyses la photo d'un repas pour une application de suivi nutritionnel au Maroc.
-- Liste chaque aliment visible séparément (féculent, viande, légumes, sauce, pain, boisson...). Plats marocains courants : tajine, couscous, harira, msemen, baghrir, etc.
-- Estime le poids réel dans l'assiette en t'aidant de la taille de l'assiette, des couverts et des mains. Sois réaliste, ni généreux ni avare.
-- Compte l'huile ou le beurre de cuisson visible (brillance, friture) comme un aliment à part si c'est significatif.
-- Donne des valeurs pour 100 g de l'aliment tel qu'il est servi (cuit).
-- Si la photo ne montre pas de nourriture, mets est_un_repas à false et une liste vide.
-Réponds uniquement avec l'outil.`;
+const CONSIGNES = `Tu analyses la photo d'un repas pour une application de suivi nutritionnel au Maroc. Le client corrigera ensuite ta liste : sois précis et honnête sur tes doutes.
+
+Identification
+- Liste chaque composant séparément (féculent, viande/poisson, légumes, sauce, pain, fromage, boisson…), au maximum 10.
+- Plats marocains fréquents : tajine, couscous, harira, pastilla, msemen, baghrir, rfissa, bissara, kefta, loubia…
+- Si tu hésites entre deux aliments, choisis le plus probable et mets confiance « basse ».
+
+Quantités (le plus important)
+- Estime le poids servi à partir des repères visibles : une assiette plate fait environ 26 cm, une assiette creuse ou un bol 15-18 cm, une fourchette 19 cm, une cuillère à soupe contient environ 15 ml, une main adulte ~18 cm.
+- Raisonne en volume puis en poids (une portion de riz cuit qui couvre un quart d'assiette sur 2 cm ≈ 150 g ; un blanc de poulet de la taille d'une paume ≈ 120 g).
+- Ne sous-estime pas : les photos font paraître les portions plus petites. Pour ce qui est en partie caché, estime la partie cachée.
+- Compte l'huile ou le beurre visible (brillance, friture, sauce grasse) comme un aliment à part : 5 à 15 ml selon ce qui se voit.
+- « grammes » : poids dans l'assiette (ml pour une boisson).
+
+Macros
+- calories, protéines, glucides, lipides pour 100 g de l'aliment tel qu'il est servi (cuit, avec sa sauce s'il est mélangé).
+- « recherche » : 2 à 4 mots sans accent pour retrouver l'aliment dans la table CIQUAL (« riz blanc cuit », « poulet filet grille », « frites »).
+
+Confiance : « haute » si l'aliment et la quantité sont évidents, « moyenne » si la quantité est incertaine, « basse » si l'aliment lui-même est incertain.
+Conseil : une phrase courte sur ce qu'une photo ne permet pas de voir (huile de cuisson, sauce, sucre dans la boisson…), sinon chaîne vide.
+Si la photo ne montre pas de nourriture : est_un_repas à false et liste vide.`;
 
 type AlimentIA = {
   nom: string;
   recherche: string;
   grammes: number;
   liquide: boolean;
+  confiance: "haute" | "moyenne" | "basse";
   calories: number;
   proteines: number;
   glucides: number;
@@ -87,48 +95,55 @@ export async function POST(request: NextRequest) {
 
   let resultat: { est_un_repas?: boolean; aliments?: AlimentIA[]; conseil?: string };
   try {
-    const reponse = await new Anthropic().messages.create({
-      model: MODELE_VISION,
-      max_tokens: 1200,
-      system: CONSIGNES,
-      tools: [OUTIL],
-      tool_choice: { type: "tool", name: OUTIL.name },
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: image.type, data: image.donnees } },
-            { type: "text", text: "Voici mon repas." },
-          ],
+    const client = new Anthropic({ timeout: 45_000, maxRetries: 1 });
+    const demande = (modele: string, avecEffort: boolean) =>
+      client.messages.create({
+        model: modele,
+        max_tokens: 4000,
+        // Effort bas : réflexion courte, réponse en quelques secondes.
+        output_config: {
+          ...(avecEffort ? { effort: "low" as const } : {}),
+          format: { type: "json_schema", schema: SCHEMA },
         },
-      ],
-    });
-    const bloc = reponse.content.find((b) => b.type === "tool_use");
-    if (bloc?.type !== "tool_use") throw new Error("réponse sans outil");
-    resultat = bloc.input as typeof resultat;
+        system: CONSIGNES,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: image.type, data: image.donnees } },
+              { type: "text", text: "Voici mon repas." },
+            ],
+          },
+        ],
+      });
+    let reponse: Anthropic.Message;
+    try {
+      reponse = await demande(MODELE_PLAT, true);
+    } catch (e) {
+      // Modèle indisponible pour ce compte : on retombe sur le petit modèle.
+      if (!(e instanceof Anthropic.BadRequestError || e instanceof Anthropic.NotFoundError)) throw e;
+      console.error("Photo du plat, repli sur", MODELE_VISION, ":", e.message);
+      reponse = await demande(MODELE_VISION, false);
+    }
+    if (reponse.stop_reason === "refusal" || reponse.stop_reason === "max_tokens") {
+      throw new Error(`réponse incomplète (${reponse.stop_reason})`);
+    }
+    const texte = reponse.content.find((b) => b.type === "text");
+    if (texte?.type !== "text") throw new Error("réponse sans texte");
+    resultat = JSON.parse(texte.text);
   } catch (e) {
     console.error("Photo du plat :", e);
     await signalerEchecIA(reservation.id, e);
     return erreur("L'analyse n'a pas marché, réessayez.", 502);
   }
 
-  // Le modèle renvoie parfois la liste sous forme de texte JSON.
-  let liste: unknown = resultat.aliments;
-  if (typeof liste === "string") {
-    try {
-      liste = JSON.parse(liste);
-    } catch {
-      liste = [];
-    }
-  }
-  const detectes = (Array.isArray(liste) ? (liste as AlimentIA[]) : []).slice(0, 10);
+  const detectes = (Array.isArray(resultat.aliments) ? resultat.aliments : []).slice(0, 10);
   if (resultat.est_un_repas === false || detectes.length === 0) {
     return NextResponse.json({ aliments: [], conseil: "", restant: reservation.restant });
   }
 
-  // Chaque aliment reconnu est rapproché de la table CIQUAL. On garde la
-  // valeur officielle si elle est cohérente avec l'estimation (sinon le mot
-  // cherché a sans doute trouvé un autre aliment).
+  // Valeur officielle CIQUAL si l'aliment trouvé colle à l'estimation de
+  // l'IA (sinon la recherche a sans doute trouvé autre chose).
   const aliments = await Promise.all(
     detectes.map(async (a) => {
       const estimation = {
@@ -144,13 +159,16 @@ export async function POST(request: NextRequest) {
         base =
           ((data as Aliment[] | null) ?? []).find((c) => {
             const kcal = Number(c.calories);
-            return estimation.calories < 40 ? Math.abs(kcal - estimation.calories) <= 40 : kcal >= estimation.calories * 0.5 && kcal <= estimation.calories * 2;
+            return estimation.calories < 50
+              ? Math.abs(kcal - estimation.calories) <= 25
+              : kcal >= estimation.calories * 0.7 && kcal <= estimation.calories * 1.4;
           }) ?? null;
       }
       return {
         nom: (typeof a.nom === "string" && a.nom.trim() ? a.nom.trim() : recherche).slice(0, 80),
         grammes: Math.max(1, Math.round(nombre(a.grammes, 2000))),
         liquide: a.liquide === true,
+        confiance: a.confiance === "haute" || a.confiance === "basse" ? a.confiance : "moyenne",
         ...(base
           ? {
               calories: Math.round(Number(base.calories)),

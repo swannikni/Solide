@@ -55,6 +55,7 @@ interface AlimentDetecte {
   glucides: number;
   lipides: number;
   reference: string | null; // aliment CIQUAL utilisé pour les valeurs
+  confiance: "haute" | "moyenne" | "basse";
 }
 
 const ETIQUETTE_VIDE = {
@@ -149,6 +150,7 @@ interface Trouve {
   paGrammes?: boolean; // true si quantite = grammes / 100 (produit du commerce)
   portions?: PortionUsuelle[]; // portions proposées (fabricant, nom ou famille)
   liquide?: boolean; // boisson : quantités en ml
+  portionFabricant?: boolean; // première portion = celle écrite sur l'emballage
 }
 
 export function AddMealModal({
@@ -222,6 +224,23 @@ export function AddMealModal({
   const [texteAnalyse, setTexteAnalyse] = useState("");
   const [platDetecte, setPlatDetecte] = useState<{ aliments: AlimentDetecte[]; conseil: string } | null>(null);
   const [restantIA, setRestantIA] = useState<number | null>(null);
+  // Photo du plat : remplacer un aliment mal reconnu (index) ou en ajouter un (null).
+  const [remplacement, setRemplacement] = useState<{ index: number | null; texte: string } | null>(null);
+  const [resultatsRemplacement, setResultatsRemplacement] = useState<Aliment[]>([]);
+  const texteRemplacement = remplacement?.texte.trim() ?? "";
+  useEffect(() => {
+    if (texteRemplacement.length < 2) return setResultatsRemplacement([]);
+    let annule = false;
+    const minuteur = setTimeout(async () => {
+      const { data } = await supabase.rpc("application_rechercher_aliments", { q: texteRemplacement, limite: 8 });
+      if (!annule) setResultatsRemplacement((data as Aliment[] | null) ?? []);
+    }, 300);
+    return () => {
+      annule = true;
+      clearTimeout(minuteur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texteRemplacement]);
 
   // Écran où revenir après un ajout ou un "Retour" depuis la confirmation.
   useEffect(() => {
@@ -479,6 +498,7 @@ export function AddMealModal({
       paGrammes: true,
       portions,
       liquide: portions[0]?.ml === true,
+      portionFabricant: !!contexte.portionProduit,
     });
     // Poids tapé dans la recherche, sinon la première portion (fabricant, 1 œuf, 1 pot...), sinon 100 g.
     setGrammes(grammesPreremplis ?? portions[0]?.grammes ?? 100);
@@ -811,6 +831,7 @@ export function AddMealModal({
         setEtape("choix");
         return;
       }
+      setRemplacement(null);
       setPlatDetecte({
         aliments: aliments.map((a) => ({ ...a, grammes: String(a.grammes), coche: true })),
         conseil: d.conseil ?? "",
@@ -1649,6 +1670,72 @@ export function AddMealModal({
               aliments[i] = { ...aliments[i], ...changement };
               setPlatDetecte({ ...platDetecte, aliments });
             };
+            // Aliment choisi dans la base : remplace celui mal reconnu (en gardant
+            // la quantité) ou s'ajoute à la liste.
+            const choisirRemplacement = (al: Aliment) => {
+              const valeurs = {
+                nom: nomSimple(al.nom, al.groupe),
+                calories: Math.round(Number(al.calories)),
+                proteines: Number(al.proteines),
+                glucides: Number(al.glucides),
+                lipides: Number(al.lipides),
+                reference: null,
+                confiance: "haute" as const,
+                coche: true,
+              };
+              if (remplacement?.index != null) {
+                modifier(remplacement.index, valeurs);
+              } else {
+                const p = portionsPour(al.nom, { groupe: al.groupe })[0];
+                setPlatDetecte({
+                  ...platDetecte,
+                  aliments: [
+                    ...platDetecte.aliments,
+                    { ...valeurs, grammes: String(p?.grammes ?? 100), liquide: p?.ml === true },
+                  ],
+                });
+              }
+              setRemplacement(null);
+            };
+            const panneauRecherche = remplacement && (
+              <div className="carte space-y-2 p-3">
+                <p className="text-xs font-bold text-c2b-green">
+                  {remplacement.index != null
+                    ? `Remplacer « ${platDetecte.aliments[remplacement.index]?.nom} » par :`
+                    : "Ajouter un aliment :"}
+                </p>
+                <div className="relative">
+                  <Search size={16} className="absolute left-3.5 top-3.5 text-c2b-muted/60" />
+                  <input
+                    autoFocus
+                    value={remplacement.texte}
+                    onChange={(e) => setRemplacement({ ...remplacement, texte: e.target.value })}
+                    placeholder="Ex : semoule, kefta, frites..."
+                    className="champ pl-10"
+                  />
+                </div>
+                {resultatsRemplacement.length > 0 && (
+                  <ul className="divide-y divide-black/5">
+                    {resultatsRemplacement.map((al) => (
+                      <li key={al.id}>
+                        <button
+                          onClick={() => choisirRemplacement(al)}
+                          className="w-full py-2 text-left text-sm font-semibold text-c2b-green"
+                        >
+                          {nomSimple(al.nom, al.groupe)}
+                          <span className="block text-[11px] font-normal text-c2b-muted">
+                            {Math.round(Number(al.calories))} kcal · {Number(al.proteines)}g P pour 100 g
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button onClick={() => setRemplacement(null)} className="text-xs font-semibold text-c2b-muted">
+                  Annuler
+                </button>
+              </div>
+            );
             return (
               <div className="space-y-4">
                 <div>
@@ -1656,8 +1743,12 @@ export function AddMealModal({
                     <Sparkles size={12} /> Votre assiette
                   </p>
                   <p className="text-sm text-c2b-muted">
-                    Estimation de l&apos;IA : ajustez les quantités si besoin, décochez ce qui est faux.
+                    Touchez un aliment pour le remplacer, changez les quantités, décochez ce qui est faux.
                   </p>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                  ⚠️ <strong>Estimation à partir d&apos;une photo</strong> : l&apos;IA peut se tromper d&apos;aliment et
+                  de quantité (souvent ±20 à 30 %). Huile, sauces et sucre ne se voient pas. Pour être précis, pesez.
                 </div>
                 <ul className="carte overflow-hidden divide-y divide-black/5">
                   {platDetecte.aliments.map((a, i) => (
@@ -1669,13 +1760,25 @@ export function AddMealModal({
                         className="h-5 w-5 accent-c2b-green flex-shrink-0"
                         aria-label={a.nom}
                       />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-c2b-green truncate">{a.nom}</p>
+                      <button
+                        onClick={() => setRemplacement({ index: i, texte: "" })}
+                        className="flex-1 min-w-0 text-left"
+                        aria-label={`Remplacer ${a.nom}`}
+                      >
+                        <p className="text-sm font-semibold text-c2b-green truncate">
+                          {a.nom}
+                          <Pencil size={12} className="ml-1.5 inline text-c2b-gold" />
+                        </p>
                         <p className="text-[11px] text-c2b-muted">
                           {Math.round((a.calories * nombreSaisi(a.grammes)) / 100)} kcal ·{" "}
                           {Math.round((a.proteines * nombreSaisi(a.grammes)) / 10) / 10}g P
+                          {a.confiance === "basse" && (
+                            <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 font-bold text-amber-800">
+                              à vérifier
+                            </span>
+                          )}
                         </p>
-                      </div>
+                      </button>
                       <div className="relative w-[88px] flex-shrink-0">
                         <input
                           inputMode="decimal"
@@ -1690,6 +1793,14 @@ export function AddMealModal({
                     </li>
                   ))}
                 </ul>
+                {panneauRecherche ?? (
+                  <button
+                    onClick={() => setRemplacement({ index: null, texte: "" })}
+                    className="btn-secondary w-full"
+                  >
+                    <Plus size={16} /> Ajouter un aliment oublié
+                  </button>
+                )}
                 <div className="rounded-2xl bg-c2b-green px-4 py-3 text-c2b-cream">
                   <p className="font-serif text-2xl">
                     {Math.round(total("calories"))} <span className="font-sans text-sm text-c2b-cream/60">kcal</span>
@@ -1710,8 +1821,7 @@ export function AddMealModal({
                     : `Ajouter ${choisis.length} aliment${choisis.length > 1 ? "s" : ""} · ${REPAS_TYPE_LABELS[repasType].toLowerCase()}`}
                 </button>
                 <p className="text-center text-[11px] text-c2b-muted">
-                  Un aliment manque ? Ajoutez-le ensuite avec la saisie manuelle.
-                  {restantIA !== null && ` · Encore ${restantIA} photo${restantIA > 1 ? "s" : ""} aujourd'hui.`}
+                  {restantIA !== null && `Encore ${restantIA} photo${restantIA > 1 ? "s" : ""} aujourd'hui.`}
                 </p>
                 <button
                   onClick={() => {
@@ -2137,6 +2247,14 @@ export function AddMealModal({
                       </button>
                     ))}
                   </div>
+                )}
+                {trouve.source === "code_barres" && trouve.paGrammes && (
+                  <p className="mt-2 rounded-xl bg-c2b-gold/[0.1] px-3 py-2 text-xs text-c2b-green">
+                    📦{" "}
+                    {trouve.portionFabricant
+                      ? "Portion écrite sur l'emballage : vérifiez qu'elle correspond à ce que vous mangez."
+                      : "L'emballage n'indique pas de portion : lisez le poids sur le paquet ou pesez."}
+                  </p>
                 )}
                 {trouve.paGrammes && (
                   <div className="flex gap-1.5 mt-2">
