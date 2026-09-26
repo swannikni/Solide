@@ -26,6 +26,7 @@ type Etape =
   | "recherche_code"
   | "etiquette" // produit scanné inconnu
   | "etiquette_verif" // valeurs lues par l'IA ou tapées, à vérifier
+  | "photo_plat" // photo choisie : description facultative avant l'analyse
   | "analyse" // photo envoyée à l'IA
   | "plat_resultat" // aliments reconnus sur la photo du plat
   | "manuel"
@@ -224,6 +225,9 @@ export function AddMealModal({
   const [texteAnalyse, setTexteAnalyse] = useState("");
   const [platDetecte, setPlatDetecte] = useState<{ aliments: AlimentDetecte[]; conseil: string } | null>(null);
   const [restantIA, setRestantIA] = useState<number | null>(null);
+  // Photo du plat choisie, avec la description du client (« steak frites, ketchup »).
+  const [photoPlat, setPhotoPlat] = useState<{ fichier: File; apercu: string } | null>(null);
+  const [descriptionPlat, setDescriptionPlat] = useState("");
   // Photo du plat : remplacer un aliment mal reconnu (index) ou en ajouter un (null).
   const [remplacement, setRemplacement] = useState<{ index: number | null; texte: string } | null>(null);
   const [resultatsRemplacement, setResultatsRemplacement] = useState<Aliment[]>([]);
@@ -720,14 +724,14 @@ export function AddMealModal({
   }
 
   // Photo réduite puis envoyée à l'IA ; les limites du jour sont vérifiées côté serveur.
-  async function analyserPhoto(route: "etiquette" | "plat", fichier: File) {
+  async function analyserPhoto(route: "etiquette" | "plat", fichier: File, description = "") {
     const image = await reduirePhoto(fichier).catch(() => {
       throw new Error("Photo illisible. Réessayez avec une photo JPEG ou PNG.");
     });
     const res = await fetch(`/api/ia/${route}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image }),
+      body: JSON.stringify({ image, description: description.trim() || undefined }),
     });
     const data = await res.json().catch(() => null);
     // Le code HTTP aide au diagnostic quand la réponse n'est pas celle de l'appli (délai dépassé...).
@@ -816,19 +820,29 @@ export function AddMealModal({
     });
   }
 
-  async function surPhotoPlat(e: React.ChangeEvent<HTMLInputElement>) {
+  // Photo choisie : on laisse le client décrire son plat avant de lancer l'IA.
+  function surPhotoPlat(e: React.ChangeEvent<HTMLInputElement>) {
     const fichier = e.target.files?.[0];
     e.target.value = "";
     if (!fichier) return;
+    if (photoPlat) URL.revokeObjectURL(photoPlat.apercu);
+    setMessageIA("");
+    if (etape === "choix") setDescriptionPlat("");
+    setPhotoPlat({ fichier, apercu: URL.createObjectURL(fichier) });
+    setEtape("photo_plat");
+  }
+
+  async function analyserPlat() {
+    if (!photoPlat) return;
     setMessageIA("");
     setTexteAnalyse("Analyse de votre assiette...");
     setEtape("analyse");
     try {
-      const d = await analyserPhoto("plat", fichier);
+      const d = await analyserPhoto("plat", photoPlat.fichier, descriptionPlat);
       const aliments = (d.aliments ?? []) as (Omit<AlimentDetecte, "grammes" | "coche"> & { grammes: number })[];
       if (aliments.length === 0) {
         setMessageIA("Je ne reconnais pas de repas sur cette photo. Prenez l'assiette entière, bien éclairée.");
-        setEtape("choix");
+        setEtape("photo_plat");
         return;
       }
       setRemplacement(null);
@@ -839,7 +853,7 @@ export function AddMealModal({
       setEtape("plat_resultat");
     } catch (err) {
       setMessageIA((err as Error).message);
-      setEtape("choix");
+      setEtape("photo_plat");
     }
   }
 
@@ -1243,7 +1257,7 @@ export function AddMealModal({
                     <p className="font-bold text-c2b-green flex items-center gap-1.5">
                       Photo de mon assiette <Sparkles size={14} className="text-c2b-gold" />
                     </p>
-                    <p className="text-xs text-c2b-muted">L&apos;IA reconnaît les aliments et estime les quantités</p>
+                    <p className="text-xs text-c2b-muted">Photo + description : l&apos;IA estime aliments et quantités</p>
                   </div>
                   {/* Sans « capture » : le téléphone propose l'appareil photo ou la galerie. */}
                   <input type="file" accept="image/*" className="hidden" onChange={surPhotoPlat} />
@@ -1506,6 +1520,49 @@ export function AddMealModal({
             <div className="flex flex-col items-center gap-2 py-8 text-sm text-c2b-green/70">
               <Loader2 className="animate-spin" />
               Recherche du produit...
+            </div>
+          )}
+
+          {etape === "photo_plat" && photoPlat && (
+            <div className="space-y-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photoPlat.apercu} alt="Votre assiette" className="h-52 w-full rounded-[20px] object-cover" />
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
+                  Décrivez votre plat <span className="normal-case font-semibold">(conseillé)</span>
+                </span>
+                <textarea
+                  value={descriptionPlat}
+                  onChange={(e) => setDescriptionPlat(e.target.value)}
+                  placeholder="Ex : steak frites (frites à la friture), ketchup"
+                  maxLength={300}
+                  rows={3}
+                  className="champ resize-none"
+                />
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {["frit", "avec sauce", "fait maison", "au restaurant", "grillé", "sans huile"].map((mot) => (
+                  <button
+                    key={mot}
+                    onClick={() => setDescriptionPlat((d) => (d.trim() ? `${d.trim()}, ${mot}` : mot))}
+                    className="rounded-full bg-c2b-gold/[0.12] px-3 py-1.5 text-xs font-bold text-c2b-green"
+                  >
+                    + {mot}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-c2b-muted">
+                La photo sert à estimer les quantités, votre description à reconnaître les aliments et la cuisson : les
+                macros sont bien plus justes.
+              </p>
+              {messageIA && <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{messageIA}</p>}
+              <button onClick={analyserPlat} className="btn-primary w-full py-4">
+                <Sparkles size={18} /> {descriptionPlat.trim() ? "Analyser" : "Analyser sans description"}
+              </button>
+              <label className="block w-full cursor-pointer text-center text-sm font-semibold text-c2b-muted">
+                Changer de photo
+                <input type="file" accept="image/*" className="hidden" onChange={surPhotoPlat} />
+              </label>
             </div>
           )}
 
