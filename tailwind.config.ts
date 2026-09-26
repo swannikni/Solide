@@ -11,15 +11,10 @@ const config: Config = {
           "green-mid": "#2a4030",
           gold: "#c9973a",
           "gold-light": "#e0aa48",
-          // Fond et filets : blanc cassé frais et gris vert léger.
-          cream: "#f4f6f3",
-          "cream-2": "#e7ebe5",
-          // Couleurs des macros (barres, repères).
-          prot: "#3f8f5b",
-          gluc: "#e0a33b",
-          lip: "#e07a5f",
+          cream: "#f7f3ec",
+          "cream-2": "#efe9de",
           text: "#1a1a1a",
-          muted: "#6f7a72",
+          muted: "#777777",
         },
       },
       fontFamily: {

@@ -49,7 +49,7 @@ export function Motivation({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[11px] text-c2b-cream/60">Record</p>
+            <p className="text-[11px] uppercase tracking-wider text-c2b-cream/60">Record</p>
             <p className="text-xl font-semibold">
               {record} <span className="text-sm font-normal text-c2b-cream/70">j</span>
             </p>
@@ -102,7 +102,7 @@ export function Motivation({
 
       <section className="carte p-5">
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="font-bold tracking-tight text-xl text-c2b-green">Badges</h2>
+          <h2 className="font-serif text-xl text-c2b-green">Badges</h2>
           <span className="text-sm font-semibold text-c2b-gold">
             {obtenus}/{badges.length}
           </span>

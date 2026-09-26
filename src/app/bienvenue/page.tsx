@@ -59,7 +59,7 @@ export default function BienvenuePage() {
 
         <form onSubmit={valider} className="carte p-6 space-y-4">
           <div>
-            <label htmlFor="mdp" className="block text-xs font-bold text-c2b-muted mb-2">
+            <label htmlFor="mdp" className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               Nouveau mot de passe
             </label>
             <div className="relative">
@@ -84,7 +84,7 @@ export default function BienvenuePage() {
             </div>
           </div>
           <div>
-            <label htmlFor="confirmation" className="block text-xs font-bold text-c2b-muted mb-2">
+            <label htmlFor="confirmation" className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               Confirmer
             </label>
             <div className="relative">

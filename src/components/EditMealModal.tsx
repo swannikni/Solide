@@ -145,7 +145,7 @@ export function EditMealModal({
 
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-c2b-muted mb-2">Nom</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom</label>
             <div className="flex gap-2">
               <input value={nom} onChange={(e) => setNom(e.target.value)} className="champ font-semibold" />
               <button
@@ -174,7 +174,7 @@ export function EditMealModal({
                   ] as const
                 ).map(([cle, label]) => (
                   <label key={cle} className="block">
-                    <span className="block text-[10px] font-bold text-c2b-muted mb-1">{label}</span>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-c2b-muted mb-1">{label}</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -190,7 +190,7 @@ export function EditMealModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-c2b-muted mb-2">Repas</label>
+            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Repas</label>
             <div className="grid grid-cols-2 gap-2">
               {ORDRE_REPAS.map((r) => (
                 <Pastille key={r} active={repasType === r} onClick={() => setRepasType(r)} large>
@@ -201,7 +201,7 @@ export function EditMealModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-c2b-muted mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
               {enGrammes ? (unite === "ml" ? "Quantité (ml)" : "Quantité (grammes)") : "Quantité (portions)"}
             </label>
             <input

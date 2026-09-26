@@ -357,7 +357,7 @@ export function ClientsClient({
         <section className="space-y-2.5">
           <div className="flex items-center gap-2">
             <Inbox size={18} className="text-c2b-gold" />
-            <h2 className="font-bold tracking-tight text-[22px] text-c2b-green">Questionnaires reçus</h2>
+            <h2 className="font-serif text-[22px] text-c2b-green">Questionnaires reçus</h2>
             <span className="pastille py-0.5 px-2">{questionnaires.length}</span>
           </div>
           <p className="text-xs text-c2b-muted">
@@ -443,8 +443,8 @@ export function ClientsClient({
                   [c.objectif_lipides, "Lip. g"],
                 ].map(([v, u]) => (
                   <div key={u} className="rounded-xl bg-c2b-cream py-2">
-                    <p className="font-bold tracking-tight text-lg text-c2b-green leading-none">{v}</p>
-                    <p className="text-[10px] font-bold text-c2b-muted mt-1">{u}</p>
+                    <p className="font-serif text-lg text-c2b-green leading-none">{v}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-c2b-muted mt-1">{u}</p>
                   </div>
                 ))}
               </div>
@@ -523,7 +523,7 @@ export function ClientsClient({
 
               <details className="rounded-2xl bg-white border border-black/5 p-4 [&[open]>summary]:mb-3">
                 <summary className="cursor-pointer list-none">
-                  <p className="text-xs font-bold text-c2b-green">
+                  <p className="text-xs font-bold uppercase tracking-wider text-c2b-green">
                     Calculer depuis le profil <span className="text-c2b-gold">›</span>
                   </p>
                   <p className="text-[11px] text-c2b-muted">
@@ -533,7 +533,7 @@ export function ClientsClient({
                 <FormulaireProfil profil={fiche.profil} onChange={changerProfil} />
               </details>
 
-              <p className="text-xs font-bold text-c2b-muted pt-1">Objectifs par jour</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted pt-1">Objectifs par jour</p>
               <Champ label="Calories (kcal)">
                 <input
                   type="text"
@@ -581,7 +581,7 @@ export function ClientsClient({
 function Champ({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">{label}</span>
+      <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
       {children}
     </label>
   );

@@ -73,7 +73,7 @@ export function BilanSemaine({ stats }: { stats: StatsSemaine }) {
         <X size={18} />
       </button>
       <span className="lbl mb-1">📊 Bilan de la semaine · {periode}</span>
-      <p className="font-bold tracking-tight text-[24px] leading-tight text-c2b-green pr-6">{phrase(stats)}</p>
+      <p className="font-serif text-[24px] leading-tight text-c2b-green pr-6">{phrase(stats)}</p>
 
       <div className="grid grid-cols-2 gap-2 mt-4">
         <Case valeur={`${stats.joursNotes}/7`} libelle="jours suivis" />

@@ -104,7 +104,7 @@ export function FormulaireProfil({
       </div>
       {erreurs.length > 0 && <p className="text-xs font-semibold text-red-600">Vérifiez : {erreurs.join(", ")}.</p>}
       <div>
-        <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">
+        <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
           Objectif (plusieurs possibles)
         </span>
         <div className="flex flex-wrap gap-1.5">
@@ -116,7 +116,7 @@ export function FormulaireProfil({
         </div>
       </div>
       <div>
-        <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">
+        <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
           Séances de sport par semaine
         </span>
         <div className="grid grid-cols-4 gap-1.5">
@@ -175,7 +175,7 @@ export function FormulaireProfil({
 function Champ({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">{label}</span>
+      <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
       {children}
     </label>
   );

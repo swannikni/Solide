@@ -39,7 +39,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
 
   // Écran fixe à la hauteur du téléphone : seule la conversation défile.
   return (
-    <div className="h-[100dvh] flex flex-col pt-[68px] md:pt-20 pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-6">
+    <div className="h-[100dvh] flex flex-col pt-[68px] md:pt-20 pb-[calc(80px+env(safe-area-inset-bottom))] md:pb-6">
       <main className="max-w-2xl w-full mx-auto flex-1 min-h-0 flex flex-col">
         <div className="px-4 pt-5 flex-shrink-0">
           <span className="lbl mb-2">Messagerie</span>

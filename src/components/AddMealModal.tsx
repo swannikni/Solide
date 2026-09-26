@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
@@ -1255,7 +1255,7 @@ export function AddMealModal({
                   <Camera className="text-c2b-green" />
                   <div className="flex-1">
                     <p className="font-bold text-c2b-green flex items-center gap-1.5">
-                      Photo de mon assiette
+                      Photo de mon assiette <Sparkles size={14} className="text-c2b-gold" />
                     </p>
                     <p className="text-xs text-c2b-muted">Photo + description : l&apos;IA estime aliments et quantités</p>
                   </div>
@@ -1318,7 +1318,7 @@ export function AddMealModal({
                 ))}
               </div>
               <label className="block">
-                <span className="block text-xs font-bold text-c2b-muted mb-2">Nom du plat</span>
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du plat</span>
                 <input
                   value={monPlat.nom}
                   onChange={(e) => setMonPlat({ ...monPlat, nom: e.target.value })}
@@ -1336,7 +1336,7 @@ export function AddMealModal({
                   ] as const
                 ).map(([cle, label]) => (
                   <label key={cle} className="block">
-                    <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
                       {label}
                     </span>
                     <input
@@ -1366,7 +1366,7 @@ export function AddMealModal({
             <div className="space-y-4">
               <div>
                 <p className="lbl mb-1">Repas favori</p>
-                <p className="font-bold tracking-tight text-2xl text-c2b-green">{favoriRepas.favori.nom}</p>
+                <p className="font-serif text-2xl text-c2b-green">{favoriRepas.favori.nom}</p>
                 <p className="text-xs text-c2b-muted mt-1">Décochez ou changez les quantités si besoin.</p>
               </div>
               <ul className="carte overflow-hidden divide-y divide-black/5">
@@ -1441,7 +1441,7 @@ export function AddMealModal({
           {etape === "favori_edition" && favoriEdite && (
             <div className="space-y-4">
               <label className="block">
-                <span className="block text-xs font-bold text-c2b-muted mb-2">Nom du favori</span>
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du favori</span>
                 <input
                   value={favoriEdite.nom}
                   onChange={(e) => setFavoriEdite({ ...favoriEdite, nom: e.target.value })}
@@ -1464,7 +1464,7 @@ export function AddMealModal({
                       ] as const
                     ).map(([cle, label]) => (
                       <label key={cle} className="block">
-                        <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">
+                        <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
                           {label}
                         </span>
                         <input
@@ -1481,7 +1481,7 @@ export function AddMealModal({
                     Valeurs {favoriEdite.favori.unite === "g" ? "pour 100 g" : "pour 1 portion"}.
                   </p>
                   <label className="block">
-                    <span className="block text-xs font-bold text-c2b-muted mb-2">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                       Quantité habituelle ({favoriEdite.favori.unite === "g" ? "grammes" : "portions"})
                     </span>
                     <input
@@ -1528,7 +1528,7 @@ export function AddMealModal({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoPlat.apercu} alt="Votre assiette" className="h-52 w-full rounded-[20px] object-cover" />
               <label className="block">
-                <span className="block text-xs font-bold text-c2b-muted mb-2">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   Décrivez votre plat <span className="normal-case font-semibold">(conseillé)</span>
                 </span>
                 <textarea
@@ -1557,7 +1557,7 @@ export function AddMealModal({
               </p>
               {messageIA && <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{messageIA}</p>}
               <button onClick={analyserPlat} className="btn-primary w-full py-4">
-                <Camera size={18} /> {descriptionPlat.trim() ? "Analyser" : "Analyser sans description"}
+                <Sparkles size={18} /> {descriptionPlat.trim() ? "Analyser" : "Analyser sans description"}
               </button>
               <label className="block w-full cursor-pointer text-center text-sm font-semibold text-c2b-muted">
                 Changer de photo
@@ -1568,7 +1568,7 @@ export function AddMealModal({
 
           {etape === "analyse" && (
             <div className="flex flex-col items-center gap-3 py-12 text-sm font-semibold text-c2b-green/80">
-              <Loader2 className="text-c2b-green animate-spin" size={28} />
+              <Sparkles className="text-c2b-gold animate-pulse" size={28} />
               {texteAnalyse}
               <span className="text-xs font-normal text-c2b-muted">Quelques secondes</span>
             </div>
@@ -1622,7 +1622,7 @@ export function AddMealModal({
                 Vérifiez que les chiffres correspondent à l&apos;étiquette, puis choisissez la quantité mangée.
               </p>
               <label className="block">
-                <span className="block text-xs font-bold text-c2b-muted mb-2">Nom du produit</span>
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom du produit</span>
                 <input
                   value={etiquette.nom}
                   onChange={(e) => setEtiquette({ ...etiquette, nom: e.target.value })}
@@ -1632,7 +1632,7 @@ export function AddMealModal({
                 />
               </label>
               <label className="block">
-                <span className="block text-xs font-bold text-c2b-muted mb-2">
+                <span className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   Marque <span className="normal-case font-semibold">(optionnel)</span>
                 </span>
                 <input
@@ -1660,7 +1660,7 @@ export function AddMealModal({
                   ] as const
                 ).map(([cle, label]) => (
                   <label key={cle} className="block">
-                    <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">{label}</span>
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -1675,7 +1675,7 @@ export function AddMealModal({
                 ))}
               </div>
               <div>
-                <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">
                   Portion indiquée <span className="normal-case font-semibold">(optionnel)</span>
                 </span>
                 <div className="grid grid-cols-[1fr_96px] gap-2">
@@ -1797,7 +1797,7 @@ export function AddMealModal({
               <div className="space-y-4">
                 <div>
                   <p className="lbl mb-1 flex items-center gap-1.5">
-                    Votre assiette
+                    <Sparkles size={12} /> Votre assiette
                   </p>
                   <p className="text-sm text-c2b-muted">
                     Touchez un aliment pour le remplacer, changez les quantités, décochez ce qui est faux.
@@ -1859,7 +1859,7 @@ export function AddMealModal({
                   </button>
                 )}
                 <div className="rounded-2xl bg-c2b-green px-4 py-3 text-c2b-cream">
-                  <p className="font-bold tracking-tight text-2xl">
+                  <p className="font-serif text-2xl">
                     {Math.round(total("calories"))} <span className="font-sans text-sm text-c2b-cream/60">kcal</span>
                   </p>
                   <p className="text-xs text-c2b-cream/70">
@@ -2221,7 +2221,7 @@ export function AddMealModal({
           {etape === "confirmation" && trouve && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-c2b-muted mb-2">Nom</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Nom</label>
                 <div className="flex gap-2">
                   <input
                     value={nomAffiche}
@@ -2250,7 +2250,7 @@ export function AddMealModal({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-c2b-muted mb-2">Repas</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">Repas</label>
                 <div className="grid grid-cols-2 gap-2">
                   {ORDRE_REPAS.map((r) => (
                     <Pastille key={r} active={repasType === r} onClick={() => setRepasType(r)} large>
@@ -2261,7 +2261,7 @@ export function AddMealModal({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-c2b-muted mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   {trouve.paGrammes
                     ? trouve.liquide || estLiquide(trouve.nom)
                       ? "Quantité (ml)"
@@ -2338,7 +2338,7 @@ export function AddMealModal({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-c2b-muted mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-c2b-muted mb-2">
                   Photo du repas (optionnel)
                 </label>
                 <label className="flex items-center gap-2 justify-center border-2 border-dashed border-c2b-green/20 rounded-2xl py-4 cursor-pointer text-sm font-semibold text-c2b-green/70 hover:border-c2b-gold">

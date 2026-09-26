@@ -106,7 +106,7 @@ export function Recompenses({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="lbl mb-1">🏁 Défi Chef2Box · jusqu&apos;au {dateCourte(d.date_fin)}</span>
-                <p className="font-bold tracking-tight text-xl text-c2b-green leading-tight">{d.titre}</p>
+                <p className="font-serif text-xl text-c2b-green leading-tight">{d.titre}</p>
                 <p className="text-xs text-c2b-muted mt-1">
                   {d.cible} {LIBELLE_DEFI[d.type]}
                 </p>
@@ -139,7 +139,7 @@ export function Recompenses({
 
       {recompensesActives && (
       <section className="carte p-5">
-        <h2 className="font-bold tracking-tight text-xl text-c2b-green">Récompenses</h2>
+        <h2 className="font-serif text-xl text-c2b-green">Récompenses</h2>
         <p className="text-xs text-c2b-muted mt-0.5 mb-4">Échangez vos points contre de vrais cadeaux Chef2Box.</p>
         <ul className="space-y-2.5">
           {catalogue.map((r) => {
@@ -200,7 +200,7 @@ export function Recompenses({
 
         {demandes.length > 0 && (
           <div className="mt-5">
-            <p className="text-[11px] font-bold text-c2b-muted mb-2">Mes récompenses</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-2">Mes récompenses</p>
             <ul className="divide-y divide-black/5">
               {demandes.map((d) => (
                 <li key={d.id} className="flex items-center justify-between gap-2 py-2 text-sm">

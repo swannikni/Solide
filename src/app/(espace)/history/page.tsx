@@ -144,7 +144,7 @@ export default async function HistoryPage() {
           poidsDepart={poidsDepart}
         />
 
-        <h2 className="font-bold tracking-tight text-[26px] text-c2b-green pt-2">
+        <h2 className="font-serif text-[26px] text-c2b-green pt-2">
           Journal <span className="text-base text-c2b-muted">· 14 derniers jours</span>
         </h2>
 
@@ -159,7 +159,7 @@ export default async function HistoryPage() {
               <div className="flex items-center justify-between mb-3">
                 <Link
                   href={date === aujourdhui ? "/dashboard" : `/dashboard?date=${date}`}
-                  className="font-bold tracking-tight text-xl text-c2b-green first-letter:uppercase hover:text-c2b-gold"
+                  className="font-serif text-xl text-c2b-green first-letter:uppercase hover:text-c2b-gold"
                 >
                   {new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
                 </Link>

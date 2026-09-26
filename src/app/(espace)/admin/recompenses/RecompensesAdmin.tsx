@@ -181,7 +181,7 @@ export function RecompensesAdmin({
       )}
 
       <section className="space-y-2.5">
-        <h2 className="font-bold tracking-tight text-2xl text-c2b-green">
+        <h2 className="font-serif text-2xl text-c2b-green">
           À remettre {enAttente.length > 0 && <span className="text-c2b-gold">· {enAttente.length}</span>}
         </h2>
         {enAttente.length === 0 ? (
@@ -222,9 +222,9 @@ export function RecompensesAdmin({
       </section>
 
       <section className="space-y-2.5">
-        <h2 className="font-bold tracking-tight text-2xl text-c2b-green">Défis</h2>
+        <h2 className="font-serif text-2xl text-c2b-green">Défis</h2>
         <div className="carte p-4 space-y-3">
-          <p className="text-xs font-bold text-c2b-muted">Lancer un défi (pour tous les clients)</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-c2b-muted">Lancer un défi (pour tous les clients)</p>
           <input
             value={nouveauDefi.titre}
             onChange={(e) => setNouveauDefi({ ...nouveauDefi, titre: e.target.value })}
@@ -307,7 +307,7 @@ export function RecompensesAdmin({
 
       <section className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold tracking-tight text-2xl text-c2b-green">Catalogue</h2>
+          <h2 className="font-serif text-2xl text-c2b-green">Catalogue</h2>
           <button onClick={ajouterRecompense} className="btn-secondary px-3.5 py-2 text-sm">
             <Plus size={15} /> Ajouter
           </button>
@@ -363,7 +363,7 @@ export function RecompensesAdmin({
 function Champ({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold text-c2b-muted mb-1.5">{label}</span>
+      <span className="block text-[11px] font-bold uppercase tracking-wider text-c2b-muted mb-1.5">{label}</span>
       {children}
     </label>
   );

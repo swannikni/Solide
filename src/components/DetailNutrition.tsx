@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Send, ChefHat, X } from "lucide-react";
+import { Send, Sparkles, X } from "lucide-react";
 import { TexteFormate } from "@/components/AssistantChat";
 import { Portail } from "@/components/Portail";
 import { libelleQuantite } from "@/components/MealCard";
@@ -193,8 +193,8 @@ export function DetailNutrition({
 
             {assistantActif && (
               <section className="rounded-[20px] border border-c2b-gold/40 bg-white p-4">
-                <h3 className="flex items-center gap-1.5 text-xs font-bold text-c2b-gold mb-3">
-                  <ChefHat size={14} /> Demander à l&apos;assistant
+                <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-c2b-gold mb-3">
+                  <Sparkles size={14} /> Demander à l&apos;assistant
                 </h3>
                 {!reponse && (
                   <div className="flex flex-wrap gap-1.5">
@@ -259,7 +259,7 @@ export function DetailNutrition({
             )}
 
             <section className="carte p-4">
-              <h3 className="text-xs font-bold text-c2b-muted mb-3">Par repas</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-3">Par repas</h3>
               <ul className="space-y-2.5">
                 {parRepas.map((p) => (
                   <li key={p.type} className="grid grid-cols-[92px_1fr_64px] items-center gap-2 text-sm">
@@ -279,7 +279,7 @@ export function DetailNutrition({
             </section>
 
             <section className="carte p-4">
-              <h3 className="text-xs font-bold text-c2b-muted mb-3">Principales sources</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-3">Principales sources</h3>
               {sources.length === 0 ? (
                 <p className="text-sm text-c2b-muted">Rien de noté pour l&apos;instant.</p>
               ) : (
@@ -306,7 +306,7 @@ export function DetailNutrition({
 
             {n === "calories" && totalKcalMacros > 0 && (
               <section className="carte p-4">
-                <h3 className="text-xs font-bold text-c2b-muted mb-3">D&apos;où viennent les calories</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-3">D&apos;où viennent les calories</h3>
                 <div className="flex h-3 gap-[2px] overflow-hidden rounded-full">
                   {(["proteines", "glucides", "lipides"] as const).map((k) => (
                     <span key={k} style={{ width: `${part(kcal[k], totalKcalMacros)}%`, backgroundColor: INFOS[k].couleur }} />
@@ -334,7 +334,7 @@ export function DetailNutrition({
 
             {n === "proteines" && reste >= 15 && (
               <section className="carte p-4">
-                <h3 className="text-xs font-bold text-c2b-muted mb-1">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-c2b-muted mb-1">
                   Idées pour finir vos protéines
                 </h3>
                 <p className="text-xs text-c2b-muted mb-3">Il vous reste {arrondi(reste)} g.</p>
