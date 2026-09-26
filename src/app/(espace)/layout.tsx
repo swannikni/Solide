@@ -1,4 +1,5 @@
 import { Nav } from "@/components/Nav";
+import { SignalerVisite } from "@/components/SignalerVisite";
 import { exigerSession } from "@/lib/session";
 
 // Barre du haut et barre du bas communes à toutes les pages de l'appli.
@@ -42,6 +43,7 @@ export default async function EspaceLayout({ children }: { children: React.React
 
   return (
     <>
+      {!estAdmin && <SignalerVisite />}
       <Nav
         estAdmin={estAdmin}
         pastilles={{ messages: nonLus, admin: questionnaires + recompenses }}

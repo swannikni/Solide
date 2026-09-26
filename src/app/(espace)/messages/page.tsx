@@ -3,7 +3,7 @@ import { MessagesThread } from "@/components/MessagesThread";
 import { AdminMessagesClient } from "@/app/(espace)/messages/AdminMessagesClient";
 import type { Client, Message } from "@/lib/types";
 
-export default async function MessagesPage() {
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ client?: string }> }) {
   const { supabase, userId, client: moi } = await exigerSession();
 
   if (moi.est_admin) {
@@ -21,7 +21,11 @@ export default async function MessagesPage() {
 
     return (
       <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-        <AdminMessagesClient clients={clients ?? []} nonLus={nonLusParClient} />
+        <AdminMessagesClient
+          clients={clients ?? []}
+          nonLus={nonLusParClient}
+          clientInitial={(await searchParams).client ?? null}
+        />
       </div>
     );
   }

@@ -1140,3 +1140,45 @@ create policy "produits_ajout_client" on public.application_produits
 drop policy if exists "produits_admin" on public.application_produits;
 create policy "produits_admin" on public.application_produits
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+-- ============ SUIVI D'UTILISATION (admin) ============
+-- Dernière ouverture de l'appli par client, et s'il l'a installée sur son
+-- écran d'accueil (mode « appli ») : pour savoir qui relancer sans demander.
+create table if not exists public.application_activite (
+  client_id uuid primary key references public.application_clients (id) on delete cascade,
+  derniere_visite timestamptz not null default now(),
+  appli_installee boolean not null default false,
+  plateforme text check (plateforme in ('ios', 'android', 'autre'))
+);
+alter table public.application_activite enable row level security;
+drop policy if exists "activite_admin" on public.application_activite;
+create policy "activite_admin" on public.application_activite
+  for select to authenticated using (public.application_is_admin());
+
+-- Appelée par l'appli à l'ouverture (au plus une fois par heure et par appareil).
+-- « installée » reste vrai une fois vu : le client peut aussi ouvrir le site.
+create or replace function public.application_signaler_visite(p_installee boolean, p_plateforme text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then return; end if;
+  insert into public.application_activite (client_id, derniere_visite, appli_installee, plateforme)
+  values (
+    auth.uid(), now(), coalesce(p_installee, false),
+    case when p_plateforme in ('ios', 'android', 'autre') then p_plateforme else 'autre' end
+  )
+  on conflict (client_id) do update set
+    derniere_visite = now(),
+    appli_installee = public.application_activite.appli_installee or excluded.appli_installee,
+    plateforme = excluded.plateforme;
+end;
+$$;
+revoke execute on function public.application_signaler_visite(boolean, text) from public, anon;
+grant execute on function public.application_signaler_visite(boolean, text) to authenticated;
+
+-- L'admin voit qui a activé les rappels (sans pouvoir les modifier).
+drop policy if exists "push_admin_lecture" on public.application_push_abonnements;
+create policy "push_admin_lecture" on public.application_push_abonnements
+  for select to authenticated using (public.application_is_admin());

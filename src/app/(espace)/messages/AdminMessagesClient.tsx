@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MessagesThread } from "@/components/MessagesThread";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, Message } from "@/lib/types";
 
-export function AdminMessagesClient({ clients, nonLus }: { clients: Client[]; nonLus: Record<string, number> }) {
+export function AdminMessagesClient({
+  clients,
+  nonLus,
+  clientInitial = null,
+}: {
+  clients: Client[];
+  nonLus: Record<string, number>;
+  clientInitial?: string | null; // ouvert depuis le Suivi (« Message dans l'appli »)
+}) {
   const supabase = createClient();
   const [clientSelectionne, setClientSelectionne] = useState<Client | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    const c = clients.find((x) => x.id === clientInitial);
+    if (c) selectionner(c);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientInitial]);
 
   async function selectionner(client: Client) {
     setClientSelectionne(client);
