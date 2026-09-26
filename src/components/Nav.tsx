@@ -95,10 +95,8 @@ export function Nav({
         </div>
       </header>
 
-      {/* Barre du bas flottante, vert Chef2Box : l'onglet actif est une case dorée
-          (mêmes couleurs que la carte « Objectif du jour »). */}
-      <nav className="print:hidden md:hidden fixed inset-x-3 bottom-[calc(10px+env(safe-area-inset-bottom))] z-20 rounded-[22px] bg-c2b-green p-1.5 shadow-[0_10px_30px_rgba(28,46,30,0.35)]">
-        <div className="flex gap-1">
+      <nav className="print:hidden md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-stretch justify-around">
           {liens.map(({ href, racine, label, icon: Icon }) => {
             const actif = actifSur(href, racine);
             return (
@@ -106,22 +104,23 @@ export function Nav({
                 key={href}
                 href={href}
                 onClick={() => setCible(href)}
-                className={`relative flex h-[54px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl text-[10.5px] font-semibold transition-colors active:scale-95 [-webkit-tap-highlight-color:transparent] ${
-                  actif ? "bg-c2b-gold text-c2b-green" : "text-c2b-cream/60 active:bg-white/10"
+                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors active:scale-95 [-webkit-tap-highlight-color:transparent] ${
+                  actif ? "text-c2b-green" : "text-c2b-muted"
                 }`}
               >
-                <Icon size={21} strokeWidth={actif ? 2.3 : 1.9} />
-                <span className="whitespace-nowrap">{label}</span>
-                {pastille(href) > 0 && (
-                  <span
-                    className={`absolute top-1 left-[calc(50%+6px)] min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold leading-[18px] text-center ring-2 ${
-                      actif ? "bg-c2b-green text-c2b-cream ring-c2b-gold" : "bg-c2b-gold text-c2b-green ring-c2b-green"
-                    }`}
-                    aria-label={`${pastille(href)} en attente`}
-                  >
-                    {pastille(href) > 9 ? "9+" : pastille(href)}
-                  </span>
-                )}
+                <span className="relative">
+                  <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
+                  {pastille(href) > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] rounded-full bg-c2b-gold px-1 text-[10px] font-bold leading-[17px] text-c2b-green text-center"
+                      aria-label={`${pastille(href)} en attente`}
+                    >
+                      {pastille(href) > 9 ? "9+" : pastille(href)}
+                    </span>
+                  )}
+                </span>
+                <span>{label}</span>
+                <span className={`h-1 w-1 rounded-full ${actif ? "bg-c2b-gold" : "bg-transparent"}`} />
               </Link>
             );
           })}

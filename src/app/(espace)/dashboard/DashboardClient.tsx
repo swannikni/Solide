@@ -374,7 +374,7 @@ export function DashboardClient({
 
       <button
         onClick={() => ouvrirAjout(repasSelonHeure())}
-        className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-gold hover:bg-c2b-gold-light text-c2b-green rounded-full w-14 h-14 flex items-center justify-center shadow-[0_8px_24px_rgba(201,151,58,0.45)] transition"
+        className="fixed bottom-[92px] md:bottom-8 right-4 md:right-8 z-10 bg-c2b-gold hover:bg-c2b-gold-light text-c2b-green rounded-full w-14 h-14 flex items-center justify-center shadow-[0_8px_24px_rgba(201,151,58,0.45)] transition"
         aria-label="Ajouter un repas"
       >
         <Plus size={26} />
