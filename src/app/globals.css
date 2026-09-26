@@ -20,19 +20,19 @@
     @apply italic text-c2b-gold;
   }
   .carte {
-    @apply bg-white rounded-[20px] border border-black/5;
+    @apply bg-white rounded-[12px] border border-c2b-green/10;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-c2b-green px-6 py-3 text-[15px] font-bold text-white transition hover:bg-c2b-green-mid disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 rounded-[12px] bg-c2b-green px-6 py-3 text-[15px] font-bold text-white transition hover:bg-c2b-green-mid disabled:opacity-60;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border-2 border-c2b-green/25 px-6 py-2.5 text-[15px] font-semibold text-c2b-green transition hover:border-c2b-green hover:bg-c2b-green/[0.04];
+    @apply inline-flex items-center justify-center gap-2 rounded-[12px] border-[1.5px] border-c2b-green/30 px-6 py-2.5 text-[15px] font-semibold text-c2b-green transition hover:border-c2b-green hover:bg-c2b-green/[0.04];
   }
   .btn-gold {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-c2b-gold px-6 py-3 text-[15px] font-extrabold text-c2b-green transition hover:bg-c2b-gold-light;
+    @apply inline-flex items-center justify-center gap-2 rounded-[12px] bg-c2b-gold px-6 py-3 text-[15px] font-extrabold text-c2b-green transition hover:bg-c2b-gold-light;
   }
   .champ {
-    @apply w-full rounded-xl border border-c2b-cream-2 bg-white px-4 py-3 text-base font-medium text-c2b-text placeholder:text-c2b-muted/60 focus:border-c2b-gold focus:outline-none;
+    @apply w-full rounded-[10px] border border-c2b-green/15 bg-white px-4 py-3 text-base font-medium text-c2b-text placeholder:text-c2b-muted/60 focus:border-c2b-gold focus:outline-none;
   }
   .pastille {
     @apply inline-flex items-center gap-2 rounded-full bg-c2b-gold/[0.12] px-3.5 py-1.5 text-xs font-bold tracking-wide text-c2b-gold;

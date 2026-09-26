@@ -1,12 +1,12 @@
 import Image from "next/image";
-import { ChevronRight, UtensilsCrossed } from "lucide-react";
 import type { RepasJournal } from "@/lib/types";
 import { estLiquide } from "@/lib/portions";
 
-const SOURCE_LABELS: Record<string, string> = {
-  chef2box: "Box Chef2Box",
-  code_barres: "Produit scanné",
-  manuel: "Saisie manuelle",
+// Origine affichée seulement quand elle apporte quelque chose.
+const SOURCE_LABELS: Record<string, string | null> = {
+  chef2box: "Chef2Box",
+  code_barres: "Scanné",
+  manuel: null,
 };
 
 export function libelleQuantite(repas: Pick<RepasJournal, "quantite" | "unite"> & { nom?: string }): string {
@@ -15,30 +15,39 @@ export function libelleQuantite(repas: Pick<RepasJournal, "quantite" | "unite"> 
   return `${String(q).replace(".", ",")} portion${q > 1 ? "s" : ""}`;
 }
 
+// Ligne de repas façon carte de restaurant : nom, points de conduite, kcal.
 export function MealCard({ repas, onModifier }: { repas: RepasJournal; onModifier: (repas: RepasJournal) => void }) {
+  const kcal = Math.round(repas.calories * repas.quantite);
   return (
     <button
       onClick={() => onModifier(repas)}
-      className="carte w-full p-3 flex gap-3 items-center text-left transition hover:border-c2b-gold/40"
+      className="w-full flex gap-3 items-center border-b border-c2b-green/15 py-3 text-left transition active:bg-c2b-green/[0.03]"
     >
-      <div className="w-14 h-14 rounded-xl bg-c2b-cream overflow-hidden flex-shrink-0 flex items-center justify-center">
-        {repas.photo_url ? (
-          <Image src={repas.photo_url} alt={repas.nom} width={56} height={56} className="object-cover w-full h-full" />
-        ) : (
-          <UtensilsCrossed size={20} className="text-c2b-green/25" />
-        )}
-      </div>
+      {repas.photo_url && (
+        <Image
+          src={repas.photo_url}
+          alt={repas.nom}
+          width={44}
+          height={44}
+          className="h-11 w-11 flex-shrink-0 rounded-[6px] object-cover"
+        />
+      )}
       <div className="flex-1 min-w-0">
-        <p className="font-bold text-[15px] text-c2b-green truncate">{repas.nom}</p>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-c2b-gold">
-          {SOURCE_LABELS[repas.source]} · {libelleQuantite(repas)}
+        <p className="flex items-baseline gap-2">
+          <span className="truncate text-[15px] font-semibold text-c2b-green">{repas.nom}</span>
+          <span className="min-w-[16px] flex-1 translate-y-[-3px] border-b-2 border-dotted border-c2b-green/20" />
+          <span className="flex-shrink-0 font-serif text-[18px] leading-none tabular-nums text-c2b-green">{kcal}</span>
         </p>
-        <p className="text-xs text-c2b-muted mt-0.5">
-          {Math.round(repas.calories * repas.quantite)} kcal · {Math.round(repas.proteines * repas.quantite)}g P ·{" "}
-          {Math.round(repas.glucides * repas.quantite)}g G · {Math.round(repas.lipides * repas.quantite)}g L
+        <p className="mt-1 text-xs text-c2b-muted tabular-nums">
+          {[
+            SOURCE_LABELS[repas.source],
+            libelleQuantite(repas),
+            `${Math.round(repas.proteines * repas.quantite)} P · ${Math.round(repas.glucides * repas.quantite)} G · ${Math.round(repas.lipides * repas.quantite)} L`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
-      <ChevronRight size={18} className="text-c2b-muted/40 flex-shrink-0" />
     </button>
   );
 }
