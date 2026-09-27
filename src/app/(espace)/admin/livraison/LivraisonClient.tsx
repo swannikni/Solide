@@ -2,12 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Crosshair, MapPin, Navigation, RotateCcw, Send, Settings } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  MapPin,
+  Navigation,
+  Pencil,
+  RotateCcw,
+  Send,
+  Settings,
+  X,
+} from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { ReglagesLivraison } from "@/lib/livraison";
 import {
+  distanceKm,
   duree,
   estUnLien,
   heure,
@@ -92,6 +107,7 @@ function LigneAdresse({
   const [texte, setTexte] = useState(arret.adresse ?? "");
   const [etat, setEtat] = useState<{ type: "ok" | "erreur" | "encours"; message: string } | null>(null);
   const dernier = useRef(arret.adresse ?? "");
+  const champ = useRef<HTMLInputElement>(null);
 
   async function traiter(valeur: string) {
     const t = valeur.trim();
@@ -104,7 +120,11 @@ function LigneAdresse({
       if (!estUnLien(t)) await onEnregistrer(t, place ? { lat: arret.lat!, lng: arret.lng! } : null);
       return setEtat({ type: "erreur", message: r.erreur });
     }
-    const adresse = estUnLien(t) ? arret.adresse || r.libelle?.split(",").slice(0, 3).join(",") || null : t;
+    // Lien collé : on garde l'adresse écrite si elle sert de repère au même
+    // endroit ; si la position change (déménagement, erreur), elle est remplacée.
+    const memeEndroit = !place || distanceKm({ lat: arret.lat!, lng: arret.lng! }, r.point) < 0.3;
+    const libelle = r.libelle?.split(",").slice(0, 3).join(",") || null;
+    const adresse = estUnLien(t) ? (memeEndroit && arret.adresse) || libelle : t;
     if (estUnLien(t)) setTexte(adresse ?? "");
     const ok = await onEnregistrer(adresse, r.point);
     setEtat(ok ? { type: "ok", message: "Position enregistrée" } : { type: "erreur", message: "Non enregistré, réessayez." });
@@ -141,23 +161,41 @@ function LigneAdresse({
         )}
       </div>
       <div className="mt-1.5 flex gap-2">
-        <input
-          value={texte}
-          onChange={(e) => setTexte(e.target.value)}
-          onPaste={(e) => {
-            const colle = e.clipboardData.getData("text");
-            if (colle) {
-              e.preventDefault();
-              setTexte(colle);
-              traiter(colle);
-            }
-          }}
-          onBlur={() => traiter(texte)}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder="Coller l'adresse ou un lien Waze, Google Maps, Plans…"
-          maxLength={500}
-          className={`champ py-2 text-sm ${place ? "" : "border-red-200"}`}
-        />
+        <div className="relative flex-1">
+          <input
+            ref={champ}
+            value={texte}
+            onChange={(e) => setTexte(e.target.value)}
+            onPaste={(e) => {
+              const colle = e.clipboardData.getData("text");
+              if (colle) {
+                e.preventDefault();
+                setTexte(colle);
+                traiter(colle);
+              }
+            }}
+            onBlur={() => traiter(texte)}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            placeholder="Coller l'adresse ou un lien Waze, Google Maps, Plans…"
+            maxLength={500}
+            className={`champ py-2 pr-9 text-sm ${place ? "" : "border-red-200"}`}
+          />
+          {texte && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setTexte("");
+                setEtat(null);
+                champ.current?.focus();
+              }}
+              className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-c2b-muted"
+              aria-label="Effacer pour coller une nouvelle adresse"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
         <button
           onClick={maPosition}
           className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-c2b-green/15 bg-white text-c2b-green"
@@ -216,6 +254,7 @@ export function LivraisonClient({
   const [plan, setPlan] = useState<string[][] | null>(planInitial);
   const [departs, setDeparts] = useState<(string | null)[]>(departsInitiaux);
   const [message, setMessage] = useState("");
+  const [enEdition, setEnEdition] = useState<string | null>(null); // adresse modifiée depuis une tournée
 
   const nb = Math.min(Math.max(reglages.nbLivreurs, 1), 3);
   const heureParDefaut = reglages.heureMidi;
@@ -648,6 +687,12 @@ export function LivraisonClient({
                               <a href={lienPoint(x)} target="_blank" rel="noopener noreferrer" className="mr-1 text-c2b-green underline">
                                 Carte
                               </a>
+                              <button
+                                onClick={() => setEnEdition(enEdition === x.cle ? null : x.cle)}
+                                className="mr-1 inline-flex items-center gap-0.5 text-c2b-green underline"
+                              >
+                                <Pencil size={11} /> Adresse
+                              </button>
                               {x.telephone && (
                                 <a href={`tel:${x.telephone.replace(/\s/g, "")}`} className="mr-1 text-c2b-green underline">
                                   Appeler
@@ -668,6 +713,22 @@ export function LivraisonClient({
                                   </button>
                                 ))}
                             </div>
+                            {enEdition === x.cle && (
+                              <div className="mt-2 rounded-xl bg-c2b-cream/60 px-3 pb-1">
+                                <ul>
+                                  <LigneAdresse
+                                    arret={arrets.find((a) => a.cle === x.cle) ?? x}
+                                    onEnregistrer={(adresse, point, tel) => enregistrerAdresse(x, adresse, point, tel)}
+                                  />
+                                </ul>
+                                <p className="pb-2 text-[11px] text-c2b-muted">
+                                  Effacez (✕) puis collez la nouvelle adresse ou le lien : gardée pour les prochaines livraisons.{" "}
+                                  <button onClick={() => setEnEdition(null)} className="font-bold text-c2b-green underline">
+                                    Fermer
+                                  </button>
+                                </p>
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-shrink-0 flex-col">
                             <button
