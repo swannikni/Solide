@@ -1312,3 +1312,17 @@ alter table public.application_livraison_reglages enable row level security;
 drop policy if exists "livraison_reglages_admin" on public.application_livraison_reglages;
 create policy "livraison_reglages_admin" on public.application_livraison_reglages
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Tournées du jour choisies par l'admin : qui livre qui (et dans quel
+-- ordre) et l'heure de départ de chaque livreur, par date et service.
+create table if not exists public.application_livraison_plans (
+  date date not null,
+  repas_type text not null check (repas_type in ('dejeuner', 'diner')),
+  tournees jsonb, -- [[clé, clé…], [clé…]] ; null = calcul automatique
+  departs jsonb not null default '[]'::jsonb, -- ["11:30", "11:45"…]
+  primary key (date, repas_type)
+);
+alter table public.application_livraison_plans enable row level security;
+drop policy if exists "livraison_plans_admin" on public.application_livraison_plans;
+create policy "livraison_plans_admin" on public.application_livraison_plans
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());

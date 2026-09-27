@@ -2,7 +2,7 @@
 
 export interface ReglagesLivraison {
   depart: { adresse: string; lat: number; lng: number } | null;
-  livreurs: { nom: string; telephone: string }[];
+  livreurs: { nom: string; telephone: string; tarif: number }[]; // tarif : DH par livraison
   nbLivreurs: number;
   heureMidi: string;
   heureSoir: string;
@@ -13,9 +13,9 @@ export interface ReglagesLivraison {
 export const REGLAGES_DEFAUT: ReglagesLivraison = {
   depart: null,
   livreurs: [
-    { nom: "Moi", telephone: "" },
-    { nom: "Livreur 2", telephone: "" },
-    { nom: "Livreur 3", telephone: "" },
+    { nom: "Moi", telephone: "", tarif: 0 },
+    { nom: "Livreur 2", telephone: "", tarif: 0 },
+    { nom: "Livreur 3", telephone: "", tarif: 0 },
   ],
   nbLivreurs: 2,
   heureMidi: "11:30",

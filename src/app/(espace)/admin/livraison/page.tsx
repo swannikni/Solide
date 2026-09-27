@@ -23,7 +23,7 @@ export default async function LivraisonPage({
   const date = estDateValide(dateDemandee) ? dateDemandee : parDefaut.date;
   const service: Service = serviceDemande === "dejeuner" || serviceDemande === "diner" ? serviceDemande : parDefaut.service;
 
-  const [{ data: commandes }, { data: ajouts }, { data: parametre }] = await Promise.all([
+  const [{ data: commandes }, { data: ajouts }, { data: parametre }, { data: planEnregistre }] = await Promise.all([
     supabase
       .from("application_commandes")
       .select("id, note, client:application_clients(id, nom, telephone, livraison_adresse, livraison_lat, livraison_lng)")
@@ -53,6 +53,12 @@ export default async function LivraisonPage({
         { id: string; nom: string; note: string | null; adresse: string | null; lat: number | null; lng: number | null; telephone: string | null }[]
       >(),
     supabase.from("application_livraison_reglages").select("valeur").eq("id", 1).maybeSingle<{ valeur: Partial<ReglagesLivraison> }>(),
+    supabase
+      .from("application_livraison_plans")
+      .select("tournees, departs")
+      .eq("date", date)
+      .eq("repas_type", service)
+      .maybeSingle<{ tournees: string[][] | null; departs: (string | null)[] }>(),
   ]);
 
   const arrets: ArretLivraison[] = [
@@ -91,6 +97,8 @@ export default async function LivraisonPage({
         service={service}
         arretsInitiaux={arrets}
         reglagesInitiaux={completerReglages(parametre?.valeur)}
+        planInitial={planEnregistre?.tournees ?? null}
+        departsInitiaux={planEnregistre?.departs ?? []}
       />
     </div>
   );

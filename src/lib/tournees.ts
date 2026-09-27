@@ -36,14 +36,41 @@ export function distanceKm(a: Point, b: Point) {
   return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+// Code « geohash » des liens courts Waze (waze.com/ul/hsv8…) → coordonnées.
+function decoderGeohash(code: string): Point | null {
+  const base = "0123456789bcdefghjkmnpqrstuvwxyz";
+  let lat: [number, number] = [-90, 90];
+  let lng: [number, number] = [-180, 180];
+  let pair = true;
+  for (const c of code.toLowerCase()) {
+    const v = base.indexOf(c);
+    if (v < 0) return null;
+    for (let b = 4; b >= 0; b--) {
+      const bit = (v >> b) & 1;
+      const plage = pair ? lng : lat;
+      const milieu = (plage[0] + plage[1]) / 2;
+      if (bit) plage[0] = milieu;
+      else plage[1] = milieu;
+      pair = !pair;
+    }
+  }
+  return { lat: (lat[0] + lat[1]) / 2, lng: (lng[0] + lng[1]) / 2 };
+}
+
 // Coordonnées dans un texte collé : « 31.63, -8.01 », lien Google Maps
-// (…@31.63,-8.01…, ?q=31.63,-8.01, !3d31.63!4d-8.01) ou position WhatsApp.
+// (…@31.63,-8.01…, ?q=31.63,-8.01, !3d31.63!4d-8.01), lien Waze (?ll=… ou
+// /ul/h<code>), Plans d'Apple (?ll=…, coordinate=…) ou position WhatsApp.
 export function lireCoordonnees(texte: string): Point | null {
-  const t = decodeURIComponent(texte.trim());
+  let t = texte.trim();
+  try {
+    t = decodeURIComponent(t);
+  } catch {
+    // Texte avec un « % » isolé : on le lit tel quel.
+  }
   const motifs = [
     /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
     /@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/,
-    /[?&](?:q|query|ll|destination|daddr|center)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|query|ll|sll|coordinate|destination|daddr|center|to|loc)=(?:loc:)?(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/,
     /^(-?\d{1,2}\.\d+)\s*[,; ]\s*(-?\d{1,3}\.\d+)$/,
   ];
   for (const m of motifs) {
@@ -54,8 +81,12 @@ export function lireCoordonnees(texte: string): Point | null {
       if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
     }
   }
+  const waze = t.match(/waze\.com\/ul\/h([0-9a-z]{5,12})/i);
+  if (waze) return decoderGeohash(waze[1]);
   return null;
 }
+
+export const estUnLien = (texte: string) => /^https?:\/\//i.test(texte.trim()) || /^(www\.|maps\.|waze\.)/i.test(texte.trim());
 
 function minutesTrajet(km: number, r: Reglages) {
   return ((km * DETOUR) / Math.max(r.vitesseKmh, 5)) * 60;

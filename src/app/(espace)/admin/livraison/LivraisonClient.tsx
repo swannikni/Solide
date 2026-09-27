@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Crosshair, MapPin, Navigation, RotateCcw, Search, Send, Settings } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Crosshair, MapPin, Navigation, RotateCcw, Send, Settings } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
-import type { ReglagesLivraison } from "@/lib/livraison";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
+import type { ReglagesLivraison } from "@/lib/livraison";
 import {
   duree,
+  estUnLien,
   heure,
   lienPoint,
   liensGoogleMaps,
@@ -55,135 +56,126 @@ function numeroWhatsApp(telephone: string) {
   return n.length >= 8 ? n : "";
 }
 
-// Saisie d'une position : lien Google Maps / position WhatsApp collé,
-// « Ma position » (sur place), ou recherche de l'adresse sur la carte.
-function EditeurPosition({
-  adresseInitiale,
-  pointInitial,
-  telephoneInitial,
-  avecTelephone,
-  onEnregistrer,
-  onAnnuler,
-}: {
-  adresseInitiale: string;
-  pointInitial: Point | null;
-  telephoneInitial?: string;
-  avecTelephone?: boolean;
-  onEnregistrer: (adresse: string, point: Point | null, telephone: string) => Promise<void>;
-  onAnnuler: () => void;
-}) {
-  const [adresse, setAdresse] = useState(adresseInitiale);
-  const [lien, setLien] = useState("");
-  const [point, setPoint] = useState<Point | null>(pointInitial);
-  const [telephone, setTelephone] = useState(telephoneInitial ?? "");
-  const [info, setInfo] = useState("");
-  const [enCours, setEnCours] = useState(false);
+// Position d'un texte collé : coordonnées ou lien lus sur place, sinon le
+// serveur (liens courts Google / Waze / Plans, adresse écrite).
+async function localiser(texte: string): Promise<{ point: Point; libelle?: string } | { erreur: string }> {
+  const direct = lireCoordonnees(texte);
+  if (direct) return { point: direct };
+  const res = await fetch(`/api/admin/lieu?texte=${encodeURIComponent(texte.trim())}`).catch(() => null);
+  const data = await res?.json().catch(() => null);
+  if (res?.ok && data?.lat != null) return { point: { lat: data.lat, lng: data.lng }, libelle: data.libelle };
+  return { erreur: data?.erreur ?? "Adresse introuvable." };
+}
 
-  async function lireLien(texte: string) {
-    setLien(texte);
-    if (!texte.trim()) return;
-    const direct = lireCoordonnees(texte);
-    if (direct) {
-      setPoint(direct);
-      return setInfo("Position trouvée ✓");
+// Une ligne « Nom : [coller l'adresse ou le lien] », enregistrée dès le collage.
+function LigneAdresse({
+  arret,
+  onEnregistrer,
+}: {
+  arret: ArretLivraison;
+  onEnregistrer: (adresse: string | null, point: Point | null, telephone?: string | null) => Promise<boolean>;
+}) {
+  const place = arret.lat != null && arret.lng != null;
+  const [texte, setTexte] = useState(arret.adresse ?? "");
+  const [etat, setEtat] = useState<{ type: "ok" | "erreur" | "encours"; message: string } | null>(null);
+  const dernier = useRef(arret.adresse ?? "");
+
+  async function traiter(valeur: string) {
+    const t = valeur.trim();
+    if (!t || t === dernier.current) return;
+    dernier.current = t;
+    setEtat({ type: "encours", message: "Recherche de la position..." });
+    const r = await localiser(t);
+    if ("erreur" in r) {
+      // Adresse écrite introuvable : on la garde comme repère pour le livreur.
+      if (!estUnLien(t)) await onEnregistrer(t, place ? { lat: arret.lat!, lng: arret.lng! } : null);
+      return setEtat({ type: "erreur", message: r.erreur });
     }
-    if (!/^https?:\/\//.test(texte.trim())) return;
-    setInfo("Lecture du lien...");
-    const res = await fetch(`/api/admin/lieu?lien=${encodeURIComponent(texte.trim())}`);
-    const data = await res.json().catch(() => null);
-    if (res.ok && data?.lat) {
-      setPoint({ lat: data.lat, lng: data.lng });
-      setInfo("Position trouvée ✓");
-    } else setInfo(data?.erreur ?? "Position introuvable dans ce lien.");
+    const adresse = estUnLien(t) ? arret.adresse || r.libelle?.split(",").slice(0, 3).join(",") || null : t;
+    if (estUnLien(t)) setTexte(adresse ?? "");
+    const ok = await onEnregistrer(adresse, r.point);
+    setEtat(ok ? { type: "ok", message: "Position enregistrée" } : { type: "erreur", message: "Non enregistré, réessayez." });
   }
 
   function maPosition() {
-    if (!navigator.geolocation) return setInfo("Position indisponible sur cet appareil.");
-    setInfo("Recherche de votre position...");
+    if (!navigator.geolocation) return setEtat({ type: "erreur", message: "Position indisponible sur cet appareil." });
+    setEtat({ type: "encours", message: "Recherche de votre position..." });
     navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setPoint({ lat: p.coords.latitude, lng: p.coords.longitude });
-        setInfo(`Position enregistrée ✓ (précision ${Math.round(p.coords.accuracy)} m)`);
+      async (p) => {
+        const ok = await onEnregistrer(texte.trim() || arret.adresse, { lat: p.coords.latitude, lng: p.coords.longitude });
+        setEtat(ok ? { type: "ok", message: `Position enregistrée (à ${Math.round(p.coords.accuracy)} m près)` } : { type: "erreur", message: "Non enregistré." });
       },
-      () => setInfo("Position refusée : autorisez la localisation pour ce site."),
+      () => setEtat({ type: "erreur", message: "Localisation refusée pour ce site." }),
       { enableHighAccuracy: true, timeout: 15000 }
     );
   }
 
-  async function chercher() {
-    if (adresse.trim().length < 3) return setInfo("Tapez d'abord l'adresse.");
-    setInfo("Recherche sur la carte...");
-    const res = await fetch(`/api/admin/lieu?adresse=${encodeURIComponent(adresse.trim())}`);
-    const data = await res.json().catch(() => null);
-    if (res.ok && data?.lat) {
-      setPoint({ lat: data.lat, lng: data.lng });
-      setInfo(`Trouvé : ${data.libelle ?? "position"} — vérifiez sur la carte.`);
-    } else setInfo(data?.erreur ?? "Adresse introuvable.");
-  }
-
   return (
-    <div className="mt-2 space-y-2 rounded-2xl bg-c2b-cream p-3">
-      <input
-        value={adresse}
-        onChange={(e) => setAdresse(e.target.value)}
-        placeholder="Adresse / repère (ex : Guéliz, rés. Les Jardins, 3e étage)"
-        maxLength={200}
-        className="champ py-2 text-sm"
-      />
-      <input
-        value={lien}
-        onChange={(e) => lireLien(e.target.value)}
-        placeholder="Coller un lien Google Maps ou une position WhatsApp"
-        className="champ py-2 text-sm"
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <button onClick={maPosition} className="btn-secondary px-2 py-2 text-xs">
-          <Crosshair size={14} /> Ma position
-        </button>
-        <button onClick={chercher} className="btn-secondary px-2 py-2 text-xs">
-          <Search size={14} /> Chercher l&apos;adresse
+    <li className="py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-c2b-green">
+          {arret.nom}
+          {arret.telephone && <span className="ml-1.5 text-xs font-normal text-c2b-muted">{arret.telephone}</span>}
+        </p>
+        {place ? (
+          <a href={lienPoint({ lat: arret.lat!, lng: arret.lng! })} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-bold text-emerald-700">
+            <Check size={14} /> sur la carte
+          </a>
+        ) : (
+          <span className="flex items-center gap-1 text-xs font-bold text-red-700">
+            <MapPin size={13} /> à localiser
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 flex gap-2">
+        <input
+          value={texte}
+          onChange={(e) => setTexte(e.target.value)}
+          onPaste={(e) => {
+            const colle = e.clipboardData.getData("text");
+            if (colle) {
+              e.preventDefault();
+              setTexte(colle);
+              traiter(colle);
+            }
+          }}
+          onBlur={() => traiter(texte)}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          placeholder="Coller l'adresse ou un lien Waze, Google Maps, Plans…"
+          maxLength={500}
+          className={`champ py-2 text-sm ${place ? "" : "border-red-200"}`}
+        />
+        <button
+          onClick={maPosition}
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-c2b-green/15 bg-white text-c2b-green"
+          aria-label={`Ma position pour ${arret.nom}`}
+          title="Je suis devant chez lui"
+        >
+          <Crosshair size={17} />
         </button>
       </div>
-      {avecTelephone && (
+      {arret.source === "ajout" && (
         <input
-          value={telephone}
-          onChange={(e) => setTelephone(e.target.value)}
+          defaultValue={arret.telephone ?? ""}
+          onBlur={(e) => {
+            const tel = e.target.value.trim().slice(0, 30) || null;
+            if (tel !== arret.telephone) onEnregistrer(arret.adresse, place ? { lat: arret.lat!, lng: arret.lng! } : null, tel);
+          }}
           placeholder="Téléphone (facultatif)"
           inputMode="tel"
-          maxLength={30}
-          className="champ py-2 text-sm"
+          className="champ mt-1.5 py-1.5 text-xs"
         />
       )}
-      <p className="text-xs text-c2b-muted">
-        {point ? (
-          <>
-            📍 {point.lat.toFixed(5)}, {point.lng.toFixed(5)} ·{" "}
-            <a href={lienPoint(point)} target="_blank" rel="noopener noreferrer" className="font-semibold text-c2b-green underline">
-              voir sur la carte
-            </a>
-          </>
-        ) : (
-          "Pas encore de position GPS."
-        )}
-        {info && <span className="block">{info}</span>}
-      </p>
-      <div className="flex gap-2">
-        <button
-          onClick={async () => {
-            setEnCours(true);
-            await onEnregistrer(adresse.trim(), point, telephone.trim());
-            setEnCours(false);
-          }}
-          disabled={enCours}
-          className="btn-primary flex-1 py-2 text-sm"
+      {etat && (
+        <p
+          className={`mt-1 text-xs ${
+            etat.type === "ok" ? "text-emerald-700" : etat.type === "erreur" ? "text-red-700" : "text-c2b-muted"
+          }`}
         >
-          {enCours ? "Enregistrement..." : "Enregistrer"}
-        </button>
-        <button onClick={onAnnuler} className="btn-secondary flex-1 py-2 text-sm">
-          Annuler
-        </button>
-      </div>
-    </div>
+          {etat.message}
+        </p>
+      )}
+    </li>
   );
 }
 
@@ -193,39 +185,66 @@ export function LivraisonClient({
   service,
   arretsInitiaux,
   reglagesInitiaux,
+  planInitial,
+  departsInitiaux,
 }: {
   date: string;
   aujourdhui: string;
   service: Service;
   arretsInitiaux: ArretLivraison[];
   reglagesInitiaux: ReglagesLivraison;
+  planInitial: string[][] | null;
+  departsInitiaux: (string | null)[];
 }) {
   const supabase = createClient();
   const [arrets, setArrets] = useState(arretsInitiaux);
   const [reglages, setReglages] = useState(reglagesInitiaux);
   const [reglagesOuverts, setReglagesOuverts] = useState(!reglagesInitiaux.depart);
-  const [editionDepart, setEditionDepart] = useState(false);
-  const [editionArret, setEditionArret] = useState<string | null>(null);
-  // Ordre modifié à la main : liste de clés par livreur (sinon calcul auto).
-  const [plan, setPlan] = useState<string[][] | null>(null);
+  const [adressesOuvertes, setAdressesOuvertes] = useState(arretsInitiaux.some((a) => a.lat == null));
+  // Répartition choisie à la main (clés par livreur) ; null = calcul automatique.
+  const [plan, setPlan] = useState<string[][] | null>(planInitial);
+  const [departs, setDeparts] = useState<(string | null)[]>(departsInitiaux);
   const [message, setMessage] = useState("");
 
-  const heureDepart = service === "dejeuner" ? reglages.heureMidi : reglages.heureSoir;
   const nb = Math.min(Math.max(reglages.nbLivreurs, 1), 3);
+  const heureParDefaut = service === "dejeuner" ? reglages.heureMidi : reglages.heureSoir;
+  const departDe = (i: number) => departs[i] || heureParDefaut;
   const places = arrets.filter((a): a is ArretPlace => a.lat != null && a.lng != null);
-  const sansAdresse = arrets.filter((a) => a.lat == null || a.lng == null);
+  const aLocaliser = arrets.filter((a) => a.lat == null || a.lng == null);
   const depart = reglages.depart;
   const params = { vitesseKmh: reglages.vitesseKmh, minutesParArret: reglages.minutesParArret };
 
   const tournees = useMemo(() => {
     if (!depart) return [];
-    if (plan) {
+    if (plan && plan.length === nb) {
+      // Plan enregistré : on retire les absents, on ajoute les nouveaux au
+      // livreur qui a la tournée la plus courte.
       const parCle = new Map(places.map((a) => [a.cle, a]));
-      return plan.map((cles) => mesurer(depart, cles.map((c) => parCle.get(c)).filter((a): a is ArretPlace => !!a), params));
+      const groupes = plan.map((cles) => cles.map((c) => parCle.get(c)).filter((a): a is ArretPlace => !!a));
+      const deja = new Set(groupes.flat().map((a) => a.cle));
+      for (const a of places.filter((x) => !deja.has(x.cle))) {
+        const durees = groupes.map((g) => mesurer(depart, g, params).dureeMin);
+        groupes[durees.indexOf(Math.min(...durees))].push(a);
+      }
+      return groupes.map((g) => mesurer(depart, g, params));
     }
     return planifier(depart, places, nb, params);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depart, plan, places.length, nb, reglages.vitesseKmh, reglages.minutesParArret, arrets]);
+  }, [depart, plan, nb, reglages.vitesseKmh, reglages.minutesParArret, arrets]);
+
+  // Enregistre la répartition et les heures de départ du jour.
+  const premierRendu = useRef(true);
+  useEffect(() => {
+    if (premierRendu.current) {
+      premierRendu.current = false;
+      return;
+    }
+    supabase
+      .from("application_livraison_plans")
+      .upsert({ date, repas_type: service, tournees: plan, departs }, { onConflict: "date,repas_type" })
+      .then(({ error }) => error && setMessage("Tournées non enregistrées, réessayez."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, departs]);
 
   const planActuel = () => tournees.map((t) => t.arrets.map((a) => a.cle));
   function deplacer(livreur: number, index: number, sens: -1 | 1) {
@@ -235,10 +254,20 @@ export function LivraisonClient({
     [p[livreur][index], p[livreur][cible]] = [p[livreur][cible], p[livreur][index]];
     setPlan(p);
   }
-  function changerLivreur(livreur: number, index: number, vers: number) {
+  function donnerA(livreur: number, index: number, vers: number) {
+    if (vers === livreur) return;
     const p = planActuel();
     const [cle] = p[livreur].splice(index, 1);
     p[vers].push(cle);
+    setPlan(p);
+  }
+  // Réordonne la tournée d'un livreur au plus court (après des changements à la main).
+  function optimiser(livreur: number) {
+    if (!depart) return;
+    const p = planActuel();
+    const parCle = new Map(places.map((a) => [a.cle, a]));
+    const groupe = p[livreur].map((c) => parCle.get(c)!).filter(Boolean);
+    p[livreur] = planifier(depart, groupe, 1, params)[0].arrets.map((a) => a.cle);
     setPlan(p);
   }
 
@@ -249,8 +278,9 @@ export function LivraisonClient({
     setMessage(error ? "Réglages non enregistrés, réessayez." : "");
   }
 
-  async function enregistrerAdresse(a: ArretLivraison, adresse: string, point: Point | null, telephone: string) {
-    const maj = { adresse: adresse || null, lat: point?.lat ?? null, lng: point?.lng ?? null };
+  async function enregistrerAdresse(a: ArretLivraison, adresse: string | null, point: Point | null, telephone?: string | null) {
+    const maj = { adresse: adresse?.slice(0, 200) || null, lat: point?.lat ?? null, lng: point?.lng ?? null };
+    const tel = telephone === undefined ? a.telephone : telephone;
     const { error } =
       a.source === "client"
         ? await supabase
@@ -260,28 +290,27 @@ export function LivraisonClient({
         : // Même personne ajoutée à la main : midi et soir du jour.
           await supabase
             .from("application_cuisine_extras")
-            .update({ ...maj, telephone: telephone || null })
+            .update({ ...maj, telephone: tel })
             .eq("date", date)
             .eq("nom", a.nom);
-    if (error) return setMessage("Adresse non enregistrée, réessayez.");
-    setArrets((prev) =>
-      prev.map((x) => (x.cle === a.cle ? { ...x, ...maj, telephone: a.source === "ajout" ? telephone || null : x.telephone } : x))
-    );
-    setPlan(null);
-    setEditionArret(null);
+    if (error) return false;
+    setArrets((prev) => prev.map((x) => (x.cle === a.cle ? { ...x, ...maj, telephone: tel } : x)));
+    return true;
   }
 
   function texteTournee(i: number) {
     const t = tournees[i];
-    const livreur = reglages.livreurs[i]?.nom || `Livreur ${i + 1}`;
+    const livreur = reglages.livreurs[i];
+    const h = departDe(i);
     const lignes = [
       `*🛵 Tournée ${service === "dejeuner" ? "☀️ midi" : "🌙 soir"} — ${dateLongue(date)}*`,
-      `*${livreur}* · ${t.arrets.length} arrêt${t.arrets.length > 1 ? "s" : ""} · ~${duree(t.dureeMin)} · départ ${heureDepart}, fin vers ${heure(heureDepart, t.dureeMin)}`,
-      "",
+      `*${livreur.nom}* · ${t.arrets.length} livraison${t.arrets.length > 1 ? "s" : ""} · départ *${h}* · fin vers ${heure(h, t.dureeMin)} (~${duree(t.dureeMin)})`,
     ];
+    if (livreur.tarif > 0) lignes.push(`Rémunération : ${t.arrets.length} × ${livreur.tarif} DH = *${t.arrets.length * livreur.tarif} DH*`);
+    lignes.push("");
     t.arrets.forEach((a, k) => {
       const x = a as ArretPlace;
-      lignes.push(`${k + 1}. ${heure(heureDepart, t.arrivees[k])} — *${nomCourt(x.nom)}*${x.telephone ? ` 📞 ${x.telephone}` : ""}`);
+      lignes.push(`${k + 1}. ${heure(h, t.arrivees[k])} — *${nomCourt(x.nom)}*${x.telephone ? ` 📞 ${x.telephone}` : ""}`);
       if (x.adresse) lignes.push(`   ${x.adresse}`);
       lignes.push(`   ${lienPoint(x)}`);
       if (x.note) lignes.push(`   → ${x.note}`);
@@ -301,9 +330,10 @@ export function LivraisonClient({
         ? "Demain"
         : new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   const lien = (d: string, s: Service) => `/admin/livraison?date=${d}&service=${s}`;
+  const totalPaye = tournees.reduce((t, x, i) => t + x.arrets.length * (reglages.livreurs[i]?.tarif ?? 0), 0);
 
   return (
-    <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
+    <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
       <AdminOnglets />
       <div className="flex items-end justify-between gap-3">
         <div>
@@ -345,40 +375,79 @@ export function LivraisonClient({
         ))}
       </div>
 
-      {/* Réglages : départ, livreurs, heure, vitesse */}
+      {message && <p className="text-sm font-semibold text-red-700">{message}</p>}
+
+      {arrets.length === 0 ? (
+        <p className="carte p-5 text-center text-sm text-c2b-muted">
+          Personne à livrer pour ce service. Les noms viennent de la{" "}
+          <Link href={`/admin/cuisine?date=${date}`} className="font-bold text-c2b-green underline">
+            fiche cuisine
+          </Link>{" "}
+          du {dateLongue(date)}.
+        </p>
+      ) : (
+        /* Adresses : les noms de la fiche cuisine, chacun avec son champ à coller. */
+        <section className={`carte p-4 ${aLocaliser.length ? "border-red-200" : ""}`}>
+          <button onClick={() => setAdressesOuvertes(!adressesOuvertes)} className="flex w-full items-center justify-between gap-2 text-left">
+            <span className="font-bold text-c2b-green first-letter:uppercase">
+              Adresses · {dateLongue(date)} {service === "dejeuner" ? "midi" : "soir"}
+            </span>
+            <span className={`text-xs font-bold ${aLocaliser.length ? "text-red-700" : "text-emerald-700"}`}>
+              {aLocaliser.length ? `${aLocaliser.length} à localiser` : `${arrets.length}/${arrets.length} ✓`}
+            </span>
+          </button>
+          {adressesOuvertes && (
+            <>
+              <p className="mt-1 text-xs text-c2b-muted">
+                Les noms de la fiche cuisine. Collez l&apos;adresse ou le lien (Waze, Google Maps, Plans, position WhatsApp) :
+                c&apos;est enregistré tout de suite, et gardé pour les jours suivants.
+              </p>
+              <ul className="mt-1 divide-y divide-black/5">
+                {[...aLocaliser, ...arrets.filter((a) => a.lat != null && a.lng != null)].map((a) => (
+                  <LigneAdresse key={a.cle} arret={a} onEnregistrer={(adresse, point, tel) => enregistrerAdresse(a, adresse, point, tel)} />
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Réglages : cuisine, livreurs, tarifs, heures, vitesse */}
       <section className="carte p-4">
         <button onClick={() => setReglagesOuverts(!reglagesOuverts)} className="flex w-full items-center justify-between text-left">
           <span className="flex items-center gap-2 font-bold text-c2b-green">
             <Settings size={17} /> Réglages
           </span>
           <span className="text-xs text-c2b-muted">
-            {nb} livreur{nb > 1 ? "s" : ""} · départ {heureDepart}
+            {nb} livreur{nb > 1 ? "s" : ""}
+            {!depart && " · cuisine à indiquer"}
           </span>
         </button>
         {reglagesOuverts && (
           <div className="mt-3 space-y-4">
             <div>
-              <p className="text-xs font-bold text-c2b-muted mb-1">Point de départ (cuisine)</p>
-              {reglages.depart && !editionDepart ? (
-                <p className="text-sm text-c2b-green">
-                  📍 {reglages.depart.adresse || "Position enregistrée"} ·{" "}
-                  <button onClick={() => setEditionDepart(true)} className="font-semibold text-c2b-gold">
-                    modifier
-                  </button>
-                </p>
-              ) : (
-                <EditeurPosition
-                  adresseInitiale={reglages.depart?.adresse ?? ""}
-                  pointInitial={reglages.depart ? { lat: reglages.depart.lat, lng: reglages.depart.lng } : null}
-                  onEnregistrer={async (adresse, point) => {
-                    if (!point) return setMessage("Indiquez la position de la cuisine (lien, Ma position ou recherche).");
-                    await enregistrerReglages({ depart: { adresse, lat: point.lat, lng: point.lng } });
-                    setEditionDepart(false);
-                    setPlan(null);
+              <p className="text-xs font-bold text-c2b-muted mb-1">Point de départ : la cuisine</p>
+              <ul>
+                <LigneAdresse
+                  arret={{
+                    cle: "depart",
+                    source: "client",
+                    id: "depart",
+                    nom: "Cuisine Chef2Box",
+                    telephone: null,
+                    adresse: depart?.adresse ?? null,
+                    lat: depart?.lat ?? null,
+                    lng: depart?.lng ?? null,
+                    note: null,
                   }}
-                  onAnnuler={() => setEditionDepart(false)}
+                  onEnregistrer={async (adresse, point) => {
+                    if (!point) return false;
+                    await enregistrerReglages({ depart: { adresse: adresse ?? "", lat: point.lat, lng: point.lng } });
+                    setPlan(null);
+                    return true;
+                  }}
                 />
-              )}
+              </ul>
             </div>
 
             <div>
@@ -402,40 +471,48 @@ export function LivraisonClient({
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-bold text-c2b-muted">Livreurs (nom et WhatsApp pour leur envoyer la tournée)</p>
-              {reglages.livreurs.slice(0, nb).map((l, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2">
-                  <input
-                    defaultValue={l.nom}
-                    onBlur={(e) => {
-                      const livreurs = [...reglages.livreurs];
-                      livreurs[i] = { ...livreurs[i], nom: e.target.value.trim().slice(0, 40) || `Livreur ${i + 1}` };
-                      enregistrerReglages({ livreurs });
-                    }}
-                    placeholder={`Livreur ${i + 1}`}
-                    className="champ py-2 text-sm"
-                    style={{ borderLeft: `4px solid ${COULEURS[i]}` }}
-                  />
-                  <input
-                    defaultValue={l.telephone}
-                    onBlur={(e) => {
-                      const livreurs = [...reglages.livreurs];
-                      livreurs[i] = { ...livreurs[i], telephone: e.target.value.trim().slice(0, 30) };
-                      enregistrerReglages({ livreurs });
-                    }}
-                    placeholder="06…"
-                    inputMode="tel"
-                    className="champ py-2 text-sm"
-                  />
-                </div>
-              ))}
+              <p className="text-xs font-bold text-c2b-muted">Livreurs : nom, WhatsApp, prix par livraison (DH)</p>
+              {reglages.livreurs.slice(0, nb).map((l, i) => {
+                const maj = (champ: Partial<ReglagesLivraison["livreurs"][number]>) => {
+                  const livreurs = [...reglages.livreurs];
+                  livreurs[i] = { ...livreurs[i], ...champ };
+                  enregistrerReglages({ livreurs });
+                };
+                return (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_72px] gap-2">
+                    <input
+                      defaultValue={l.nom}
+                      onBlur={(e) => maj({ nom: e.target.value.trim().slice(0, 40) || `Livreur ${i + 1}` })}
+                      placeholder={`Livreur ${i + 1}`}
+                      className="champ py-2 text-sm"
+                      style={{ borderLeft: `4px solid ${COULEURS[i]}` }}
+                    />
+                    <input
+                      defaultValue={l.telephone}
+                      onBlur={(e) => maj({ telephone: e.target.value.trim().slice(0, 30) })}
+                      placeholder="06…"
+                      inputMode="tel"
+                      className="champ py-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      defaultValue={l.tarif || ""}
+                      onBlur={(e) => maj({ tarif: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                      placeholder="DH"
+                      className="champ px-2 py-2 text-sm"
+                      aria-label={`Prix par livraison pour ${l.nom}`}
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               {(
                 [
-                  ["heureMidi", "Départ midi"],
-                  ["heureSoir", "Départ soir"],
+                  ["heureMidi", "Départ habituel midi"],
+                  ["heureSoir", "Départ habituel soir"],
                 ] as const
               ).map(([cle, libelle]) => (
                 <label key={cle} className="block text-xs font-bold text-c2b-muted">
@@ -472,61 +549,16 @@ export function LivraisonClient({
               </label>
             </div>
             <p className="text-[11px] text-c2b-muted">
-              Temps estimé à partir des distances et de la vitesse moyenne (trafic non compris). Ajustez la vitesse après
-              quelques tournées pour coller à la réalité.
+              Temps estimé avec les distances et la vitesse moyenne (sans les bouchons) : ajustez la vitesse après quelques
+              tournées.
             </p>
           </div>
         )}
       </section>
 
-      {message && <p className="text-sm font-semibold text-red-700">{message}</p>}
-
-      {arrets.length === 0 && (
-        <p className="carte p-5 text-center text-sm text-c2b-muted">
-          Aucune livraison pour ce service. Préparez d&apos;abord la{" "}
-          <Link href={`/admin/cuisine?date=${date}`} className="font-bold text-c2b-green underline">
-            fiche cuisine
-          </Link>
-          .
-        </p>
-      )}
-
-      {/* Personnes sans position GPS */}
-      {sansAdresse.length > 0 && (
-        <section className="carte border-red-200 p-4">
-          <p className="font-bold text-red-700">
-            <MapPin size={16} className="mr-1 inline" />
-            {sansAdresse.length} adresse{sansAdresse.length > 1 ? "s" : ""} à compléter
-          </p>
-          <p className="mt-0.5 text-xs text-c2b-muted">
-            Sans position, la personne n&apos;est pas placée dans une tournée. À faire une seule fois : c&apos;est mémorisé.
-          </p>
-          <ul className="mt-2 divide-y divide-black/5">
-            {sansAdresse.map((a) => (
-              <li key={a.cle} className="py-2">
-                <button onClick={() => setEditionArret(editionArret === a.cle ? null : a.cle)} className="flex w-full items-center justify-between text-left">
-                  <span className="text-sm font-bold text-c2b-green">{a.nom}</span>
-                  <span className="text-xs font-semibold text-c2b-gold">Ajouter l&apos;adresse</span>
-                </button>
-                {editionArret === a.cle && (
-                  <EditeurPosition
-                    adresseInitiale={a.adresse ?? ""}
-                    pointInitial={null}
-                    telephoneInitial={a.telephone ?? ""}
-                    avecTelephone={a.source === "ajout"}
-                    onEnregistrer={(adresse, point, tel) => enregistrerAdresse(a, adresse, point, tel)}
-                    onAnnuler={() => setEditionArret(null)}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {!depart && places.length > 0 && (
         <p className="carte p-4 text-sm font-semibold text-c2b-green">
-          Indiquez le point de départ (la cuisine) dans les réglages pour calculer les tournées.
+          Indiquez la position de la cuisine dans les réglages pour calculer les tournées.
         </p>
       )}
 
@@ -536,33 +568,55 @@ export function LivraisonClient({
           <div className="flex items-center justify-between">
             <h2 className="font-serif text-2xl text-c2b-green">
               {places.length} livraison{places.length > 1 ? "s" : ""}
+              {totalPaye > 0 && <span className="ml-2 font-sans text-sm font-bold text-c2b-muted">· {totalPaye} DH</span>}
             </h2>
             {plan && (
               <button onClick={() => setPlan(null)} className="inline-flex items-center gap-1 text-sm font-semibold text-c2b-gold">
-                <RotateCcw size={14} /> Recalculer
+                <RotateCcw size={14} /> Répartition auto
               </button>
             )}
           </div>
+          <p className="text-xs text-c2b-muted">
+            Touchez la pastille d&apos;un livreur pour lui donner une livraison ; les flèches changent l&apos;ordre. C&apos;est
+            enregistré.
+          </p>
           {tournees.map((t, i) => {
-            const livreur = reglages.livreurs[i] ?? { nom: `Livreur ${i + 1}`, telephone: "" };
+            const livreur = reglages.livreurs[i];
             const liens = liensGoogleMaps(depart, t.arrets);
             const numero = livreur.telephone ? numeroWhatsApp(livreur.telephone) : "";
+            const h = departDe(i);
             return (
               <div key={i} className="carte overflow-hidden">
                 <div className="px-4 py-3 text-white" style={{ backgroundColor: COULEURS[i] }}>
                   <p className="flex items-baseline justify-between gap-2">
                     <span className="text-lg font-bold">🛵 {livreur.nom}</span>
                     <span className="text-sm font-bold">
-                      {t.arrets.length} arrêt{t.arrets.length > 1 ? "s" : ""}
+                      {t.arrets.length} livraison{t.arrets.length > 1 ? "s" : ""}
+                      {livreur.tarif > 0 && ` · ${t.arrets.length * livreur.tarif} DH`}
                     </span>
                   </p>
-                  <p className="text-sm text-white/90">
-                    ~{duree(t.dureeMin)} · {t.distanceKm.toFixed(1)} km · départ {heureDepart} → fin vers{" "}
-                    <strong>{heure(heureDepart, t.dureeMin)}</strong>
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/95">
+                    <label className="flex items-center gap-1.5">
+                      Départ
+                      <input
+                        type="time"
+                        value={h}
+                        onChange={(e) => {
+                          const d = [...departs];
+                          d[i] = e.target.value || null;
+                          setDeparts(d);
+                        }}
+                        className="rounded-lg bg-white/20 px-1.5 py-0.5 font-bold text-white [color-scheme:dark]"
+                        aria-label={`Heure de départ de ${livreur.nom}`}
+                      />
+                    </label>
+                    <span>
+                      → fin vers <strong>{heure(h, t.dureeMin)}</strong> · ~{duree(t.dureeMin)} · {t.distanceKm.toFixed(1)} km
+                    </span>
+                  </div>
                 </div>
                 {t.arrets.length === 0 ? (
-                  <p className="p-4 text-sm text-c2b-muted">Aucun arrêt.</p>
+                  <p className="p-4 text-sm text-c2b-muted">Aucune livraison.</p>
                 ) : (
                   <ol className="divide-y divide-black/5">
                     {t.arrets.map((a, k) => {
@@ -577,48 +631,35 @@ export function LivraisonClient({
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm">
-                              <span className="font-bold tabular-nums text-c2b-green">{heure(heureDepart, t.arrivees[k])}</span>{" "}
+                              <span className="font-bold tabular-nums text-c2b-green">{heure(h, t.arrivees[k])}</span>{" "}
                               <span className="font-bold text-c2b-green">{x.nom}</span>
                             </p>
                             {x.adresse && <p className="truncate text-xs text-c2b-muted">{x.adresse}</p>}
                             {x.note && <p className="text-xs italic text-c2b-text">→ {x.note}</p>}
-                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold">
-                              <a href={lienPoint(x)} target="_blank" rel="noopener noreferrer" className="text-c2b-green underline">
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                              <a href={lienPoint(x)} target="_blank" rel="noopener noreferrer" className="mr-1 text-c2b-green underline">
                                 Carte
                               </a>
                               {x.telephone && (
-                                <a href={`tel:${x.telephone.replace(/\s/g, "")}`} className="text-c2b-green underline">
+                                <a href={`tel:${x.telephone.replace(/\s/g, "")}`} className="mr-1 text-c2b-green underline">
                                   Appeler
                                 </a>
                               )}
-                              <button onClick={() => setEditionArret(editionArret === x.cle ? null : x.cle)} className="text-c2b-gold">
-                                Adresse
-                              </button>
-                              {nb > 1 && (
-                                <select
-                                  value={i}
-                                  onChange={(e) => changerLivreur(i, k, Number(e.target.value))}
-                                  className="rounded-full border border-c2b-green/15 bg-white px-2 py-0.5 text-xs text-c2b-green"
-                                  aria-label={`Livreur de ${x.nom}`}
-                                >
-                                  {tournees.map((_, j) => (
-                                    <option key={j} value={j}>
-                                      {reglages.livreurs[j]?.nom ?? `Livreur ${j + 1}`}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
+                              {nb > 1 &&
+                                tournees.map((_, j) => (
+                                  <button
+                                    key={j}
+                                    onClick={() => donnerA(i, k, j)}
+                                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                      j === i ? "text-white" : "border bg-white"
+                                    }`}
+                                    style={j === i ? { backgroundColor: COULEURS[j] } : { borderColor: COULEURS[j], color: COULEURS[j] }}
+                                    aria-pressed={j === i}
+                                  >
+                                    {reglages.livreurs[j]?.nom}
+                                  </button>
+                                ))}
                             </div>
-                            {editionArret === x.cle && (
-                              <EditeurPosition
-                                adresseInitiale={x.adresse ?? ""}
-                                pointInitial={{ lat: x.lat, lng: x.lng }}
-                                telephoneInitial={x.telephone ?? ""}
-                                avecTelephone={x.source === "ajout"}
-                                onEnregistrer={(adresse, point, tel) => enregistrerAdresse(x, adresse, point, tel)}
-                                onAnnuler={() => setEditionArret(null)}
-                              />
-                            )}
                           </div>
                           <div className="flex flex-shrink-0 flex-col">
                             <button
@@ -644,43 +685,46 @@ export function LivraisonClient({
                   </ol>
                 )}
                 {t.arrets.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 border-t border-black/5 p-3">
-                    <a
-                      href={liens[0]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 rounded-full bg-c2b-green px-3 py-2.5 text-sm font-bold text-c2b-cream"
-                    >
-                      <Navigation size={15} /> Itinéraire{liens.length > 1 ? ` (1/${liens.length})` : ""}
-                    </a>
-                    <a
-                      href={`https://wa.me/${numero}?text=${encodeURIComponent(texteTournee(i))}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
-                    >
-                      <Send size={15} /> {numero ? `Envoyer à ${livreur.nom}` : "WhatsApp"}
-                    </a>
+                  <div className="space-y-2 border-t border-black/5 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={liens[0]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 rounded-full bg-c2b-green px-3 py-2.5 text-sm font-bold text-c2b-cream"
+                      >
+                        <Navigation size={15} /> Itinéraire{liens.length > 1 ? ` 1/${liens.length}` : ""}
+                      </a>
+                      <a
+                        href={`https://wa.me/${numero}?text=${encodeURIComponent(texteTournee(i))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
+                      >
+                        <Send size={15} /> {numero ? `Envoyer à ${livreur.nom}` : "WhatsApp"}
+                      </a>
+                    </div>
                     {liens.slice(1).map((l, k) => (
                       <a
                         key={l}
                         href={l}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="col-span-2 rounded-full border border-c2b-green/15 py-2 text-center text-xs font-bold text-c2b-green"
+                        className="block rounded-full border border-c2b-green/15 py-2 text-center text-xs font-bold text-c2b-green"
                       >
                         Itinéraire, partie {k + 2}/{liens.length}
                       </a>
                     ))}
+                    {plan && t.arrets.length > 2 && (
+                      <button onClick={() => optimiser(i)} className="w-full text-xs font-semibold text-c2b-gold">
+                        Remettre cette tournée dans l&apos;ordre le plus court
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             );
           })}
-          <p className="text-[11px] text-c2b-muted">
-            Les flèches changent l&apos;ordre, le menu déplace une livraison vers un autre livreur. « Recalculer » revient à
-            l&apos;ordre automatique.
-          </p>
         </section>
       )}
     </main>
