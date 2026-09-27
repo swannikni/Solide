@@ -1182,3 +1182,71 @@ grant execute on function public.application_signaler_visite(boolean, text) to a
 drop policy if exists "push_admin_lecture" on public.application_push_abonnements;
 create policy "push_admin_lecture" on public.application_push_abonnements
   for select to authenticated using (public.application_is_admin());
+-- ============ FICHE CUISINE ============
+-- Ce que la cuisine doit savoir de chaque client : allergies, aliments
+-- refusés, et les repas qu'il prend d'habitude (midi, soir). Modifié par l'admin.
+alter table public.application_clients add column if not exists cuisine_allergies text
+  check (cuisine_allergies is null or char_length(cuisine_allergies) <= 300);
+alter table public.application_clients add column if not exists cuisine_refus text
+  check (cuisine_refus is null or char_length(cuisine_refus) <= 300);
+alter table public.application_clients add column if not exists repas_habituels text[] not null default '{}'
+  check (repas_habituels <@ array['dejeuner', 'diner']::text[]);
+
+-- Consigne du jour pour une commande (« sauce à part »).
+alter table public.application_commandes add column if not exists note text
+  check (note is null or char_length(note) <= 200);
+
+-- Reprise des réponses au questionnaire pour les clients déjà créés.
+with dernier as (
+  select distinct on (client_id) client_id, reponses
+  from public.application_questionnaires
+  where client_id is not null
+  order by client_id, created_at desc
+)
+update public.application_clients c set
+  cuisine_allergies = coalesce(c.cuisine_allergies, nullif(case
+    when lower(trim(d.reponses->>'allergies')) ~ '^(aucune?s?|non|rien|néant|-|—|/)?$' then null
+    else trim(d.reponses->>'allergies') end, '')),
+  cuisine_refus = coalesce(c.cuisine_refus, nullif(case
+    when lower(trim(d.reponses->>'refuses')) ~ '^(aucune?s?|non|rien|néant|-|—|/)?$' then null
+    else trim(d.reponses->>'refuses') end, '')),
+  repas_habituels = case when c.repas_habituels = '{}' then
+    array_remove(array[
+      case when d.reponses->>'repartition' ilike '%déjeuner%' then 'dejeuner' end,
+      case when d.reponses->>'repartition' ilike '%dîner%' or d.reponses->>'repartition' ilike '%diner%' then 'diner' end
+    ], null) else c.repas_habituels end
+from dernier d
+where d.client_id = c.id;
+-- Compte créé depuis un questionnaire : on reprend allergies, refus et repas
+-- habituels dans la fiche cuisine du client (sans écraser ce qui est rempli).
+create or replace function public.application_cuisine_depuis_questionnaire()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  vide constant text := '^(aucune?s?|non|rien|néant|-|—|/)?$';
+  r jsonb := new.reponses;
+begin
+  if new.client_id is null or new.client_id is not distinct from old.client_id then
+    return new;
+  end if;
+  update public.application_clients c set
+    cuisine_allergies = coalesce(c.cuisine_allergies,
+      case when lower(trim(coalesce(r->>'allergies', ''))) ~ vide then null else left(trim(r->>'allergies'), 300) end),
+    cuisine_refus = coalesce(c.cuisine_refus,
+      case when lower(trim(coalesce(r->>'refuses', ''))) ~ vide then null else left(trim(r->>'refuses'), 300) end),
+    repas_habituels = case when c.repas_habituels = '{}' then
+      array_remove(array[
+        case when r->>'repartition' ilike '%déjeuner%' then 'dejeuner' end,
+        case when r->>'repartition' ilike '%dîner%' or r->>'repartition' ilike '%diner%' then 'diner' end
+      ], null) else c.repas_habituels end
+  where c.id = new.client_id;
+  return new;
+end;
+$$;
+drop trigger if exists application_cuisine_depuis_questionnaire on public.application_questionnaires;
+create trigger application_cuisine_depuis_questionnaire
+  after update of client_id on public.application_questionnaires
+  for each row execute function public.application_cuisine_depuis_questionnaire();

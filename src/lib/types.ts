@@ -14,6 +14,10 @@ export interface Client {
   est_admin: boolean;
   profil?: import("@/lib/objectifs").Profil | null;
   poids_objectif?: number | null;
+  // Fiche cuisine (admin) : allergies, aliments refusés, repas pris d'habitude.
+  cuisine_allergies?: string | null;
+  cuisine_refus?: string | null;
+  repas_habituels?: ("dejeuner" | "diner")[];
   created_at: string;
 }
 
