@@ -4,6 +4,7 @@ import {
   type AjoutCuisine,
   type ClientCuisine,
   type CommandeCuisine,
+  type PersonneConnue,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
 
@@ -19,7 +20,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
   const date = estDateValide(dateDemandee) ? dateDemandee : heure >= 12 ? decalerDate(aujourdhui, 1) : aujourdhui;
 
-  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }] = await Promise.all([
     supabase
       .from("application_clients")
       .select("id, nom, palier, cuisine_allergies, cuisine_refus, repas_habituels")
@@ -43,7 +44,25 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
       .eq("date", date)
       .order("created_at")
       .returns<AjoutCuisine[]>(),
+    // Personnes déjà ajoutées à la main les autres jours : on les retrouve
+    // en tapant leur nom, avec palier, allergies et refus.
+    supabase
+      .from("application_cuisine_extras")
+      .select("date, repas_type, nom, palier, allergies, refus")
+      .neq("date", date)
+      .order("date", { ascending: false })
+      .limit(1000)
+      .returns<(Omit<AjoutCuisine, "id" | "note"> & { date: string })[]>(),
   ]);
+  // Dernière fiche connue de chaque nom (sans tenir compte des majuscules).
+  const connues = new Map<string, PersonneConnue & { date: string }>();
+  for (const h of historique ?? []) {
+    const cle = h.nom.trim().toLowerCase();
+    const deja = connues.get(cle);
+    if (!deja) connues.set(cle, { nom: h.nom, palier: h.palier, allergies: h.allergies, refus: h.refus, services: [h.repas_type], date: h.date });
+    else if (deja.date === h.date && !deja.services.includes(h.repas_type)) deja.services.push(h.repas_type);
+  }
+  const personnesConnues = Array.from(connues.values()).map(({ date: _d, ...p }) => p);
   const plats = { dejeuner: "", diner: "" };
   for (const s of services ?? []) plats[s.repas_type] = s.plat ?? "";
 
@@ -57,6 +76,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         commandesInitiales={commandes ?? []}
         platsInitiaux={plats}
         ajoutsInitiaux={ajouts ?? []}
+        personnesConnues={personnesConnues}
       />
     </div>
   );

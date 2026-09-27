@@ -40,6 +40,18 @@ export interface AjoutCuisine {
   note: string | null;
 }
 
+// Personne déjà ajoutée à la main un autre jour (sa dernière fiche).
+export interface PersonneConnue {
+  nom: string;
+  palier: Palier | null;
+  allergies: string | null;
+  refus: string | null;
+  services: Service[];
+}
+
+const sansAccents = (t: string) =>
+  t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
 const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[] = [
   { cle: "dejeuner", libelle: "Midi", court: "MIDI", icone: "☀️" },
   { cle: "diner", libelle: "Soir", court: "SOIR", icone: "🌙" },
@@ -66,6 +78,7 @@ export function CuisineClient({
   commandesInitiales,
   platsInitiaux,
   ajoutsInitiaux,
+  personnesConnues = [],
 }: {
   date: string;
   aujourdhui: string;
@@ -73,6 +86,7 @@ export function CuisineClient({
   commandesInitiales: CommandeCuisine[];
   platsInitiaux: Record<Service, string>;
   ajoutsInitiaux: AjoutCuisine[];
+  personnesConnues?: PersonneConnue[];
 }) {
   const supabase = createClient();
   const [clients, setClients] = useState(clientsInitiaux);
@@ -103,6 +117,34 @@ export function CuisineClient({
   }, []);
 
   const parClient = new Map(clients.map((c) => [c.id, c]));
+
+  // Suggestions pendant la saisie du nom : personnes des jours précédents
+  // (pas celles déjà sur la fiche du jour).
+  const saisieNom = sansAccents(nouvelAjout?.nom ?? "");
+  const dejaSurLaFiche = new Set(ajouts.map((a) => sansAccents(a.nom)));
+  const ficheReprise =
+    personnesConnues.some((p) => sansAccents(p.nom) === saisieNom) &&
+    !!(nouvelAjout?.palier || nouvelAjout?.allergies || nouvelAjout?.refus);
+  const suggestions =
+    saisieNom.length >= 1 && !ficheReprise
+      ? personnesConnues
+          .filter((p) => !dejaSurLaFiche.has(sansAccents(p.nom)))
+          .filter((p) => sansAccents(p.nom).split(/\s+/).some((mot) => mot.startsWith(saisieNom)) || sansAccents(p.nom).startsWith(saisieNom))
+          .slice(0, 5)
+      : [];
+
+  function reprendrePersonne(p: PersonneConnue) {
+    setNouvelAjout((a) =>
+      a && {
+        ...a,
+        nom: p.nom,
+        palier: p.palier ?? "",
+        allergies: p.allergies ?? "",
+        refus: p.refus ?? "",
+        services: p.services.length ? p.services : a.services,
+      }
+    );
+  }
   const commande = (clientId: string, service: Service) =>
     commandes.find((c) => c.client_id === clientId && c.repas_type === service);
 
@@ -629,10 +671,46 @@ export function CuisineClient({
               autoFocus
               value={nouvelAjout.nom}
               onChange={(e) => setNouvelAjout({ ...nouvelAjout, nom: e.target.value })}
+              onBlur={() => {
+                // Nom déjà connu tapé en entier : on reprend sa fiche.
+                const connu = personnesConnues.find((p) => sansAccents(p.nom) === saisieNom);
+                if (connu && !nouvelAjout.allergies && !nouvelAjout.refus && !nouvelAjout.palier) reprendrePersonne(connu);
+              }}
               placeholder="Nom (ex : Yasmine B.)"
               maxLength={80}
+              autoComplete="off"
               className="champ py-2.5"
             />
+            {suggestions.length > 0 && (
+              <ul className="-mt-1 overflow-hidden rounded-xl border border-c2b-green/10 bg-white">
+                {suggestions.map((p) => (
+                  <li key={p.nom}>
+                    <button
+                      // onMouseDown : passe avant la perte du focus du champ.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => reprendrePersonne(p)}
+                      className="w-full border-b border-c2b-green/5 px-3 py-2 text-left last:border-b-0 hover:bg-c2b-cream"
+                    >
+                      <span className="text-sm font-bold text-c2b-green">{p.nom}</span>
+                      <span className="ml-1.5 text-xs text-c2b-muted">
+                        {[
+                          p.palier && libellePalier(p.palier),
+                          p.services.map((sv) => (sv === "dejeuner" ? "midi" : "soir")).join(" + "),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                      {(p.allergies || p.refus) && (
+                        <span className="block text-xs">
+                          {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
+                          {p.refus && <span className="text-c2b-muted">· sans {p.refus}</span>}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {SERVICES.map((s) => {
                 const coche = nouvelAjout.services.includes(s.cle);
