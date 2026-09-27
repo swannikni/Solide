@@ -70,7 +70,9 @@ export function lireCoordonnees(texte: string): Point | null {
   const motifs = [
     /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
     /@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/,
-    /[?&](?:q|query|ll|sll|coordinate|destination|daddr|center|to|loc)=(?:loc:)?(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/,
+    /[?&](?:q|query|ll|sll|coordinate|destination|daddr|center|to|loc)=(?:loc:)?(-?\d{1,2}\.\d+)\s*,\s*\+?(-?\d{1,3}\.\d+)/,
+    // Google : /maps/search/31.63,+-8.01 ou /maps/place/31.63,-8.01
+    /\/(?:search|place|dir)\/(-?\d{1,2}\.\d+)\s*,\s*\+?(-?\d{1,3}\.\d+)/,
     /^(-?\d{1,2}\.\d+)\s*[,; ]\s*(-?\d{1,3}\.\d+)$/,
   ];
   for (const m of motifs) {
@@ -80,6 +82,16 @@ export function lireCoordonnees(texte: string): Point | null {
       const lng = Number(r[2]);
       if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
     }
+  }
+  // Degrés, minutes, secondes : 31°38'17.2"N 8°00'51.2"W (épingle Google).
+  const dms = t.match(
+    /(\d{1,2})°\s*(\d{1,2})['′]\s*([\d.]+)["″]?\s*([NS])[\s,+]*(\d{1,3})°\s*(\d{1,2})['′]\s*([\d.]+)["″]?\s*([EOW])/i
+  );
+  if (dms) {
+    const deg = (d: string, m: string, sec: string) => Number(d) + Number(m) / 60 + Number(sec) / 3600;
+    const lat = deg(dms[1], dms[2], dms[3]) * (/s/i.test(dms[4]) ? -1 : 1);
+    const lng = deg(dms[5], dms[6], dms[7]) * (/w|o/i.test(dms[8]) ? -1 : 1);
+    if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
   }
   const waze = t.match(/waze\.com\/ul\/h([0-9a-z]{5,12})/i);
   if (waze) return decoderGeohash(waze[1]);

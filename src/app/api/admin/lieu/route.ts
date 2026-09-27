@@ -42,6 +42,25 @@ async function chercherAdresse(adresse: string) {
   return r ? { lat: Number(r.lat), lng: Number(r.lon), libelle: r.display_name } : null;
 }
 
+// Coordonnées dans la page d'un lieu (Google : image de carte « center=lat%2Clng »,
+// vue « @lat,lng », état initial [[[zoom,lng,lat]]) quand l'adresse n'en a pas.
+function coordonneesDansPage(html: string) {
+  const motifs: [RegExp, boolean][] = [
+    [/center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/, false],
+    [/@(-?\d{1,2}\.\d{3,}),(-?\d{1,3}\.\d{3,}),\d/, false],
+    [/APP_INITIALIZATION_STATE=\[\[\[[\d.]+,(-?\d{1,3}\.\d+),(-?\d{1,2}\.\d+)\]/, true],
+  ];
+  for (const [motif, inverse] of motifs) {
+    const r = html.match(motif);
+    if (r) {
+      const [a, b] = [Number(r[1]), Number(r[2])];
+      const [lat, lng] = inverse ? [b, a] : [a, b];
+      if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0)) return { lat, lng };
+    }
+  }
+  return null;
+}
+
 // Nom ou adresse lisible dans un lien sans coordonnées (?q=, ?address=, /place/…/).
 function adresseDansLien(url: URL) {
   for (const cle of ["address", "q", "query", "name", "daddr"]) {
@@ -67,21 +86,42 @@ export async function GET(request: NextRequest) {
     } catch {
       return erreur("Lien invalide.", 400);
     }
-    // Liens courts : on suit les redirections jusqu'à l'adresse complète.
-    for (let saut = 0; saut < 5; saut++) {
+    // Liens courts : on suit les redirections jusqu'à l'adresse complète,
+    // puis on lit la page du lieu si l'adresse ne contient pas la position.
+    const entetes = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
+      "Accept-Language": "fr-FR,fr;q=0.9",
+      Cookie: "CONSENT=YES+cb", // évite la page de consentement de Google
+    };
+    for (let saut = 0; saut < 6; saut++) {
       const point = lireCoordonnees(url.toString());
       if (point) return NextResponse.json(point);
       if (url.protocol !== "https:" || !HOTES.test(url.hostname)) break;
-      const res = await fetch(url, { redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 (iPhone)" } }).catch(() => null);
-      const suivante = res?.headers.get("location");
-      if (!suivante) break;
-      url = new URL(suivante, url);
+      const res = await fetch(url, { redirect: "manual", headers: entetes }).catch(() => null);
+      if (!res) break;
+      const suivante = res.headers.get("location");
+      if (suivante) {
+        url = new URL(suivante, url);
+        continue;
+      }
+      if (res.ok) {
+        const html = (await res.text().catch(() => "")).slice(0, 600_000);
+        const point = coordonneesDansPage(html) ?? lireCoordonnees(html.match(/https:\/\/[^"'\s]*(?:maps|waze)[^"'\s]*/)?.[0] ?? "");
+        if (point) return NextResponse.json(point);
+        // Redirection écrite dans la page (meta refresh / lien canonique).
+        const meta = html.match(/(?:http-equiv="refresh"[^>]*url=|rel="canonical" href=")([^"'>]+)/i)?.[1];
+        if (meta) {
+          url = new URL(meta.replace(/&amp;/g, "&"), url);
+          continue;
+        }
+      }
+      break;
     }
     // Pas de coordonnées dans le lien : on cherche le lieu par son nom.
     const nom = adresseDansLien(url);
     const trouve = nom ? await chercherAdresse(nom) : null;
     if (trouve) return NextResponse.json(trouve);
-    return erreur("Position introuvable dans ce lien. Essayez le partage de position WhatsApp.", 404);
+    return erreur("Position introuvable dans ce lien. Demandez au client sa position WhatsApp, ou utilisez ⊕ sur place.", 404);
   }
 
   const trouve = await chercherAdresse(texte);
