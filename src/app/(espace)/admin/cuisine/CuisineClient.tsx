@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, FileDown, Pencil, Printer, Send, UserPlus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, FileDown, Pencil, Printer, Send, UserPlus } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
@@ -82,6 +82,18 @@ export function CuisineClient({
   const [nouvelAjout, setNouvelAjout] = useState<typeof AJOUT_VIDE | null>(null);
   const [edition, setEdition] = useState<{ id: string; allergies: string; refus: string; habituels: Service[] } | null>(null);
   const [message, setMessage] = useState("");
+  // Ligne de la fiche en cours de modification (touchée sur la fiche).
+  const [ligneEditee, setLigneEditee] = useState<{
+    cle: string; // id de la commande ou de l'ajout
+    service: Service;
+    ajout: boolean;
+    nom: string;
+    palier: Palier | "";
+    services: Service[];
+    allergies: string;
+    refus: string;
+    note: string;
+  } | null>(null);
   const [enCours, setEnCours] = useState(false);
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
@@ -238,6 +250,113 @@ export function CuisineClient({
     setMessage("");
   }
 
+  function ouvrirLigne(l: LigneFiche, service: Service) {
+    if (ligneEditee?.cle === l.cle) return setLigneEditee(null);
+    const nom = l.ajout ? l.nom : parClient.get(commandes.find((c) => c.id === l.cle)?.client_id ?? "")?.nom ?? l.nom;
+    const services = l.ajout
+      ? SERVICES.filter((s) => s.cle === service || ajouts.some((a) => a.nom === l.nom && a.repas_type === s.cle)).map((s) => s.cle)
+      : SERVICES.filter((s) => {
+          const c = commandes.find((x) => x.id === l.cle);
+          return c && commande(c.client_id, s.cle);
+        }).map((s) => s.cle);
+    setLigneEditee({
+      cle: l.cle,
+      service,
+      ajout: !!l.ajout,
+      nom,
+      palier: l.palier ?? "",
+      services,
+      allergies: l.allergies ?? "",
+      refus: l.refus ?? "",
+      note: l.note ?? "",
+    });
+  }
+
+  async function enregistrerLigne() {
+    const e = ligneEditee;
+    if (!e) return;
+    const texte = (t: string, max: number) => t.trim().slice(0, max) || null;
+    const palier = e.palier || null;
+    if (e.ajout) {
+      const nom = e.nom.trim().slice(0, 80);
+      if (!nom) return setMessage("Indiquez un nom.");
+      const champs = { nom, palier, allergies: texte(e.allergies, 300), refus: texte(e.refus, 300), note: texte(e.note, 200) };
+      const ancien = ajouts.find((a) => a.id === e.cle);
+      // Les deux lignes (midi, soir) de la même personne ajoutée à la main.
+      const freres = ajouts.filter((a) => ancien && a.nom === ancien.nom);
+      let nouveaux = ajouts;
+      for (const s of SERVICES) {
+        const existant = freres.find((a) => a.repas_type === s.cle);
+        const voulu = e.services.includes(s.cle);
+        if (existant && voulu) {
+          const { error } = await supabase.from("application_cuisine_extras").update(champs).eq("id", existant.id);
+          if (!error) nouveaux = nouveaux.map((a) => (a.id === existant.id ? { ...a, ...champs } : a));
+        } else if (existant && !voulu) {
+          const { error } = await supabase.from("application_cuisine_extras").delete().eq("id", existant.id);
+          if (!error) nouveaux = nouveaux.filter((a) => a.id !== existant.id);
+        } else if (!existant && voulu) {
+          const { data } = await supabase
+            .from("application_cuisine_extras")
+            .insert({ date, repas_type: s.cle, ...champs })
+            .select("id, repas_type, nom, palier, allergies, refus, note")
+            .single<AjoutCuisine>();
+          if (data) nouveaux = [...nouveaux, data];
+        }
+      }
+      setAjouts(nouveaux);
+    } else {
+      const cmd = commandes.find((c) => c.id === e.cle);
+      const client = cmd && parClient.get(cmd.client_id);
+      if (!cmd || !client) return setLigneEditee(null);
+      // Palier du jour : vide si c'est celui du client.
+      const palierJour = palier && palier !== client.palier ? palier : null;
+      let nouvelles = commandes;
+      for (const s of SERVICES) {
+        const existante = commande(client.id, s.cle);
+        const voulu = e.services.includes(s.cle);
+        const maj = { palier: palierJour, ...(s.cle === e.service ? { note: texte(e.note, 200) } : {}) };
+        if (existante && voulu) {
+          const { error } = await supabase.from("application_commandes").update(maj).eq("id", existante.id);
+          if (!error) nouvelles = nouvelles.map((c) => (c.id === existante.id ? { ...c, ...maj } : c));
+        } else if (existante && !voulu) {
+          const { error } = await supabase.from("application_commandes").delete().eq("id", existante.id);
+          if (!error) nouvelles = nouvelles.filter((c) => c.id !== existante.id);
+        } else if (!existante && voulu) {
+          const { data } = await supabase
+            .from("application_commandes")
+            .upsert(
+              { client_id: client.id, date_livraison: date, repas_type: s.cle, statut: "confirmee", ...maj },
+              { onConflict: "client_id,date_livraison,repas_type" }
+            )
+            .select("id, client_id, repas_type, note, palier")
+            .single<CommandeCuisine>();
+          if (data) nouvelles = [...nouvelles, data];
+        }
+      }
+      setCommandes(nouvelles);
+      // Allergies et refus : fiche du client (valables tous les jours).
+      const prefs = { cuisine_allergies: texte(e.allergies, 300), cuisine_refus: texte(e.refus, 300) };
+      if (prefs.cuisine_allergies !== client.cuisine_allergies || prefs.cuisine_refus !== client.cuisine_refus) {
+        const { error } = await supabase.from("application_clients").update(prefs).eq("id", client.id);
+        if (!error) setClients((prev) => prev.map((c) => (c.id === client.id ? { ...c, ...prefs } : c)));
+      }
+    }
+    setLigneEditee(null);
+    setMessage("");
+  }
+
+  async function supprimerLigne() {
+    const e = ligneEditee;
+    if (!e) return;
+    if (e.ajout) {
+      await retirerAjout(e.cle);
+    } else {
+      const { error } = await supabase.from("application_commandes").delete().eq("id", e.cle);
+      if (!error) setCommandes((prev) => prev.filter((c) => c.id !== e.cle));
+    }
+    setLigneEditee(null);
+  }
+
   async function retirerAjout(id: string) {
     const { error } = await supabase.from("application_cuisine_extras").delete().eq("id", id);
     if (!error) setAjouts((prev) => prev.filter((a) => a.id !== id));
@@ -353,21 +472,114 @@ export function CuisineClient({
                     <p className="border-b border-c2b-green/20 pb-1 text-sm font-bold text-c2b-green">{libellePalier(g.palier)}</p>
                     <ul className="mt-1 space-y-1">
                       {g.lignes.map((l) => (
-                        <li key={l.cle} className="flex items-start gap-1 text-sm leading-snug">
-                          <span className="flex-1">
-                            <span className="font-bold text-c2b-green">{l.nom}</span>
-                            {l.allergies && <span className="ml-1.5 font-bold text-red-700">⚠️ {l.allergies}</span>}
-                            {l.refus && <span className="text-c2b-text"> · sans {l.refus}</span>}
-                            {l.note && <span className="italic text-c2b-text"> · {l.note}</span>}
-                          </span>
-                          {l.ajout && (
-                            <button
-                              onClick={() => retirerAjout(l.cle)}
-                              className="print:hidden flex-shrink-0 text-c2b-muted hover:text-red-600"
-                              aria-label={`Retirer ${l.nom}`}
-                            >
-                              <X size={15} />
-                            </button>
+                        <li key={l.cle} className="text-sm leading-snug">
+                          <button
+                            onClick={() => ouvrirLigne(l, s.cle)}
+                            className={`flex w-full items-start gap-1 rounded-lg py-0.5 text-left transition hover:bg-c2b-green/[0.04] ${
+                              ligneEditee?.cle === l.cle ? "bg-c2b-gold/10" : ""
+                            }`}
+                            aria-label={`Modifier ${l.nom}`}
+                          >
+                            <span className="flex-1">
+                              <span className="font-bold text-c2b-green">{l.nom}</span>
+                              {l.allergies && <span className="ml-1.5 font-bold text-red-700">⚠️ {l.allergies}</span>}
+                              {l.refus && <span className="text-c2b-text"> · sans {l.refus}</span>}
+                              {l.note && <span className="italic text-c2b-text"> · {l.note}</span>}
+                            </span>
+                            <Pencil size={13} className="mt-0.5 flex-shrink-0 text-c2b-muted print:hidden" />
+                          </button>
+                          {ligneEditee?.cle === l.cle && (
+                            <div className="print:hidden mt-2 mb-3 space-y-2 rounded-2xl bg-c2b-cream p-3">
+                              {ligneEditee.ajout ? (
+                                <input
+                                  value={ligneEditee.nom}
+                                  onChange={(ev) => setLigneEditee({ ...ligneEditee, nom: ev.target.value })}
+                                  placeholder="Nom"
+                                  maxLength={80}
+                                  className="champ py-2 text-sm font-bold"
+                                />
+                              ) : (
+                                <p className="text-sm font-bold text-c2b-green">{ligneEditee.nom}</p>
+                              )}
+                              <div className="grid grid-cols-2 gap-2">
+                                {SERVICES.map((sv) => {
+                                  const coche = ligneEditee.services.includes(sv.cle);
+                                  return (
+                                    <button
+                                      key={sv.cle}
+                                      onClick={() =>
+                                        setLigneEditee({
+                                          ...ligneEditee,
+                                          services: coche
+                                            ? ligneEditee.services.filter((x) => x !== sv.cle)
+                                            : [...ligneEditee.services, sv.cle],
+                                        })
+                                      }
+                                      className={`rounded-full py-2 text-sm font-bold ${
+                                        coche ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-muted"
+                                      }`}
+                                    >
+                                      {sv.icone} {sv.libelle}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {PALIERS.map((p) => (
+                                  <button
+                                    key={p}
+                                    onClick={() => setLigneEditee({ ...ligneEditee, palier: ligneEditee.palier === p ? "" : p })}
+                                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                                      ligneEditee.palier === p
+                                        ? "bg-c2b-gold text-c2b-green"
+                                        : "bg-white border border-c2b-green/15 text-c2b-green"
+                                    }`}
+                                  >
+                                    {libellePalier(p)}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                value={ligneEditee.allergies}
+                                onChange={(ev) => setLigneEditee({ ...ligneEditee, allergies: ev.target.value })}
+                                placeholder="Allergies"
+                                maxLength={300}
+                                className="champ py-2 text-sm"
+                              />
+                              <input
+                                value={ligneEditee.refus}
+                                onChange={(ev) => setLigneEditee({ ...ligneEditee, refus: ev.target.value })}
+                                placeholder="Ne mange pas"
+                                maxLength={300}
+                                className="champ py-2 text-sm"
+                              />
+                              <input
+                                value={ligneEditee.note}
+                                onChange={(ev) => setLigneEditee({ ...ligneEditee, note: ev.target.value })}
+                                placeholder="Consigne (facultatif)"
+                                maxLength={200}
+                                className="champ py-2 text-sm"
+                              />
+                              {!ligneEditee.ajout && (
+                                <p className="text-[11px] text-c2b-muted">
+                                  Allergies et refus sont gardés dans la fiche du client (tous les jours).
+                                </p>
+                              )}
+                              <div className="flex gap-2 pt-1">
+                                <button onClick={enregistrerLigne} className="btn-primary flex-1 py-2 text-sm">
+                                  Enregistrer
+                                </button>
+                                <button
+                                  onClick={supprimerLigne}
+                                  className="flex-1 rounded-full border-2 border-red-200 py-2 text-sm font-bold text-red-700"
+                                >
+                                  Supprimer
+                                </button>
+                              </div>
+                              <button onClick={() => setLigneEditee(null)} className="w-full text-xs font-semibold text-c2b-muted">
+                                Fermer
+                              </button>
+                            </div>
                           )}
                         </li>
                       ))}
