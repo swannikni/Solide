@@ -98,7 +98,20 @@ export function lireCoordonnees(texte: string): Point | null {
   return null;
 }
 
-export const estUnLien = (texte: string) => /^https?:\/\//i.test(texte.trim()) || /^(www\.|maps\.|waze\.)/i.test(texte.trim());
+export const estUnLien = (texte: string) =>
+  /^https?:\/\//i.test(texte.trim()) || /^(www\.|maps\.|waze\.|share\.google|goo\.gl)/i.test(texte.trim());
+
+// Texte partagé depuis une appli de cartes : souvent « Nom du lieu, adresse »
+// suivi du lien. On sépare les deux (le nom sert de repère et de secours).
+export function separerLien(texte: string): { lien: string | null; texte: string } {
+  const r = texte.match(/(?:https?:\/\/|\b(?:maps\.app\.goo\.gl|share\.google|waze\.com)\/)\S+/i);
+  if (!r) return { lien: null, texte: texte.trim() };
+  const reste = (texte.slice(0, r.index) + " " + texte.slice(r.index! + r[0].length))
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:·-]+|[\s,;:·-]+$/g, "")
+    .trim();
+  return { lien: r[0].replace(/[),.;]+$/, ""), texte: reste };
+}
 
 function minutesTrajet(km: number, r: Reglages) {
   return ((km * DETOUR) / Math.max(r.vitesseKmh, 5)) * 60;
@@ -137,6 +150,18 @@ function ordonner<A extends Arret>(depart: Point, arrets: A[]): A[] {
     }
   }
   return ordre;
+}
+
+// Place d'un arrêt dans un parcours déjà ordonné : là où il allonge le
+// moins le trajet. Renvoie l'indice et le détour (km à vol d'oiseau).
+export function meilleurePlace(depart: Point, parcours: Point[], p: Point) {
+  let meilleur = { index: parcours.length, detour: parcours.length ? distanceKm(parcours[parcours.length - 1], p) : distanceKm(depart, p) };
+  for (let i = 0; i < parcours.length; i++) {
+    const avant = i === 0 ? depart : parcours[i - 1];
+    const detour = distanceKm(avant, p) + distanceKm(p, parcours[i]) - distanceKm(avant, parcours[i]);
+    if (detour < meilleur.detour) meilleur = { index: i, detour };
+  }
+  return meilleur;
 }
 
 // Temps et distance d'un parcours dans l'ordre donné.

@@ -9,6 +9,7 @@ import {
   Check,
   ChevronLeft,
   FileText,
+  Map as IconeCarte,
   ChevronRight,
   Crosshair,
   MapPin,
@@ -24,6 +25,7 @@ import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { ReglagesLivraison } from "@/lib/livraison";
 import { genererFeuillePdf } from "@/lib/tournee-pdf";
+import { CarteTournees, ChoixSurCarte, type GroupeCarte } from "@/components/CarteLivraison";
 import {
   distanceKm,
   duree,
@@ -33,8 +35,10 @@ import {
   lienWaze,
   liensGoogleMaps,
   lireCoordonnees,
+  meilleurePlace,
   mesurer,
   planifier,
+  separerLien,
   type Arret,
   type Point,
 } from "@/lib/tournees";
@@ -101,12 +105,19 @@ async function localiser(texte: string): Promise<{ point: Point; libelle?: strin
 }
 
 // Une ligne « Nom : [coller l'adresse ou le lien] », enregistrée dès le collage.
+// Position tombée sur la cuisine : presque toujours une erreur (⊕ touché à la
+// cuisine, lien non lu…).
+const surLaCuisine = (a: { lat: number | null; lng: number | null }, depart: Point | null) =>
+  !!depart && a.lat != null && a.lng != null && distanceKm(depart, { lat: a.lat, lng: a.lng }) < 0.08;
+
 function LigneAdresse({
   arret,
+  depart,
   onEnregistrer,
   onComplement,
 }: {
   arret: ArretLivraison;
+  depart: Point | null;
   onEnregistrer: (adresse: string | null, point: Point | null, telephone?: string | null) => Promise<boolean>;
   onComplement?: (complement: string | null) => Promise<boolean>;
 }) {
@@ -115,34 +126,48 @@ function LigneAdresse({
   const [etat, setEtat] = useState<{ type: "ok" | "erreur" | "encours"; message: string } | null>(null);
   const dernier = useRef(arret.adresse ?? "");
   const champ = useRef<HTMLInputElement>(null);
+  const [carteOuverte, setCarteOuverte] = useState(false);
+  const aVerifier = surLaCuisine(arret, depart);
+  // Texte à garder comme repère : jamais un lien brut.
+  const repere = () => {
+    const { lien, texte: nom } = separerLien(texte);
+    return (lien ? nom : texte.trim()) || arret.adresse || null;
+  };
 
   async function traiter(valeur: string) {
     const t = valeur.trim();
     if (!t || t === dernier.current) return;
     dernier.current = t;
     setEtat({ type: "encours", message: "Recherche de la position..." });
+    const { lien, texte: nomLieu } = separerLien(t);
     const r = await localiser(t);
     if ("erreur" in r) {
       // Adresse écrite introuvable : on la garde comme repère pour le livreur.
-      if (!estUnLien(t)) await onEnregistrer(t, place ? { lat: arret.lat!, lng: arret.lng! } : null);
+      if (!lien) await onEnregistrer(t, place && !aVerifier ? { lat: arret.lat!, lng: arret.lng! } : null);
+      else if (nomLieu) setTexte(nomLieu);
       return setEtat({ type: "erreur", message: r.erreur });
     }
     // Lien collé : on garde l'adresse écrite si elle sert de repère au même
     // endroit ; si la position change (déménagement, erreur), elle est remplacée.
     const memeEndroit = !place || distanceKm({ lat: arret.lat!, lng: arret.lng! }, r.point) < 0.3;
     const libelle = r.libelle?.split(",").slice(0, 3).join(",") || null;
-    const adresse = estUnLien(t) ? (memeEndroit && arret.adresse) || libelle : t;
-    if (estUnLien(t)) setTexte(adresse ?? "");
+    const adresse = lien ? nomLieu || (memeEndroit && !estUnLien(arret.adresse ?? "") && arret.adresse) || libelle : t;
+    if (lien) setTexte(adresse ?? "");
+    if (surLaCuisine(r.point, depart)) {
+      await onEnregistrer(adresse, r.point);
+      return setEtat({ type: "erreur", message: "Ce lien donne la position de la cuisine : vérifiez-le, ou placez l'adresse sur la carte." });
+    }
     const ok = await onEnregistrer(adresse, r.point);
     setEtat(ok ? { type: "ok", message: "Position enregistrée" } : { type: "erreur", message: "Non enregistré, réessayez." });
   }
 
   function maPosition() {
     if (!navigator.geolocation) return setEtat({ type: "erreur", message: "Position indisponible sur cet appareil." });
+    if (!window.confirm(`Enregistrer l'endroit où vous êtes MAINTENANT comme position de « ${arret.nom} » ?\n\nÀ faire seulement quand vous êtes sur place.`)) return;
     setEtat({ type: "encours", message: "Recherche de votre position..." });
     navigator.geolocation.getCurrentPosition(
       async (p) => {
-        const ok = await onEnregistrer(texte.trim() || arret.adresse, { lat: p.coords.latitude, lng: p.coords.longitude });
+        const ok = await onEnregistrer(repere(), { lat: p.coords.latitude, lng: p.coords.longitude });
         setEtat(ok ? { type: "ok", message: `Position enregistrée (à ${Math.round(p.coords.accuracy)} m près)` } : { type: "erreur", message: "Non enregistré." });
       },
       () => setEtat({ type: "erreur", message: "Localisation refusée pour ce site." }),
@@ -157,7 +182,9 @@ function LigneAdresse({
           {arret.nom}
           {arret.telephone && <span className="ml-1.5 text-xs font-normal text-c2b-muted">{arret.telephone}</span>}
         </p>
-        {place ? (
+        {place && aVerifier ? (
+          <span className="flex items-center gap-1 text-xs font-bold text-red-700">⚠️ sur la cuisine</span>
+        ) : place ? (
           <a href={lienPoint({ lat: arret.lat!, lng: arret.lng! })} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-bold text-emerald-700">
             <Check size={14} /> sur la carte
           </a>
@@ -185,7 +212,7 @@ function LigneAdresse({
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             placeholder="Coller l'adresse ou un lien Waze, Google Maps, Plans…"
             maxLength={500}
-            className={`champ py-2 pr-9 text-sm ${place ? "" : "border-red-200"}`}
+            className={`champ py-2 pr-9 text-sm ${place && !aVerifier ? "" : "border-red-200"}`}
           />
           {texte && (
             <button
@@ -211,7 +238,34 @@ function LigneAdresse({
         >
           <Crosshair size={17} />
         </button>
+        <button
+          onClick={() => setCarteOuverte(!carteOuverte)}
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border ${
+            carteOuverte ? "border-c2b-green bg-c2b-green text-c2b-cream" : "border-c2b-green/15 bg-white text-c2b-green"
+          }`}
+          aria-label={`Placer ${arret.nom} sur la carte`}
+          title="Placer sur la carte"
+        >
+          <IconeCarte size={17} />
+        </button>
       </div>
+      {aVerifier && !etat && (
+        <p className="mt-1 text-xs font-semibold text-red-700">
+          Même position que la cuisine : collez le bon lien, ou placez l&apos;adresse sur la carte.
+        </p>
+      )}
+      {carteOuverte && (
+        <ChoixSurCarte
+          depart={depart}
+          point={place && !aVerifier ? { lat: arret.lat!, lng: arret.lng! } : null}
+          onAnnuler={() => setCarteOuverte(false)}
+          onValider={async (p) => {
+            const ok = await onEnregistrer(repere(), p);
+            setCarteOuverte(false);
+            setEtat(ok ? { type: "ok", message: "Position placée sur la carte" } : { type: "erreur", message: "Non enregistré, réessayez." });
+          }}
+        />
+      )}
       {onComplement && (
         <input
           defaultValue={arret.complement ?? ""}
@@ -271,7 +325,10 @@ export function LivraisonClient({
   const [arrets, setArrets] = useState(arretsInitiaux);
   const [reglages, setReglages] = useState(reglagesInitiaux);
   const [reglagesOuverts, setReglagesOuverts] = useState(!reglagesInitiaux.depart);
-  const [adressesOuvertes, setAdressesOuvertes] = useState(arretsInitiaux.some((a) => a.lat == null));
+  const [adressesOuvertes, setAdressesOuvertes] = useState(
+    arretsInitiaux.some((a) => a.lat == null || surLaCuisine(a, reglagesInitiaux.depart))
+  );
+  const [carteVisible, setCarteVisible] = useState(true);
   // Répartition choisie à la main (clés par livreur) ; null = calcul automatique.
   const [plan, setPlan] = useState<string[][] | null>(planInitial);
   const [departs, setDeparts] = useState<(string | null)[]>(departsInitiaux);
@@ -297,28 +354,41 @@ export function LivraisonClient({
   const nb = Math.min(Math.max(reglages.nbLivreurs, 1), 3);
   const heureParDefaut = reglages.heureMidi;
   const departDe = (i: number) => departs[i] || heureParDefaut;
-  const places = arrets.filter((a): a is ArretPlace => a.lat != null && a.lng != null);
-  const aLocaliser = arrets.filter((a) => a.lat == null || a.lng == null);
   const depart = reglages.depart;
+  // Arrêts sans position, ou placés sur la cuisine (erreur) : hors tournées.
+  const places = arrets.filter((a): a is ArretPlace => a.lat != null && a.lng != null && !surLaCuisine(a, depart));
+  const aLocaliser = arrets.filter((a) => a.lat == null || a.lng == null || surLaCuisine(a, depart));
   const params = { vitesseKmh: reglages.vitesseKmh, minutesParArret: reglages.minutesParArret };
 
   const tournees = useMemo(() => {
     if (!depart) return [];
     if (plan && plan.length === nb) {
-      // Plan enregistré : on retire les absents, on ajoute les nouveaux au
-      // livreur qui a la tournée la plus courte.
+      // Plan enregistré : on retire les absents, on ajoute les nouveaux là
+      // où ils rallongent le moins une tournée.
       const parCle = new Map(places.map((a) => [a.cle, a]));
       const groupes = plan.map((cles) => cles.map((c) => parCle.get(c)).filter((a): a is ArretPlace => !!a));
       const deja = new Set(groupes.flat().map((a) => a.cle));
       for (const a of places.filter((x) => !deja.has(x.cle))) {
-        const durees = groupes.map((g) => mesurer(depart, g, params).dureeMin);
-        groupes[durees.indexOf(Math.min(...durees))].push(a);
+        const choix = groupes.map((g) => meilleurePlace(depart, g, a));
+        const i = choix.reduce((m, c, k) => (c.detour < choix[m].detour ? k : m), 0);
+        groupes[i].splice(choix[i].index, 0, a);
       }
       return groupes.map((g) => mesurer(depart, g, params));
     }
     return planifier(depart, places, nb, params);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [depart, plan, nb, reglages.vitesseKmh, reglages.minutesParArret, arrets]);
+
+  const groupesCarte = useMemo<GroupeCarte[]>(
+    () =>
+      tournees.map((t, i) => ({
+        couleur: COULEURS[i],
+        nom: reglages.livreurs[i]?.nom ?? "",
+        arrets: t.arrets.map((a) => ({ cle: a.cle, nom: a.nom, lat: a.lat, lng: a.lng })),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tournees]
+  );
 
   // Enregistre la répartition et les heures de départ du jour.
   const premierRendu = useRef(true);
@@ -346,7 +416,11 @@ export function LivraisonClient({
     if (vers === livreur) return;
     const p = planActuel();
     const [cle] = p[livreur].splice(index, 1);
-    p[vers].push(cle);
+    // Insérée là où elle rallonge le moins la tournée du livreur choisi.
+    const parCle = new Map(places.map((x) => [x.cle, x]));
+    const arret = parCle.get(cle);
+    const position = depart && arret ? meilleurePlace(depart, p[vers].map((c) => parCle.get(c)!).filter(Boolean), arret).index : p[vers].length;
+    p[vers].splice(position, 0, cle);
     setPlan(p);
   }
   // Réordonne la tournée d'un livreur au plus court (après des changements à la main).
@@ -383,6 +457,19 @@ export function LivraisonClient({
             .eq("nom", a.nom);
     if (error) return false;
     setArrets((prev) => prev.map((x) => (x.cle === a.cle ? { ...x, ...maj, telephone: tel } : x)));
+    // Répartition choisie à la main : l'arrêt déplacé reprend la meilleure
+    // place dans la tournée de son livreur (le reste de l'ordre ne bouge pas).
+    if (plan && point && depart && !surLaCuisine(point, depart)) {
+      const p = planActuel();
+      const i = p.findIndex((g) => g.includes(a.cle));
+      if (i >= 0) {
+        const parCle = new Map(places.map((x) => [x.cle, x]));
+        p[i] = p[i].filter((c) => c !== a.cle);
+        const { index } = meilleurePlace(depart, p[i].map((c) => parCle.get(c)!).filter(Boolean), point);
+        p[i].splice(index, 0, a.cle);
+        setPlan(p);
+      }
+    }
     return true;
   }
 
@@ -538,7 +625,7 @@ export function LivraisonClient({
               Adresses · {dateLongue(date)}
             </span>
             <span className={`text-xs font-bold ${aLocaliser.length ? "text-red-700" : "text-emerald-700"}`}>
-              {aLocaliser.length ? `${aLocaliser.length} à localiser` : `${arrets.length}/${arrets.length} ✓`}
+              {aLocaliser.length ? `${aLocaliser.length} à localiser ou vérifier` : `${arrets.length}/${arrets.length} ✓`}
             </span>
           </button>
           {adressesOuvertes && (
@@ -548,10 +635,11 @@ export function LivraisonClient({
                 c&apos;est enregistré tout de suite, et gardé pour les jours suivants.
               </p>
               <ul className="mt-1 divide-y divide-black/5">
-                {[...aLocaliser, ...arrets.filter((a) => a.lat != null && a.lng != null)].map((a) => (
+                {[...aLocaliser, ...arrets.filter((a) => !aLocaliser.includes(a))].map((a) => (
                   <LigneAdresse
                     key={a.cle}
                     arret={a}
+                    depart={depart}
                     onEnregistrer={(adresse, point, tel) => enregistrerAdresse(a, adresse, point, tel)}
                     onComplement={(c) => enregistrerComplement(a, c)}
                   />
@@ -579,6 +667,7 @@ export function LivraisonClient({
               <p className="text-xs font-bold text-c2b-muted mb-1">Point de départ : la cuisine</p>
               <ul>
                 <LigneAdresse
+                  depart={null}
                   arret={{
                     cle: "depart",
                     source: "client",
@@ -721,6 +810,31 @@ export function LivraisonClient({
               </button>
             )}
           </div>
+          {aLocaliser.length > 0 && (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+              ⚠️ {aLocaliser.length} personne{aLocaliser.length > 1 ? "s" : ""} pas encore dans les tournées (
+              {aLocaliser.map((a) => a.nom).join(", ")}) : adresse à localiser ou à vérifier dans « Adresses ».
+            </p>
+          )}
+          <div className="carte overflow-hidden p-2">
+            <button
+              onClick={() => setCarteVisible(!carteVisible)}
+              className="flex w-full items-center justify-between px-2 py-1 text-left text-sm font-bold text-c2b-green"
+            >
+              <span className="flex items-center gap-2">
+                <IconeCarte size={16} /> Carte des tournées
+              </span>
+              <span className="text-xs font-semibold text-c2b-muted">{carteVisible ? "Masquer" : "Afficher"}</span>
+            </button>
+            {carteVisible && (
+              <div className="mt-2">
+                <CarteTournees depart={depart} groupes={groupesCarte} />
+                <p className="px-2 pt-2 text-[11px] text-c2b-muted">
+                  Un numéro mal placé ? Touchez « Adresse » sous son nom, puis le bouton carte pour le remettre au bon endroit.
+                </p>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-c2b-muted">
             Touchez la pastille d&apos;un livreur pour lui donner une livraison ; les flèches changent l&apos;ordre. C&apos;est
             enregistré.
@@ -828,6 +942,7 @@ export function LivraisonClient({
                                 <ul>
                                   <LigneAdresse
                                     arret={arrets.find((a) => a.cle === x.cle) ?? x}
+                                    depart={depart}
                                     onEnregistrer={(adresse, point, tel) => enregistrerAdresse(x, adresse, point, tel)}
                                     onComplement={(c) => enregistrerComplement(x, c)}
                                   />
