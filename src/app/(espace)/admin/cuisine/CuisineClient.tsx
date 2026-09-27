@@ -112,8 +112,19 @@ export function CuisineClient({
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
+  const [logo, setLogo] = useState<{ data: string; ratio: number } | null>(null);
   useEffect(() => {
     import("jspdf").then((m) => setJsPdf(() => m.jsPDF)).catch(() => {});
+    // Logo pour l'en-tête du PDF, lu une fois en image (data URL).
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d")?.drawImage(image, 0, 0);
+      setLogo({ data: canvas.toDataURL("image/png"), ratio: image.naturalWidth / image.naturalHeight });
+    };
+    image.src = "/logo-fiche.png";
   }, []);
 
   const parClient = new Map(clients.map((c) => [c.id, c]));
@@ -201,7 +212,7 @@ export function CuisineClient({
 
   async function envoyerPdf() {
     if (!JsPdf) return setMessage("Préparation du PDF, réessayez dans une seconde.");
-    const blob = genererFichePdf(JsPdf, { titreDate: dateLongue(date), services: fiche });
+    const blob = genererFichePdf(JsPdf, { titreDate: dateLongue(date), services: fiche, logo });
     const fichier = new File([blob], `fiche-cuisine-${date}.pdf`, { type: "application/pdf" });
     // Téléphone : menu de partage (WhatsApp, mail…). Sinon : téléchargement.
     if (navigator.canShare?.({ files: [fichier] })) {
