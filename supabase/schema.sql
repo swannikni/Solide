@@ -1250,3 +1250,36 @@ drop trigger if exists application_cuisine_depuis_questionnaire on public.applic
 create trigger application_cuisine_depuis_questionnaire
   after update of client_id on public.application_questionnaires
   for each row execute function public.application_cuisine_depuis_questionnaire();
+-- Plat servi à chaque service d'un jour (affiché sur la fiche cuisine).
+create table if not exists public.application_cuisine_services (
+  date date not null,
+  repas_type text not null check (repas_type in ('dejeuner', 'diner')),
+  plat text check (plat is null or char_length(plat) <= 120),
+  primary key (date, repas_type)
+);
+alter table public.application_cuisine_services enable row level security;
+drop policy if exists "cuisine_services_admin" on public.application_cuisine_services;
+create policy "cuisine_services_admin" on public.application_cuisine_services
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Personnes ajoutées à la main sur la fiche (sans compte dans l'appli).
+create table if not exists public.application_cuisine_extras (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  repas_type text not null check (repas_type in ('dejeuner', 'diner')),
+  nom text not null check (char_length(nom) between 1 and 80),
+  palier text check (palier is null or palier in ('P1','P2','P3','P4','P5','P6')),
+  allergies text check (allergies is null or char_length(allergies) <= 300),
+  refus text check (refus is null or char_length(refus) <= 300),
+  note text check (note is null or char_length(note) <= 200),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_cuisine_extras_date_idx on public.application_cuisine_extras (date);
+alter table public.application_cuisine_extras enable row level security;
+drop policy if exists "cuisine_extras_admin" on public.application_cuisine_extras;
+create policy "cuisine_extras_admin" on public.application_cuisine_extras
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Palier du jour pour une commande (sinon celui du client).
+alter table public.application_commandes add column if not exists palier text
+  check (palier is null or palier in ('P1','P2','P3','P4','P5','P6'));
