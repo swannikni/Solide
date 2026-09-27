@@ -7,6 +7,7 @@ const ONGLETS = [
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/suivi", label: "Suivi" },
   { href: "/admin/cuisine", label: "Cuisine" },
+  { href: "/admin/livraison", label: "Livraison" },
   { href: "/admin/menu", label: "Menu & QR" },
   { href: "/admin/recompenses", label: "Récompenses" },
 ];

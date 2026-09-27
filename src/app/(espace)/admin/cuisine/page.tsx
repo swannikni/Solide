@@ -48,19 +48,44 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
     // en tapant leur nom, avec palier, allergies et refus.
     supabase
       .from("application_cuisine_extras")
-      .select("date, repas_type, nom, palier, allergies, refus")
+      .select("date, repas_type, nom, palier, allergies, refus, adresse, lat, lng, telephone")
       .neq("date", date)
       .order("date", { ascending: false })
       .limit(1000)
-      .returns<(Omit<AjoutCuisine, "id" | "note"> & { date: string })[]>(),
+      .returns<
+        (Omit<AjoutCuisine, "id" | "note"> & {
+          date: string;
+          adresse: string | null;
+          lat: number | null;
+          lng: number | null;
+          telephone: string | null;
+        })[]
+      >(),
   ]);
   // Dernière fiche connue de chaque nom (sans tenir compte des majuscules).
   const connues = new Map<string, PersonneConnue & { date: string }>();
   for (const h of historique ?? []) {
     const cle = h.nom.trim().toLowerCase();
     const deja = connues.get(cle);
-    if (!deja) connues.set(cle, { nom: h.nom, palier: h.palier, allergies: h.allergies, refus: h.refus, services: [h.repas_type], date: h.date });
-    else if (deja.date === h.date && !deja.services.includes(h.repas_type)) deja.services.push(h.repas_type);
+    if (!deja)
+      connues.set(cle, {
+        nom: h.nom,
+        palier: h.palier,
+        allergies: h.allergies,
+        refus: h.refus,
+        services: [h.repas_type],
+        adresse: h.adresse,
+        lat: h.lat,
+        lng: h.lng,
+        telephone: h.telephone,
+        date: h.date,
+      });
+    else {
+      if (deja.date === h.date && !deja.services.includes(h.repas_type)) deja.services.push(h.repas_type);
+      // Adresse : la plus récente connue, même si la dernière fiche n'en a pas.
+      if (deja.lat == null && h.lat != null) Object.assign(deja, { adresse: h.adresse, lat: h.lat, lng: h.lng });
+      if (!deja.telephone && h.telephone) deja.telephone = h.telephone;
+    }
   }
   const personnesConnues = Array.from(connues.values()).map(({ date: _d, ...p }) => p);
   const plats = { dejeuner: "", diner: "" };

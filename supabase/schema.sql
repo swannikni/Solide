@@ -1283,3 +1283,32 @@ create policy "cuisine_extras_admin" on public.application_cuisine_extras
 -- Palier du jour pour une commande (sinon celui du client).
 alter table public.application_commandes add column if not exists palier text
   check (palier is null or palier in ('P1','P2','P3','P4','P5','P6'));
+-- ============ LIVRAISON ============
+-- Adresse de livraison : texte (repère pour le livreur) et point GPS.
+alter table public.application_clients add column if not exists livraison_adresse text
+  check (livraison_adresse is null or char_length(livraison_adresse) <= 200);
+alter table public.application_clients add column if not exists livraison_lat double precision
+  check (livraison_lat is null or livraison_lat between -90 and 90);
+alter table public.application_clients add column if not exists livraison_lng double precision
+  check (livraison_lng is null or livraison_lng between -180 and 180);
+
+-- Idem pour les personnes ajoutées à la main (mémorisé d'un jour à l'autre).
+alter table public.application_cuisine_extras add column if not exists adresse text
+  check (adresse is null or char_length(adresse) <= 200);
+alter table public.application_cuisine_extras add column if not exists lat double precision
+  check (lat is null or lat between -90 and 90);
+alter table public.application_cuisine_extras add column if not exists lng double precision
+  check (lng is null or lng between -180 and 180);
+alter table public.application_cuisine_extras add column if not exists telephone text
+  check (telephone is null or char_length(telephone) <= 30);
+
+-- Réglages des tournées (départ, livreurs et leurs numéros, vitesse, temps
+-- par arrêt) : une seule ligne, lisible et modifiable par l'admin seulement.
+create table if not exists public.application_livraison_reglages (
+  id int primary key default 1 check (id = 1),
+  valeur jsonb not null default '{}'::jsonb
+);
+alter table public.application_livraison_reglages enable row level security;
+drop policy if exists "livraison_reglages_admin" on public.application_livraison_reglages;
+create policy "livraison_reglages_admin" on public.application_livraison_reglages
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());

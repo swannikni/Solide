@@ -47,6 +47,11 @@ export interface PersonneConnue {
   allergies: string | null;
   refus: string | null;
   services: Service[];
+  // Livraison, reprise avec le reste (saisie dans l'onglet Livraison).
+  adresse?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  telephone?: string | null;
 }
 
 const sansAccents = (t: string) =>
@@ -69,7 +74,16 @@ function nomCourt(nom: string) {
 const dateLongue = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
-const AJOUT_VIDE = { nom: "", services: ["dejeuner"] as Service[], palier: "" as Palier | "", allergies: "", refus: "", note: "" };
+const AJOUT_VIDE = {
+  nom: "",
+  services: ["dejeuner"] as Service[],
+  palier: "" as Palier | "",
+  allergies: "",
+  refus: "",
+  note: "",
+  // Adresse de livraison reprise d'une fiche précédente (non affichée ici).
+  livraison: null as { adresse: string | null; lat: number | null; lng: number | null; telephone: string | null } | null,
+};
 
 export function CuisineClient({
   date,
@@ -153,6 +167,7 @@ export function CuisineClient({
         allergies: p.allergies ?? "",
         refus: p.refus ?? "",
         services: p.services.length ? p.services : a.services,
+        livraison: { adresse: p.adresse ?? null, lat: p.lat ?? null, lng: p.lng ?? null, telephone: p.telephone ?? null },
       }
     );
   }
@@ -293,6 +308,7 @@ export function CuisineClient({
           allergies: texte(nouvelAjout.allergies, 300),
           refus: texte(nouvelAjout.refus, 300),
           note: texte(nouvelAjout.note, 200),
+          ...(nouvelAjout.livraison ?? {}),
         }))
       )
       .select("id, repas_type, nom, palier, allergies, refus, note")
@@ -348,9 +364,15 @@ export function CuisineClient({
           const { error } = await supabase.from("application_cuisine_extras").delete().eq("id", existant.id);
           if (!error) nouveaux = nouveaux.filter((a) => a.id !== existant.id);
         } else if (!existant && voulu) {
+          // L'autre service reprend l'adresse de livraison de la même personne.
+          const { data: livraison } = await supabase
+            .from("application_cuisine_extras")
+            .select("adresse, lat, lng, telephone")
+            .eq("id", e.cle)
+            .maybeSingle();
           const { data } = await supabase
             .from("application_cuisine_extras")
-            .insert({ date, repas_type: s.cle, ...champs })
+            .insert({ date, repas_type: s.cle, ...champs, ...(livraison ?? {}) })
             .select("id, repas_type, nom, palier, allergies, refus, note")
             .single<AjoutCuisine>();
           if (data) nouveaux = [...nouveaux, data];
