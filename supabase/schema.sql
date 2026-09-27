@@ -1326,3 +1326,9 @@ alter table public.application_livraison_plans enable row level security;
 drop policy if exists "livraison_plans_admin" on public.application_livraison_plans;
 create policy "livraison_plans_admin" on public.application_livraison_plans
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Complément d'adresse pour le livreur (bâtiment, porte, étage, code…).
+alter table public.application_clients add column if not exists livraison_complement text
+  check (livraison_complement is null or char_length(livraison_complement) <= 150);
+alter table public.application_cuisine_extras add column if not exists complement text
+  check (complement is null or char_length(complement) <= 150);

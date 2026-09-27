@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { jsPDF as JsPDF } from "jspdf";
 import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
   Check,
   ChevronLeft,
+  FileText,
   ChevronRight,
   Crosshair,
   MapPin,
@@ -21,12 +23,14 @@ import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { ReglagesLivraison } from "@/lib/livraison";
+import { genererFeuillePdf } from "@/lib/tournee-pdf";
 import {
   distanceKm,
   duree,
   estUnLien,
   heure,
   lienPoint,
+  lienWaze,
   liensGoogleMaps,
   lireCoordonnees,
   mesurer,
@@ -46,6 +50,7 @@ export interface ArretLivraison {
   adresse: string | null;
   lat: number | null;
   lng: number | null;
+  complement: string | null; // bât., porte, étage… (gardé d'un jour à l'autre)
   repas: RepasLivre[]; // repas du jour livrés ensemble à midi
   notes: { repas: RepasLivre; note: string }[]; // consignes du jour
 }
@@ -99,9 +104,11 @@ async function localiser(texte: string): Promise<{ point: Point; libelle?: strin
 function LigneAdresse({
   arret,
   onEnregistrer,
+  onComplement,
 }: {
   arret: ArretLivraison;
   onEnregistrer: (adresse: string | null, point: Point | null, telephone?: string | null) => Promise<boolean>;
+  onComplement?: (complement: string | null) => Promise<boolean>;
 }) {
   const place = arret.lat != null && arret.lng != null;
   const [texte, setTexte] = useState(arret.adresse ?? "");
@@ -205,6 +212,21 @@ function LigneAdresse({
           <Crosshair size={17} />
         </button>
       </div>
+      {onComplement && (
+        <input
+          defaultValue={arret.complement ?? ""}
+          onBlur={async (e) => {
+            const complement = e.target.value.trim().slice(0, 150) || null;
+            if (complement === arret.complement) return;
+            const ok = await onComplement(complement);
+            setEtat(ok ? { type: "ok", message: "Complément enregistré" } : { type: "erreur", message: "Non enregistré, réessayez." });
+          }}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          placeholder="Complément : bât. 39, porte 7, étage, code…"
+          maxLength={150}
+          className="champ mt-1.5 py-1.5 text-xs"
+        />
+      )}
       {arret.source === "ajout" && (
         <input
           defaultValue={arret.telephone ?? ""}
@@ -255,6 +277,22 @@ export function LivraisonClient({
   const [departs, setDeparts] = useState<(string | null)[]>(departsInitiaux);
   const [message, setMessage] = useState("");
   const [enEdition, setEnEdition] = useState<string | null>(null); // adresse modifiée depuis une tournée
+  // Bibliothèque PDF et logo chargés d'avance : le PDF se fabrique sans
+  // attente au toucher, ce qu'exige le partage sur iPhone.
+  const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
+  const [logo, setLogo] = useState<{ data: string; ratio: number } | null>(null);
+  useEffect(() => {
+    import("jspdf").then((m) => setJsPdf(() => m.jsPDF)).catch(() => {});
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d")?.drawImage(image, 0, 0);
+      setLogo({ data: canvas.toDataURL("image/png"), ratio: image.naturalWidth / image.naturalHeight });
+    };
+    image.src = "/logo-fiche.png";
+  }, []);
 
   const nb = Math.min(Math.max(reglages.nbLivreurs, 1), 3);
   const heureParDefaut = reglages.heureMidi;
@@ -348,6 +386,70 @@ export function LivraisonClient({
     return true;
   }
 
+  async function enregistrerComplement(a: ArretLivraison, complement: string | null) {
+    const { error } =
+      a.source === "client"
+        ? await supabase.from("application_clients").update({ livraison_complement: complement }).eq("id", a.id)
+        : await supabase.from("application_cuisine_extras").update({ complement }).eq("date", date).eq("nom", a.nom);
+    if (error) return false;
+    setArrets((prev) => prev.map((x) => (x.cle === a.cle ? { ...x, complement } : x)));
+    return true;
+  }
+
+  // Feuille de route PDF du livreur, partagée (WhatsApp…) ou téléchargée.
+  async function envoyerPdf(i: number) {
+    if (!JsPdf || !depart) return setMessage("Préparation du PDF, réessayez dans une seconde.");
+    const t = tournees[i];
+    const livreur = reglages.livreurs[i];
+    const h = departDe(i);
+    const boites = t.arrets.reduce((n, a) => n + (a as ArretPlace).repas.length, 0);
+    const blob = genererFeuillePdf(
+      JsPdf,
+      {
+        titreDate: dateLongue(date),
+        livreur: livreur.nom,
+        depart: h,
+        fin: heure(h, t.dureeMin),
+        dureeTexte: duree(t.dureeMin),
+        distanceKm: t.distanceKm,
+        totalBoites: boites,
+        remuneration: livreur.tarif > 0 ? `${t.arrets.length} × ${livreur.tarif} DH = ${t.arrets.length * livreur.tarif} DH` : null,
+        itineraires: liensGoogleMaps(depart, t.arrets),
+        arrets: t.arrets.map((a, k) => {
+          const x = a as ArretPlace;
+          return {
+            heure: heure(h, t.arrivees[k]),
+            nom: x.nom,
+            boites: libelleBoites(x),
+            telephone: x.telephone,
+            adresse: x.adresse,
+            complement: x.complement,
+            consignes: consignes(x),
+            google: lienPoint(x),
+            waze: lienWaze(x),
+          };
+        }),
+      },
+      logo
+    );
+    const nomFichier = `tournee-${livreur.nom.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}-${date}.pdf`;
+    const fichier = new File([blob], nomFichier, { type: "application/pdf" });
+    if (navigator.canShare?.({ files: [fichier] })) {
+      try {
+        await navigator.share({ files: [fichier], title: `Tournée de ${livreur.nom}` });
+        return;
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const lien = document.createElement("a");
+    lien.href = url;
+    lien.download = fichier.name;
+    lien.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
   function texteTournee(i: number) {
     const t = tournees[i];
     const livreur = reglages.livreurs[i];
@@ -364,7 +466,8 @@ export function LivraisonClient({
       const x = a as ArretPlace;
       lignes.push(`${k + 1}. ${heure(h, t.arrivees[k])} — *${nomCourt(x.nom)}* · ${libelleBoites(x)}${x.telephone ? ` 📞 ${x.telephone}` : ""}`);
       if (x.adresse) lignes.push(`   ${x.adresse}`);
-      lignes.push(`   ${lienPoint(x)}`);
+      if (x.complement) lignes.push(`   🚪 *${x.complement}*`);
+      lignes.push(`   Google Maps : ${lienPoint(x)}`, `   Waze : ${lienWaze(x)}`);
       consignes(x).forEach((c) => lignes.push(`   → ${c}`));
     });
     const liens = depart ? liensGoogleMaps(depart, t.arrets) : [];
@@ -446,7 +549,12 @@ export function LivraisonClient({
               </p>
               <ul className="mt-1 divide-y divide-black/5">
                 {[...aLocaliser, ...arrets.filter((a) => a.lat != null && a.lng != null)].map((a) => (
-                  <LigneAdresse key={a.cle} arret={a} onEnregistrer={(adresse, point, tel) => enregistrerAdresse(a, adresse, point, tel)} />
+                  <LigneAdresse
+                    key={a.cle}
+                    arret={a}
+                    onEnregistrer={(adresse, point, tel) => enregistrerAdresse(a, adresse, point, tel)}
+                    onComplement={(c) => enregistrerComplement(a, c)}
+                  />
                 ))}
               </ul>
             </>
@@ -480,6 +588,7 @@ export function LivraisonClient({
                     adresse: depart?.adresse ?? null,
                     lat: depart?.lat ?? null,
                     lng: depart?.lng ?? null,
+                    complement: null,
                     repas: [],
                     notes: [],
                   }}
@@ -678,6 +787,7 @@ export function LivraisonClient({
                               </span>
                             </p>
                             {x.adresse && <p className="truncate text-xs text-c2b-muted">{x.adresse}</p>}
+                            {x.complement && <p className="text-xs font-bold text-c2b-green">🚪 {x.complement}</p>}
                             {consignes(x).map((c) => (
                               <p key={c} className="text-xs italic text-c2b-text">
                                 → {c}
@@ -719,6 +829,7 @@ export function LivraisonClient({
                                   <LigneAdresse
                                     arret={arrets.find((a) => a.cle === x.cle) ?? x}
                                     onEnregistrer={(adresse, point, tel) => enregistrerAdresse(x, adresse, point, tel)}
+                                    onComplement={(c) => enregistrerComplement(x, c)}
                                   />
                                 </ul>
                                 <p className="pb-2 text-[11px] text-c2b-muted">
@@ -773,6 +884,12 @@ export function LivraisonClient({
                         <Send size={15} /> {numero ? `Envoyer à ${livreur.nom}` : "WhatsApp"}
                       </a>
                     </div>
+                    <button
+                      onClick={() => envoyerPdf(i)}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 bg-white py-2.5 text-sm font-bold text-c2b-green"
+                    >
+                      <FileText size={15} /> Feuille de route PDF
+                    </button>
                     {liens.slice(1).map((l, k) => (
                       <a
                         key={l}

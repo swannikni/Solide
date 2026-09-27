@@ -48,7 +48,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
     // en tapant leur nom, avec palier, allergies et refus.
     supabase
       .from("application_cuisine_extras")
-      .select("date, repas_type, nom, palier, allergies, refus, adresse, lat, lng, telephone")
+      .select("date, repas_type, nom, palier, allergies, refus, adresse, lat, lng, telephone, complement")
       .neq("date", date)
       .order("date", { ascending: false })
       .limit(1000)
@@ -59,6 +59,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
           lat: number | null;
           lng: number | null;
           telephone: string | null;
+          complement: string | null;
         })[]
       >(),
   ]);
@@ -78,12 +79,13 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         lat: h.lat,
         lng: h.lng,
         telephone: h.telephone,
+        complement: h.complement,
         date: h.date,
       });
     else {
       if (deja.date === h.date && !deja.services.includes(h.repas_type)) deja.services.push(h.repas_type);
       // Adresse : la plus récente connue, même si la dernière fiche n'en a pas.
-      if (deja.lat == null && h.lat != null) Object.assign(deja, { adresse: h.adresse, lat: h.lat, lng: h.lng });
+      if (deja.lat == null && h.lat != null) Object.assign(deja, { adresse: h.adresse, lat: h.lat, lng: h.lng, complement: h.complement });
       if (!deja.telephone && h.telephone) deja.telephone = h.telephone;
     }
   }

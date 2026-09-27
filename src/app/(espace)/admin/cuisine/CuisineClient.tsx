@@ -52,6 +52,7 @@ export interface PersonneConnue {
   lat?: number | null;
   lng?: number | null;
   telephone?: string | null;
+  complement?: string | null;
 }
 
 const sansAccents = (t: string) =>
@@ -82,7 +83,13 @@ const AJOUT_VIDE = {
   refus: "",
   note: "",
   // Adresse de livraison reprise d'une fiche précédente (non affichée ici).
-  livraison: null as { adresse: string | null; lat: number | null; lng: number | null; telephone: string | null } | null,
+  livraison: null as {
+    adresse: string | null;
+    lat: number | null;
+    lng: number | null;
+    telephone: string | null;
+    complement: string | null;
+  } | null,
 };
 
 export function CuisineClient({
@@ -167,7 +174,13 @@ export function CuisineClient({
         allergies: p.allergies ?? "",
         refus: p.refus ?? "",
         services: p.services.length ? p.services : a.services,
-        livraison: { adresse: p.adresse ?? null, lat: p.lat ?? null, lng: p.lng ?? null, telephone: p.telephone ?? null },
+        livraison: {
+          adresse: p.adresse ?? null,
+          lat: p.lat ?? null,
+          lng: p.lng ?? null,
+          telephone: p.telephone ?? null,
+          complement: p.complement ?? null,
+        },
       }
     );
   }
@@ -367,7 +380,7 @@ export function CuisineClient({
           // L'autre service reprend l'adresse de livraison de la même personne.
           const { data: livraison } = await supabase
             .from("application_cuisine_extras")
-            .select("adresse, lat, lng, telephone")
+            .select("adresse, lat, lng, telephone, complement")
             .eq("id", e.cle)
             .maybeSingle();
           const { data } = await supabase

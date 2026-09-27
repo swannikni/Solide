@@ -18,7 +18,7 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
   const [{ data: commandes }, { data: ajouts }, { data: parametre }, { data: planEnregistre }] = await Promise.all([
     supabase
       .from("application_commandes")
-      .select("id, repas_type, note, client:application_clients(id, nom, telephone, livraison_adresse, livraison_lat, livraison_lng)")
+      .select("id, repas_type, note, client:application_clients(id, nom, telephone, livraison_adresse, livraison_lat, livraison_lng, livraison_complement)")
       .eq("date_livraison", date)
       .neq("statut", "annulee")
       .returns<
@@ -33,12 +33,13 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
             livraison_adresse: string | null;
             livraison_lat: number | null;
             livraison_lng: number | null;
+            livraison_complement: string | null;
           } | null;
         }[]
       >(),
     supabase
       .from("application_cuisine_extras")
-      .select("id, nom, repas_type, note, adresse, lat, lng, telephone")
+      .select("id, nom, repas_type, note, adresse, lat, lng, telephone, complement")
       .eq("date", date)
       .returns<
         {
@@ -50,6 +51,7 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
           lat: number | null;
           lng: number | null;
           telephone: string | null;
+          complement: string | null;
         }[]
       >(),
     supabase.from("application_livraison_reglages").select("valeur").eq("id", 1).maybeSingle<{ valeur: Partial<ReglagesLivraison> }>(),
@@ -71,6 +73,7 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
     if (note) cible.notes = [...cible.notes, { repas, note }];
     // Ajouts à la main : la position peut n'être que sur la ligne du midi ou du soir.
     if (cible.lat == null && arret.lat != null) Object.assign(cible, { adresse: arret.adresse, lat: arret.lat, lng: arret.lng });
+    if (!cible.complement && arret.complement) cible.complement = arret.complement;
     if (!cible.telephone && arret.telephone) cible.telephone = arret.telephone;
   };
   for (const c of commandes ?? []) {
@@ -85,6 +88,7 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
         adresse: c.client.livraison_adresse,
         lat: c.client.livraison_lat,
         lng: c.client.livraison_lng,
+        complement: c.client.livraison_complement,
         repas: [],
         notes: [],
       },
@@ -103,6 +107,7 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
         adresse: a.adresse,
         lat: a.lat,
         lng: a.lng,
+        complement: a.complement,
         repas: [],
         notes: [],
       },

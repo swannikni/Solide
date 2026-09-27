@@ -214,6 +214,7 @@ export function liensGoogleMaps(depart: Point, arrets: Point[]): string[] {
 }
 
 export const lienPoint = (p: Point) => `https://maps.google.com/?q=${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+export const lienWaze = (p: Point) => `https://waze.com/ul?ll=${p.lat.toFixed(6)},${p.lng.toFixed(6)}&navigate=yes`;
 
 export function heure(depart: string, minutes: number) {
   const [h, m] = depart.split(":").map(Number);
