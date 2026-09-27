@@ -1,38 +1,30 @@
 import { exigerAdmin } from "@/lib/admin";
-import { LivraisonClient, type ArretLivraison } from "@/app/(espace)/admin/livraison/LivraisonClient";
+import { LivraisonClient, type ArretLivraison, type RepasLivre } from "@/app/(espace)/admin/livraison/LivraisonClient";
 import { completerReglages, type ReglagesLivraison } from "@/lib/livraison";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-type Service = "dejeuner" | "diner";
-
-// Tournées de livraison d'un service (midi ou soir) : les mêmes personnes que
-// la fiche cuisine, avec leur adresse. Par défaut : le prochain service à livrer.
-export default async function LivraisonPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ date?: string; service?: string }>;
-}) {
+// Une seule tournée par jour, à midi (pas de livraison le soir pour le moment) :
+// toutes les personnes de la fiche cuisine du jour, repas du midi et du soir
+// livrés ensemble. Par défaut : aujourd'hui avant 14 h, sinon demain.
+export default async function LivraisonPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const { supabase } = await exigerAdmin();
-  const { date: dateDemandee, service: serviceDemande } = await searchParams;
+  const { date: dateDemandee } = await searchParams;
   const aujourdhui = dateDuJour();
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
-  const parDefaut: { date: string; service: Service } =
-    heure < 13 ? { date: aujourdhui, service: "dejeuner" } : heure < 20 ? { date: aujourdhui, service: "diner" } : { date: decalerDate(aujourdhui, 1), service: "dejeuner" };
-  const date = estDateValide(dateDemandee) ? dateDemandee : parDefaut.date;
-  const service: Service = serviceDemande === "dejeuner" || serviceDemande === "diner" ? serviceDemande : parDefaut.service;
+  const date = estDateValide(dateDemandee) ? dateDemandee : heure < 14 ? aujourdhui : decalerDate(aujourdhui, 1);
 
   const [{ data: commandes }, { data: ajouts }, { data: parametre }, { data: planEnregistre }] = await Promise.all([
     supabase
       .from("application_commandes")
-      .select("id, note, client:application_clients(id, nom, telephone, livraison_adresse, livraison_lat, livraison_lng)")
+      .select("id, repas_type, note, client:application_clients(id, nom, telephone, livraison_adresse, livraison_lat, livraison_lng)")
       .eq("date_livraison", date)
-      .eq("repas_type", service)
       .neq("statut", "annulee")
       .returns<
         {
           id: string;
+          repas_type: RepasLivre;
           note: string | null;
           client: {
             id: string;
@@ -46,55 +38,86 @@ export default async function LivraisonPage({
       >(),
     supabase
       .from("application_cuisine_extras")
-      .select("id, nom, note, adresse, lat, lng, telephone")
+      .select("id, nom, repas_type, note, adresse, lat, lng, telephone")
       .eq("date", date)
-      .eq("repas_type", service)
       .returns<
-        { id: string; nom: string; note: string | null; adresse: string | null; lat: number | null; lng: number | null; telephone: string | null }[]
+        {
+          id: string;
+          nom: string;
+          repas_type: RepasLivre;
+          note: string | null;
+          adresse: string | null;
+          lat: number | null;
+          lng: number | null;
+          telephone: string | null;
+        }[]
       >(),
     supabase.from("application_livraison_reglages").select("valeur").eq("id", 1).maybeSingle<{ valeur: Partial<ReglagesLivraison> }>(),
     supabase
       .from("application_livraison_plans")
       .select("tournees, departs")
       .eq("date", date)
-      .eq("repas_type", service)
+      .eq("repas_type", "dejeuner")
       .maybeSingle<{ tournees: string[][] | null; departs: (string | null)[] }>(),
   ]);
 
-  const arrets: ArretLivraison[] = [
-    ...(commandes ?? [])
-      .filter((c) => c.client)
-      .map((c) => ({
-        cle: `c:${c.client!.id}`,
-        source: "client" as const,
-        id: c.client!.id,
-        nom: c.client!.nom,
-        telephone: c.client!.telephone,
-        adresse: c.client!.livraison_adresse,
-        lat: c.client!.livraison_lat,
-        lng: c.client!.livraison_lng,
-        note: c.note,
-      })),
-    ...(ajouts ?? []).map((a) => ({
-      cle: `a:${a.id}`,
-      source: "ajout" as const,
-      id: a.id,
-      nom: a.nom,
-      telephone: a.telephone,
-      adresse: a.adresse,
-      lat: a.lat,
-      lng: a.lng,
-      note: a.note,
-    })),
-  ].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  // Un arrêt par personne, avec ses repas du jour (midi et/ou soir).
+  const parCle = new Map<string, ArretLivraison>();
+  const ajouter = (arret: ArretLivraison, repas: RepasLivre, note: string | null) => {
+    const deja = parCle.get(arret.cle);
+    const cible = deja ?? arret;
+    if (!deja) parCle.set(arret.cle, arret);
+    cible.repas = [...new Set([...cible.repas, repas])].sort();
+    if (note) cible.notes = [...cible.notes, { repas, note }];
+    // Ajouts à la main : la position peut n'être que sur la ligne du midi ou du soir.
+    if (cible.lat == null && arret.lat != null) Object.assign(cible, { adresse: arret.adresse, lat: arret.lat, lng: arret.lng });
+    if (!cible.telephone && arret.telephone) cible.telephone = arret.telephone;
+  };
+  for (const c of commandes ?? []) {
+    if (!c.client) continue;
+    ajouter(
+      {
+        cle: `c:${c.client.id}`,
+        source: "client",
+        id: c.client.id,
+        nom: c.client.nom,
+        telephone: c.client.telephone,
+        adresse: c.client.livraison_adresse,
+        lat: c.client.livraison_lat,
+        lng: c.client.livraison_lng,
+        repas: [],
+        notes: [],
+      },
+      c.repas_type,
+      c.note
+    );
+  }
+  for (const a of ajouts ?? []) {
+    ajouter(
+      {
+        cle: `a:${a.nom.trim().toLowerCase()}`,
+        source: "ajout",
+        id: a.id,
+        nom: a.nom,
+        telephone: a.telephone,
+        adresse: a.adresse,
+        lat: a.lat,
+        lng: a.lng,
+        repas: [],
+        notes: [],
+      },
+      a.repas_type,
+      a.note
+    );
+  }
+  const arrets = [...parCle.values()].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <LivraisonClient
-        key={`${date}-${service}`}
+        key={date}
         date={date}
         aujourdhui={aujourdhui}
-        service={service}
         arretsInitiaux={arrets}
         reglagesInitiaux={completerReglages(parametre?.valeur)}
         planInitial={planEnregistre?.tournees ?? null}

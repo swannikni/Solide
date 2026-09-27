@@ -20,10 +20,10 @@ import {
   type Point,
 } from "@/lib/tournees";
 
-type Service = "dejeuner" | "diner";
+export type RepasLivre = "dejeuner" | "diner";
 
 export interface ArretLivraison {
-  cle: string; // « c:<client> » ou « a:<ajout> »
+  cle: string; // « c:<client> » ou « a:<nom ajouté à la main> »
   source: "client" | "ajout";
   id: string;
   nom: string;
@@ -31,7 +31,20 @@ export interface ArretLivraison {
   adresse: string | null;
   lat: number | null;
   lng: number | null;
-  note: string | null; // consigne du jour
+  repas: RepasLivre[]; // repas du jour livrés ensemble à midi
+  notes: { repas: RepasLivre; note: string }[]; // consignes du jour
+}
+
+// « 2 boîtes (midi + soir) », « 1 boîte (soir) »…
+function libelleBoites(a: ArretLivraison) {
+  const n = a.repas.length;
+  const quels = a.repas.map((r) => (r === "dejeuner" ? "midi" : "soir")).join(" + ");
+  return `${n} boîte${n > 1 ? "s" : ""} (${quels})`;
+}
+
+// Consignes, précédées du repas quand la personne en a deux.
+function consignes(a: ArretLivraison) {
+  return a.notes.map((n) => (a.repas.length > 1 ? `${n.repas === "dejeuner" ? "Midi" : "Soir"} : ${n.note}` : n.note));
 }
 
 type ArretPlace = Arret & ArretLivraison & { lat: number; lng: number };
@@ -182,7 +195,6 @@ function LigneAdresse({
 export function LivraisonClient({
   date,
   aujourdhui,
-  service,
   arretsInitiaux,
   reglagesInitiaux,
   planInitial,
@@ -190,7 +202,6 @@ export function LivraisonClient({
 }: {
   date: string;
   aujourdhui: string;
-  service: Service;
   arretsInitiaux: ArretLivraison[];
   reglagesInitiaux: ReglagesLivraison;
   planInitial: string[][] | null;
@@ -207,7 +218,7 @@ export function LivraisonClient({
   const [message, setMessage] = useState("");
 
   const nb = Math.min(Math.max(reglages.nbLivreurs, 1), 3);
-  const heureParDefaut = service === "dejeuner" ? reglages.heureMidi : reglages.heureSoir;
+  const heureParDefaut = reglages.heureMidi;
   const departDe = (i: number) => departs[i] || heureParDefaut;
   const places = arrets.filter((a): a is ArretPlace => a.lat != null && a.lng != null);
   const aLocaliser = arrets.filter((a) => a.lat == null || a.lng == null);
@@ -241,7 +252,7 @@ export function LivraisonClient({
     }
     supabase
       .from("application_livraison_plans")
-      .upsert({ date, repas_type: service, tournees: plan, departs }, { onConflict: "date,repas_type" })
+      .upsert({ date, repas_type: "dejeuner", tournees: plan, departs }, { onConflict: "date,repas_type" })
       .then(({ error }) => error && setMessage("Tournées non enregistrées, réessayez."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, departs]);
@@ -287,7 +298,7 @@ export function LivraisonClient({
             .from("application_clients")
             .update({ livraison_adresse: maj.adresse, livraison_lat: maj.lat, livraison_lng: maj.lng })
             .eq("id", a.id)
-        : // Même personne ajoutée à la main : midi et soir du jour.
+        : // Personne ajoutée à la main : ses lignes du midi et du soir.
           await supabase
             .from("application_cuisine_extras")
             .update({ ...maj, telephone: tel })
@@ -302,18 +313,20 @@ export function LivraisonClient({
     const t = tournees[i];
     const livreur = reglages.livreurs[i];
     const h = departDe(i);
+    const boites = t.arrets.reduce((n, a) => n + (a as ArretPlace).repas.length, 0);
     const lignes = [
-      `*🛵 Tournée ${service === "dejeuner" ? "☀️ midi" : "🌙 soir"} — ${dateLongue(date)}*`,
+      `*🛵 Tournée du midi — ${dateLongue(date)}*`,
       `*${livreur.nom}* · ${t.arrets.length} livraison${t.arrets.length > 1 ? "s" : ""} · départ *${h}* · fin vers ${heure(h, t.dureeMin)} (~${duree(t.dureeMin)})`,
     ];
+    if (boites > t.arrets.length) lignes.push(`📦 ${boites} boîtes à emporter (midi + soir)`);
     if (livreur.tarif > 0) lignes.push(`Rémunération : ${t.arrets.length} × ${livreur.tarif} DH = *${t.arrets.length * livreur.tarif} DH*`);
     lignes.push("");
     t.arrets.forEach((a, k) => {
       const x = a as ArretPlace;
-      lignes.push(`${k + 1}. ${heure(h, t.arrivees[k])} — *${nomCourt(x.nom)}*${x.telephone ? ` 📞 ${x.telephone}` : ""}`);
+      lignes.push(`${k + 1}. ${heure(h, t.arrivees[k])} — *${nomCourt(x.nom)}* · ${libelleBoites(x)}${x.telephone ? ` 📞 ${x.telephone}` : ""}`);
       if (x.adresse) lignes.push(`   ${x.adresse}`);
       lignes.push(`   ${lienPoint(x)}`);
-      if (x.note) lignes.push(`   → ${x.note}`);
+      consignes(x).forEach((c) => lignes.push(`   → ${c}`));
     });
     const liens = depart ? liensGoogleMaps(depart, t.arrets) : [];
     if (liens.length) {
@@ -329,7 +342,7 @@ export function LivraisonClient({
       : date === decalerDate(aujourdhui, 1)
         ? "Demain"
         : new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-  const lien = (d: string, s: Service) => `/admin/livraison?date=${d}&service=${s}`;
+  const lien = (d: string) => `/admin/livraison?date=${d}`;
   const totalPaye = tournees.reduce((t, x, i) => t + x.arrets.length * (reglages.livreurs[i]?.tarif ?? 0), 0);
 
   return (
@@ -344,7 +357,7 @@ export function LivraisonClient({
         </div>
         <div className="flex items-center gap-1 pb-1">
           <Link
-            href={lien(decalerDate(date, -1), service)}
+            href={lien(decalerDate(date, -1))}
             className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
             aria-label="Jour précédent"
           >
@@ -352,7 +365,7 @@ export function LivraisonClient({
           </Link>
           <span className="min-w-[80px] text-center text-sm font-bold text-c2b-green first-letter:uppercase">{libelleJour}</span>
           <Link
-            href={lien(decalerDate(date, 1), service)}
+            href={lien(decalerDate(date, 1))}
             className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
             aria-label="Jour suivant"
           >
@@ -361,25 +374,15 @@ export function LivraisonClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {(["dejeuner", "diner"] as const).map((s) => (
-          <Link
-            key={s}
-            href={lien(date, s)}
-            className={`rounded-full py-2.5 text-center text-sm font-bold ${
-              service === s ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
-            }`}
-          >
-            {s === "dejeuner" ? "☀️ Midi" : "🌙 Soir"}
-          </Link>
-        ))}
-      </div>
+      <p className="-mt-2 text-sm text-c2b-muted">
+        ☀️ Une tournée à midi : les repas du midi et du soir partent ensemble.
+      </p>
 
       {message && <p className="text-sm font-semibold text-red-700">{message}</p>}
 
       {arrets.length === 0 ? (
         <p className="carte p-5 text-center text-sm text-c2b-muted">
-          Personne à livrer pour ce service. Les noms viennent de la{" "}
+          Personne à livrer ce jour-là. Les noms viennent de la{" "}
           <Link href={`/admin/cuisine?date=${date}`} className="font-bold text-c2b-green underline">
             fiche cuisine
           </Link>{" "}
@@ -390,7 +393,7 @@ export function LivraisonClient({
         <section className={`carte p-4 ${aLocaliser.length ? "border-red-200" : ""}`}>
           <button onClick={() => setAdressesOuvertes(!adressesOuvertes)} className="flex w-full items-center justify-between gap-2 text-left">
             <span className="font-bold text-c2b-green first-letter:uppercase">
-              Adresses · {dateLongue(date)} {service === "dejeuner" ? "midi" : "soir"}
+              Adresses · {dateLongue(date)}
             </span>
             <span className={`text-xs font-bold ${aLocaliser.length ? "text-red-700" : "text-emerald-700"}`}>
               {aLocaliser.length ? `${aLocaliser.length} à localiser` : `${arrets.length}/${arrets.length} ✓`}
@@ -438,7 +441,8 @@ export function LivraisonClient({
                     adresse: depart?.adresse ?? null,
                     lat: depart?.lat ?? null,
                     lng: depart?.lng ?? null,
-                    note: null,
+                    repas: [],
+                    notes: [],
                   }}
                   onEnregistrer={async (adresse, point) => {
                     if (!point) return false;
@@ -509,22 +513,15 @@ export function LivraisonClient({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  ["heureMidi", "Départ habituel midi"],
-                  ["heureSoir", "Départ habituel soir"],
-                ] as const
-              ).map(([cle, libelle]) => (
-                <label key={cle} className="block text-xs font-bold text-c2b-muted">
-                  {libelle}
-                  <input
-                    type="time"
-                    defaultValue={reglages[cle]}
-                    onBlur={(e) => e.target.value && enregistrerReglages({ [cle]: e.target.value })}
-                    className="champ mt-1 py-2 text-sm"
-                  />
-                </label>
-              ))}
+              <label className="col-span-2 block text-xs font-bold text-c2b-muted">
+                Départ habituel (midi)
+                <input
+                  type="time"
+                  defaultValue={reglages.heureMidi}
+                  onBlur={(e) => e.target.value && enregistrerReglages({ heureMidi: e.target.value })}
+                  className="champ mt-1 py-2 text-sm"
+                />
+              </label>
               <label className="block text-xs font-bold text-c2b-muted">
                 Vitesse moyenne (km/h)
                 <input
@@ -592,6 +589,10 @@ export function LivraisonClient({
                     <span className="text-lg font-bold">🛵 {livreur.nom}</span>
                     <span className="text-sm font-bold">
                       {t.arrets.length} livraison{t.arrets.length > 1 ? "s" : ""}
+                      {(() => {
+                        const boites = t.arrets.reduce((n, x) => n + (x as ArretPlace).repas.length, 0);
+                        return boites > t.arrets.length ? ` · ${boites} boîtes` : "";
+                      })()}
                       {livreur.tarif > 0 && ` · ${t.arrets.length * livreur.tarif} DH`}
                     </span>
                   </p>
@@ -632,10 +633,17 @@ export function LivraisonClient({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm">
                               <span className="font-bold tabular-nums text-c2b-green">{heure(h, t.arrivees[k])}</span>{" "}
-                              <span className="font-bold text-c2b-green">{x.nom}</span>
+                              <span className="font-bold text-c2b-green">{x.nom}</span>{" "}
+                              <span className={`text-xs font-bold ${x.repas.length > 1 ? "text-c2b-gold" : "text-c2b-muted"}`}>
+                                · {libelleBoites(x)}
+                              </span>
                             </p>
                             {x.adresse && <p className="truncate text-xs text-c2b-muted">{x.adresse}</p>}
-                            {x.note && <p className="text-xs italic text-c2b-text">→ {x.note}</p>}
+                            {consignes(x).map((c) => (
+                              <p key={c} className="text-xs italic text-c2b-text">
+                                → {c}
+                              </p>
+                            ))}
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
                               <a href={lienPoint(x)} target="_blank" rel="noopener noreferrer" className="mr-1 text-c2b-green underline">
                                 Carte
