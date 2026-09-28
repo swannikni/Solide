@@ -2,29 +2,35 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, MessageCircle, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, MessageCircle, RotateCcw, Trash2 } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
+import { montantAuto, prixSemaine, type SemaineRepas, type Tarifs } from "@/lib/paiements";
 
 export interface Paiement {
   id: string;
   nom: string;
   client_id: string | null;
   montant: number; // dû (DH)
+  montant_manuel: boolean; // modifié à la main : plus recalculé
   recu: number; // encaissé (DH)
   moyen: Moyen | null;
   paye_le: string | null;
   note: string | null;
 }
 
-// Personne de la fiche cuisine du mois, avec son nombre de repas.
+// Personne de la fiche cuisine du mois : repas, semaines, offre éventuelle.
 export interface PersonneMois {
-  cle: string;
+  cle: string; // « c:<client> » ou « n:<nom en minuscules> »
   nom: string;
   clientId: string | null;
   telephone: string | null;
   repas: number;
+  semaines: SemaineRepas[];
+  offre: Offre | null;
+  montantAuto: number;
 }
+type Offre = { prix: number; note: string | null };
 
 type Moyen = "especes" | "virement" | "carte" | "autre";
 const MOYENS: Record<Moyen, string> = { especes: "Espèces", virement: "Virement", carte: "Carte", autre: "Autre" };
@@ -36,6 +42,9 @@ const sansAccents = (t: string) =>
     .replace(/[̀-ͯ]/g, "")
     .trim()
     .toLowerCase();
+const cleDe = (p: Paiement) => (p.client_id ? `c:${p.client_id}` : `n:${p.nom.trim().toLowerCase()}`);
+const nombre = (texte: string) => Math.max(0, Math.round((Number(texte.replace(",", ".")) || 0) * 100) / 100);
+const dateCourte = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
 const reste = (p: Paiement) => Math.max(0, p.montant - p.recu);
 const estPaye = (p: Paiement) => p.montant > 0 && p.recu >= p.montant;
 
@@ -63,22 +72,26 @@ export function PaiementsClient({
   aujourdhui,
   paiementsInitiaux,
   personnes,
+  tarifsInitiaux,
 }: {
   mois: string;
   aujourdhui: string;
   paiementsInitiaux: Paiement[];
   personnes: PersonneMois[];
+  tarifsInitiaux: Tarifs;
 }) {
   const supabase = createClient();
   const [paiements, setPaiements] = useState(paiementsInitiaux);
   const [filtre, setFiltre] = useState<"tous" | "non_payes" | "payes">("tous");
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [tarifs, setTarifs] = useState(tarifsInitiaux);
+  const [offres, setOffres] = useState(() => new Map(personnes.filter((x) => x.offre).map((x) => [x.cle, x.offre!])));
 
-  // Personne liée à une ligne : même client, sinon même nom.
-  const personneDe = (p: Paiement) =>
-    personnes.find((x) => (p.client_id ? x.clientId === p.client_id : !x.clientId && sansAccents(x.nom) === sansAccents(p.nom))) ??
-    personnes.find((x) => sansAccents(x.nom) === sansAccents(p.nom));
+  // Personne de la fiche cuisine liée à une ligne : même client, sinon même nom.
+  const parCle = new Map(personnes.map((x) => [x.cle, x]));
+  const personneDe = (p: Paiement) => parCle.get(cleDe(p)) ?? personnes.find((x) => sansAccents(x.nom) === sansAccents(p.nom));
+  const autoDe = (x: PersonneMois, t = tarifs, o = offres) => montantAuto(x.semaines, t, o.get(x.cle)?.prix ?? null);
 
   const totalDu = paiements.reduce((t, p) => t + p.montant, 0);
   const totalPaye = paiements.reduce((t, p) => t + Math.min(p.recu, p.montant || p.recu), 0);
@@ -89,7 +102,6 @@ export function PaiementsClient({
     .map((m) => ({ moyen: m, total: paiements.filter((p) => p.moyen === m).reduce((t, p) => t + p.recu, 0) }))
     .filter((x) => x.total > 0);
   const recuSansMoyen = paiements.filter((p) => !p.moyen).reduce((t, p) => t + p.recu, 0);
-
 
   const affiches = paiements
     .filter((p) => (filtre === "payes" ? estPaye(p) : filtre === "non_payes" ? !estPaye(p) : true))
@@ -115,6 +127,45 @@ export function PaiementsClient({
     return modifier(p, { recu: p.montant, paye_le: p.paye_le ?? aujourdhui, moyen: p.moyen ?? "especes" });
   }
 
+  // Montant tapé à la main : gardé tel quel (offre, geste…), sauf s'il
+  // redevient égal au calcul.
+  function changerMontant(p: Paiement, montant: number) {
+    const personne = personneDe(p);
+    const manuel = !personne || montant !== autoDe(personne);
+    const paye = estPaye(p);
+    return modifier(p, { montant, montant_manuel: manuel, ...(paye ? { recu: montant } : {}) });
+  }
+
+  // Lignes non modifiées à la main : montant recalculé (tarifs ou offre changés).
+  async function recalculer(t: Tarifs, o: Map<string, Offre>, seulement?: string) {
+    const maj = paiements
+      .filter((p) => !p.montant_manuel && (!seulement || cleDe(p) === seulement))
+      .map((p) => ({ p, personne: personneDe(p) }))
+      .filter((x): x is { p: Paiement; personne: PersonneMois } => !!x.personne && autoDe(x.personne, t, o) !== x.p.montant);
+    await Promise.all(maj.map(({ p, personne }) => modifier(p, { montant: autoDe(personne, t, o) })));
+  }
+
+  async function enregistrerTarifs(nouveaux: Tarifs) {
+    setTarifs(nouveaux);
+    const { error } = await supabase.from("application_parametres").upsert({ cle: "tarifs", valeur: nouveaux });
+    if (error) return setMessage("Tarifs non enregistrés, réessayez.");
+    await recalculer(nouveaux, offres);
+  }
+
+  // Offre d'une personne : son prix par semaine, gardé pour les mois suivants.
+  async function enregistrerOffre(x: PersonneMois, offre: Offre | null) {
+    const { error } = offre
+      ? await supabase
+          .from("application_tarifs_perso")
+          .upsert({ cle: x.cle, prix_semaine: offre.prix, note: offre.note, updated_at: new Date().toISOString() })
+      : await supabase.from("application_tarifs_perso").delete().eq("cle", x.cle);
+    if (error) return setMessage("Offre non enregistrée, réessayez.");
+    const nouvelles = new Map(offres);
+    if (offre) nouvelles.set(x.cle, offre);
+    else nouvelles.delete(x.cle);
+    setOffres(nouvelles);
+    await recalculer(tarifs, nouvelles, x.cle);
+  }
 
   async function supprimer(p: Paiement) {
     if (!window.confirm(`Supprimer la ligne de ${p.nom} pour ${libelleMois(mois).toLowerCase()} ?`)) return;
@@ -127,14 +178,16 @@ export function PaiementsClient({
   function exporter() {
     const champ = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const lignes = [
-      ["Mois", "Nom", "Repas", "Montant (DH)", "Reçu (DH)", "Reste (DH)", "Statut", "Moyen", "Payé le", "Note"],
+      ["Mois", "Nom", "Repas", "Semaines", "Montant (DH)", "Montant", "Reçu (DH)", "Reste (DH)", "Statut", "Moyen", "Payé le", "Note"],
       ...[...paiements]
         .sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
         .map((p) => [
           mois,
           p.nom,
           personneDe(p)?.repas ?? "",
+          personneDe(p)?.semaines.length ?? "",
           p.montant,
+          p.montant_manuel ? "Modifié à la main" : offres.has(cleDe(p)) ? "Offre" : "Tarif",
           p.recu,
           reste(p),
           estPaye(p) ? "Payé" : p.recu > 0 ? "Partiel" : "Non payé",
@@ -143,7 +196,7 @@ export function PaiementsClient({
           p.note ?? "",
         ]),
       [],
-      ["", "TOTAL", "", totalDu, totalPaye, totalReste],
+      ["", "TOTAL", "", "", totalDu, "", totalPaye, totalReste],
     ];
     const csv = "﻿" + lignes.map((l) => l.map(champ).join(";")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -153,7 +206,6 @@ export function PaiementsClient({
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
-
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
@@ -212,7 +264,6 @@ export function PaiementsClient({
       </section>
 
       {message && <p className="text-sm font-semibold text-red-700">{message}</p>}
-
 
       {/* Filtres */}
       <div className="grid grid-cols-3 gap-2">
@@ -279,18 +330,25 @@ export function PaiementsClient({
                         : p.montant
                           ? "Non payé"
                           : "Montant à indiquer"}
-                    {personne?.repas ? <span className="text-c2b-muted"> · {personne.repas} repas</span> : null}
+                    {personne ? (
+                      <span className="text-c2b-muted">
+                        {" "}
+                        · {personne.semaines.length} sem. · {personne.repas} repas
+                        {p.montant_manuel ? " · ✎ modifié" : offres.has(personne.cle) ? " · offre" : ""}
+                      </span>
+                    ) : null}
                   </p>
                 </button>
                 <label className="flex items-center gap-1">
                   <input
+                    key={`${p.id}-${p.montant}`}
                     type="number"
                     inputMode="decimal"
                     min={0}
                     defaultValue={p.montant || ""}
                     onBlur={(e) => {
-                      const montant = Math.max(0, Math.round((Number(e.target.value.replace(",", ".")) || 0) * 100) / 100);
-                      if (montant !== p.montant) modifier(p, paye ? { montant, recu: montant } : { montant });
+                      const montant = nombre(e.target.value);
+                      if (montant !== p.montant) changerMontant(p, montant);
                     }}
                     placeholder="0"
                     className="champ w-[84px] px-2 py-1.5 text-right text-sm font-bold"
@@ -310,6 +368,73 @@ export function PaiementsClient({
 
               {ouvert === p.id && (
                 <div className="space-y-2 bg-c2b-cream/50 px-4 pb-4 pt-2">
+                  {personne && (
+                    <div className="rounded-xl bg-white p-3 text-xs">
+                      <p className="font-bold text-c2b-green">Calcul d&apos;après la fiche cuisine</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {personne.semaines.map((s) => (
+                          <li key={s.lundi} className="flex justify-between gap-2">
+                            <span className={s.jours < 5 ? "text-amber-700" : "text-c2b-text"}>
+                              Sem. du {dateCourte(s.lundi)} · {s.jours} j · {s.formule} repas/j{s.jours < 5 ? " ⚠️ incomplète" : ""}
+                            </span>
+                            <span className="whitespace-nowrap tabular-nums font-semibold">{dh(prixSemaine(s, tarifs, offres.get(personne.cle)?.prix ?? null))}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 flex justify-between border-t border-black/5 pt-1 font-bold text-c2b-green">
+                        <span>Total calculé</span>
+                        <span className="tabular-nums">{dh(autoDe(personne))}</span>
+                      </p>
+                      {p.montant_manuel && (
+                        <button
+                          onClick={() => modifier(p, { montant: autoDe(personne), montant_manuel: false, ...(paye ? { recu: autoDe(personne) } : {}) })}
+                          className="mt-1.5 inline-flex items-center gap-1 font-semibold text-c2b-gold"
+                        >
+                          <RotateCcw size={12} /> Montant modifié à la main : revenir au calcul ({dh(autoDe(personne))})
+                        </button>
+                      )}
+                      <div className="mt-2 grid grid-cols-[110px_1fr] gap-2 border-t border-black/5 pt-2">
+                        <label className="block font-bold text-c2b-muted">
+                          Offre / semaine
+                          <input
+                            key={`offre-${offres.get(personne.cle)?.prix ?? ""}`}
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            defaultValue={offres.get(personne.cle)?.prix ?? ""}
+                            onBlur={(e) => {
+                              const texte = e.target.value.trim();
+                              const actuelle = offres.get(personne.cle) ?? null;
+                              if (!texte) return actuelle && enregistrerOffre(personne, null);
+                              const prix = nombre(texte);
+                              if (prix !== actuelle?.prix) enregistrerOffre(personne, { prix, note: actuelle?.note ?? null });
+                            }}
+                            placeholder="DH"
+                            className="champ mt-1 px-2 py-1.5 text-sm"
+                          />
+                        </label>
+                        <label className="block font-bold text-c2b-muted">
+                          Raison de l&apos;offre
+                          <input
+                            key={`note-${offres.get(personne.cle)?.note ?? ""}`}
+                            defaultValue={offres.get(personne.cle)?.note ?? ""}
+                            disabled={!offres.has(personne.cle)}
+                            onBlur={(e) => {
+                              const actuelle = offres.get(personne.cle);
+                              const note = e.target.value.trim().slice(0, 120) || null;
+                              if (actuelle && note !== actuelle.note) enregistrerOffre(personne, { ...actuelle, note });
+                            }}
+                            placeholder="parrainage, -10 %…"
+                            maxLength={120}
+                            className="champ mt-1 py-1.5 text-sm disabled:opacity-50"
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-1 text-[11px] text-c2b-muted">
+                        L&apos;offre remplace le tarif de chaque semaine, ce mois-ci et les suivants. Videz la case pour l&apos;enlever.
+                      </p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block text-xs font-bold text-c2b-muted">
                       Reçu (DH)
@@ -318,8 +443,9 @@ export function PaiementsClient({
                         inputMode="decimal"
                         min={0}
                         defaultValue={p.recu || ""}
+                        key={`recu-${p.recu}`}
                         onBlur={(e) => {
-                          const recu = Math.max(0, Math.round((Number(e.target.value.replace(",", ".")) || 0) * 100) / 100);
+                          const recu = nombre(e.target.value);
                           if (recu !== p.recu) modifier(p, { recu, paye_le: recu > 0 ? p.paye_le ?? aujourdhui : null });
                         }}
                         placeholder="0"
@@ -374,7 +500,7 @@ export function PaiementsClient({
                     ) : (
                       <span />
                     )}
-                    {personne?.repas ? (
+                    {personne ? (
                       <span className="text-[11px] text-c2b-muted">Vient de la fiche cuisine</span>
                     ) : (
                       <button onClick={() => supprimer(p)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
@@ -387,7 +513,41 @@ export function PaiementsClient({
             </div>
           );
         })}
+      </section>
 
+      {/* Tarifs */}
+      <section className="carte p-4">
+        <h2 className="font-bold text-c2b-green">Tarifs par semaine (du lundi au vendredi)</h2>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {(
+            [
+              ["un_repas", "1 repas par jour"],
+              ["deux_repas", "2 repas par jour"],
+            ] as const
+          ).map(([cle, libelle]) => (
+            <label key={cle} className="block text-xs font-bold text-c2b-muted">
+              {libelle}
+              <span className="mt-1 flex items-center gap-1">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  defaultValue={tarifs[cle]}
+                  onBlur={(e) => {
+                    const prix = nombre(e.target.value);
+                    if (prix > 0 && prix !== tarifs[cle]) enregistrerTarifs({ ...tarifs, [cle]: prix });
+                  }}
+                  className="champ py-2 text-sm font-bold"
+                />
+                <span>DH</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-c2b-muted">
+          Chaque semaine où la personne est sur la fiche cuisine compte une formule (2 repas si midi et soir). Une semaine compte
+          dans le mois de son lundi. Les montants modifiés à la main ne bougent pas.
+        </p>
       </section>
 
       {/* Comptabilité du mois */}

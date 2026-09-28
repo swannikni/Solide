@@ -1358,3 +1358,23 @@ create policy "paiements_admin" on public.application_paiements
 alter table public.application_paiements add column if not exists cle text
   generated always as (coalesce('c:' || client_id::text, 'n:' || lower(btrim(nom)))) stored;
 create unique index if not exists application_paiements_mois_cle_idx on public.application_paiements (mois, cle);
+
+-- Tarifs à la semaine (du lundi au vendredi), modifiables par l'admin.
+insert into public.application_parametres (cle, valeur)
+values ('tarifs', '{"un_repas": 690, "deux_repas": 1290}'::jsonb)
+on conflict (cle) do nothing;
+
+-- Montant modifié à la main (offre ponctuelle…) : plus recalculé.
+alter table public.application_paiements add column if not exists montant_manuel boolean not null default false;
+
+-- Offres par personne : prix par semaine à la place du tarif (mois suivants compris).
+create table if not exists public.application_tarifs_perso (
+  cle text primary key check (cle ~ '^(c|n):.{1,80}$'), -- « c:<client> » ou « n:<nom> »
+  prix_semaine numeric(10,2) not null check (prix_semaine >= 0 and prix_semaine < 100000),
+  note text check (note is null or char_length(note) <= 120),
+  updated_at timestamptz not null default now()
+);
+alter table public.application_tarifs_perso enable row level security;
+drop policy if exists "tarifs_perso_admin" on public.application_tarifs_perso;
+create policy "tarifs_perso_admin" on public.application_tarifs_perso
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
