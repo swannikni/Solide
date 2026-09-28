@@ -8,6 +8,7 @@ const ONGLETS = [
   { href: "/admin/suivi", label: "Suivi" },
   { href: "/admin/cuisine", label: "Cuisine" },
   { href: "/admin/livraison", label: "Livraison" },
+  { href: "/admin/paiements", label: "Paiements" },
   { href: "/admin/menu", label: "Menu & QR" },
   { href: "/admin/recompenses", label: "Récompenses" },
 ];

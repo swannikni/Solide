@@ -1332,3 +1332,24 @@ alter table public.application_clients add column if not exists livraison_comple
   check (livraison_complement is null or char_length(livraison_complement) <= 150);
 alter table public.application_cuisine_extras add column if not exists complement text
   check (complement is null or char_length(complement) <= 150);
+
+-- ============ PAIEMENTS ============
+-- Suivi des paiements par mois (admin seulement) : une ligne par personne
+-- (client de l'appli ou nom de la fiche cuisine), montant dû et reçu.
+create table if not exists public.application_paiements (
+  id uuid primary key default gen_random_uuid(),
+  mois date not null check (extract(day from mois) = 1),
+  nom text not null check (char_length(nom) between 1 and 80),
+  client_id uuid references public.application_clients (id) on delete set null,
+  montant numeric(10,2) not null default 0 check (montant >= 0 and montant < 1000000),
+  recu numeric(10,2) not null default 0 check (recu >= 0 and recu < 1000000),
+  moyen text check (moyen is null or moyen in ('especes', 'virement', 'carte', 'autre')),
+  paye_le date,
+  note text check (note is null or char_length(note) <= 200),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_paiements_mois_idx on public.application_paiements (mois);
+alter table public.application_paiements enable row level security;
+drop policy if exists "paiements_admin" on public.application_paiements;
+create policy "paiements_admin" on public.application_paiements
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
