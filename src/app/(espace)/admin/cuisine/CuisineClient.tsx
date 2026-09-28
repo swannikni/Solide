@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Copy, FileDown, Pencil, Printer, Send, UserPlus } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
+import type { Reprise } from "@/lib/cuisine-reprise";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
@@ -74,6 +75,7 @@ function nomCourt(nom: string) {
 
 const dateLongue = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const jourCourt = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", timeZone: "UTC" });
 
 const AJOUT_VIDE = {
   nom: "",
@@ -100,6 +102,8 @@ export function CuisineClient({
   platsInitiaux,
   ajoutsInitiaux,
   personnesConnues = [],
+  reprise = null,
+  lundi = false,
 }: {
   date: string;
   aujourdhui: string;
@@ -108,6 +112,8 @@ export function CuisineClient({
   platsInitiaux: Record<Service, string>;
   ajoutsInitiaux: AjoutCuisine[];
   personnesConnues?: PersonneConnue[];
+  reprise?: Reprise | null;
+  lundi?: boolean;
 }) {
   const supabase = createClient();
   const [clients, setClients] = useState(clientsInitiaux);
@@ -257,6 +263,17 @@ export function CuisineClient({
     lien.download = fichier.name;
     lien.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  // Lundi : nouvelle semaine, reprise de la fiche du vendredi à la demande.
+  async function reprendreVendredi() {
+    setEnCours(true);
+    const { error } = await supabase.rpc("application_cuisine_reprendre", { p_date: date, p_source: decalerDate(date, -3) });
+    if (error) {
+      setEnCours(false);
+      return setMessage("Reprise impossible, réessayez.");
+    }
+    window.location.reload();
   }
 
   async function preparer() {
@@ -508,6 +525,25 @@ export function CuisineClient({
             </Link>
           </div>
         </div>
+
+        {reprise && (
+          <p className="rounded-xl bg-c2b-gold/10 px-4 py-3 text-sm text-c2b-green">
+            ↻ <strong>Fiche reprise de {jourCourt(reprise.source)}</strong>
+            {reprise.ajoutes > 0 && ` (${reprise.ajoutes} ligne${reprise.ajoutes > 1 ? "s" : ""} ajoutée${reprise.ajoutes > 1 ? "s" : ""})`}. Retirez les
+            absents, ajoutez les nouveaux. Les noms ajoutés plus tard sur la fiche de {jourCourt(reprise.source)} arrivent aussi ici.
+          </p>
+        )}
+
+        {lundi && !reprise && (
+          <section className="carte p-4 space-y-2">
+            <p className="text-sm text-c2b-muted">
+              Nouvelle semaine : la fiche de lundi ne reprend pas automatiquement celle de vendredi.
+            </p>
+            <button onClick={reprendreVendredi} disabled={enCours} className="btn-primary w-full">
+              {enCours ? "Reprise..." : `Reprendre la fiche du ${dateLongue(decalerDate(date, -3))}`}
+            </button>
+          </section>
+        )}
 
         {commandes.length === 0 && ajouts.length === 0 && (
           <section className="carte border-c2b-gold/50 p-5 space-y-3">

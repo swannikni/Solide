@@ -1378,3 +1378,75 @@ alter table public.application_tarifs_perso enable row level security;
 drop policy if exists "tarifs_perso_admin" on public.application_tarifs_perso;
 create policy "tarifs_perso_admin" on public.application_tarifs_perso
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- ============ FICHE CUISINE : REPRISE DE LA VEILLE ============
+-- Formules à la semaine : du mardi au vendredi, la fiche reprend celle de la
+-- veille (appelée à l'ouverture de la fiche ou des tournées). Première fois :
+-- toute la veille ; ensuite, seulement les personnes ajoutées depuis à la veille.
+create table if not exists public.application_cuisine_reprises (
+  date date primary key,
+  source date not null,
+  reprise_le timestamptz not null default now()
+);
+alter table public.application_cuisine_reprises enable row level security;
+drop policy if exists "cuisine_reprises_admin" on public.application_cuisine_reprises;
+create policy "cuisine_reprises_admin" on public.application_cuisine_reprises
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+create or replace function public.application_cuisine_reprendre(p_date date, p_source date)
+returns integer
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_depuis timestamptz;
+  v_n integer := 0;
+  v_k integer;
+begin
+  if not public.application_is_admin() then
+    raise exception 'Réservé à l''admin.';
+  end if;
+  if p_source >= p_date then
+    raise exception 'La source doit précéder la date.';
+  end if;
+  -- Une seule reprise à la fois pour un même jour.
+  perform pg_advisory_xact_lock(hashtext('cuisine_reprise:' || p_date::text));
+
+  -- Rien à reprendre : on réessaiera plus tard (pas de marque).
+  if not exists (select 1 from application_commandes where date_livraison = p_source and statut <> 'annulee')
+     and not exists (select 1 from application_cuisine_extras where date = p_source) then
+    return 0;
+  end if;
+
+  -- Première reprise : toute la veille. Ensuite : seulement les personnes
+  -- ajoutées à la veille depuis (celles retirées de ce jour ne reviennent pas).
+  select reprise_le into v_depuis from application_cuisine_reprises where date = p_date;
+  v_depuis := coalesce(v_depuis, '-infinity');
+
+  insert into application_commandes (client_id, date_livraison, repas_type, statut, note, palier)
+  select c.client_id, p_date, c.repas_type, 'confirmee', c.note, c.palier
+  from application_commandes c
+  where c.date_livraison = p_source and c.statut <> 'annulee' and c.created_at > v_depuis
+  on conflict (client_id, date_livraison, repas_type) do nothing;
+  get diagnostics v_k = row_count;
+  v_n := v_n + v_k;
+
+  insert into application_cuisine_extras (date, repas_type, nom, palier, allergies, refus, note, adresse, lat, lng, telephone, complement)
+  select p_date, e.repas_type, e.nom, e.palier, e.allergies, e.refus, e.note, e.adresse, e.lat, e.lng, e.telephone, e.complement
+  from application_cuisine_extras e
+  where e.date = p_source and e.created_at > v_depuis
+    and not exists (
+      select 1 from application_cuisine_extras x
+      where x.date = p_date and x.repas_type = e.repas_type and lower(btrim(x.nom)) = lower(btrim(e.nom))
+    );
+  get diagnostics v_k = row_count;
+  v_n := v_n + v_k;
+
+  insert into application_cuisine_reprises (date, source) values (p_date, p_source)
+  on conflict (date) do update set source = excluded.source, reprise_le = now();
+  return v_n;
+end;
+$$;
+revoke all on function public.application_cuisine_reprendre(date, date) from public, anon;
+grant execute on function public.application_cuisine_reprendre(date, date) to authenticated;

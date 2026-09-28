@@ -7,6 +7,7 @@ import {
   type PersonneConnue,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
+import { estLundi, reprendreLaVeille } from "@/lib/cuisine-reprise";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const aujourdhui = dateDuJour();
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
   const date = estDateValide(dateDemandee) ? dateDemandee : heure >= 12 ? decalerDate(aujourdhui, 1) : aujourdhui;
+  // Du mardi au vendredi : reprise de la fiche de la veille avant lecture.
+  const reprise = await reprendreLaVeille(supabase, date, aujourdhui);
 
   const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }] = await Promise.all([
     supabase
@@ -104,6 +107,8 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         platsInitiaux={plats}
         ajoutsInitiaux={ajouts ?? []}
         personnesConnues={personnesConnues}
+        reprise={reprise}
+        lundi={estLundi(date)}
       />
     </div>
   );
