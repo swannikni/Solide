@@ -4,8 +4,9 @@ import { dateDuJour } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-// Paiements d'un mois : qui a payé, combien reste à encaisser. Les personnes
-// livrées dans le mois (clients et noms de la fiche cuisine) sont proposées.
+// Paiements d'un mois : qui a payé, combien reste à encaisser.
+// Cuisine → Livraison → Paiements : chaque personne de la fiche cuisine du
+// mois a sa ligne, créée automatiquement (montant à indiquer).
 export default async function PaiementsPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {
   const { supabase } = await exigerAdmin();
   const { mois: moisDemande } = await searchParams;
@@ -15,7 +16,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   const [a, m] = mois.split("-").map(Number);
   const fin = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10); // dernier jour du mois
 
-  const [{ data: paiements }, { data: clients }, { data: commandes }, { data: extras }] = await Promise.all([
+  const [{ data: paiementsExistants }, { data: clients }, { data: commandes }, { data: extras }] = await Promise.all([
     supabase
       .from("application_paiements")
       .select("id, nom, client_id, montant, recu, moyen, paye_le, note")
@@ -62,13 +63,22 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
     if (!p.telephone && e.telephone) p.telephone = e.telephone;
     personnes.set(cle, p);
   }
-  // Clients de l'appli sans repas ce mois : proposés à la saisie seulement.
-  const suggestions = [
-    ...personnes.values(),
-    ...(clients ?? [])
-      .filter((c) => !personnes.has(`c:${c.id}`))
-      .map((c) => ({ cle: `c:${c.id}`, nom: c.nom, clientId: c.id, telephone: c.telephone, repas: 0 })),
-  ];
+  // Personnes de la fiche cuisine sans ligne ce mois : ajoutées (sans
+  // doublon, même si la page est ouverte deux fois en même temps).
+  const presentes = new Set((paiementsExistants ?? []).map((p) => (p.client_id ? `c:${p.client_id}` : `n:${p.nom.trim().toLowerCase()}`)));
+  const manquantes = [...personnes.values()].filter((x) => !presentes.has(x.cle));
+  let paiements = paiementsExistants ?? [];
+  if (manquantes.length) {
+    const { data: ajoutees } = await supabase
+      .from("application_paiements")
+      .upsert(
+        manquantes.map((x) => ({ mois: debut, nom: x.nom.slice(0, 80), client_id: x.clientId, montant: 0 })),
+        { onConflict: "mois,cle", ignoreDuplicates: true }
+      )
+      .select("id, nom, client_id, montant, recu, moyen, paye_le, note")
+      .returns<Paiement[]>();
+    paiements = [...paiements, ...(ajoutees ?? [])];
+  }
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
@@ -76,8 +86,8 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         key={mois}
         mois={mois}
         aujourdhui={aujourdhui}
-        paiementsInitiaux={(paiements ?? []).map((p) => ({ ...p, montant: Number(p.montant), recu: Number(p.recu) }))}
-        personnes={suggestions.sort((x, y) => x.nom.localeCompare(y.nom, "fr"))}
+        paiementsInitiaux={paiements.map((p) => ({ ...p, montant: Number(p.montant), recu: Number(p.recu) }))}
+        personnes={[...personnes.values()]}
       />
     </div>
   );

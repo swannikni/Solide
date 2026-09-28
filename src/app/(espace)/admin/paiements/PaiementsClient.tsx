@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, MessageCircle, Plus, Trash2, UserPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, MessageCircle, Trash2 } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,7 +17,7 @@ export interface Paiement {
   note: string | null;
 }
 
-// Personne livrée dans le mois (ou client de l'appli), avec son nombre de repas.
+// Personne de la fiche cuisine du mois, avec son nombre de repas.
 export interface PersonneMois {
   cle: string;
   nom: string;
@@ -73,9 +73,7 @@ export function PaiementsClient({
   const [paiements, setPaiements] = useState(paiementsInitiaux);
   const [filtre, setFiltre] = useState<"tous" | "non_payes" | "payes">("tous");
   const [ouvert, setOuvert] = useState<string | null>(null);
-  const [ajout, setAjout] = useState<{ nom: string; montant: string } | null>(null);
   const [message, setMessage] = useState("");
-  const [enCours, setEnCours] = useState(false);
 
   // Personne liée à une ligne : même client, sinon même nom.
   const personneDe = (p: Paiement) =>
@@ -92,10 +90,6 @@ export function PaiementsClient({
     .filter((x) => x.total > 0);
   const recuSansMoyen = paiements.filter((p) => !p.moyen).reduce((t, p) => t + p.recu, 0);
 
-  // Personnes livrées ce mois qui n'ont pas encore de ligne.
-  const dejaLa = new Set(paiements.map((p) => (p.client_id ? `c:${p.client_id}` : `n:${sansAccents(p.nom)}`)));
-  const nomsDejaLa = new Set(paiements.map((p) => sansAccents(p.nom)));
-  const manquants = personnes.filter((x) => x.repas > 0 && !dejaLa.has(x.cle) && !nomsDejaLa.has(sansAccents(x.nom)));
 
   const affiches = paiements
     .filter((p) => (filtre === "payes" ? estPaye(p) : filtre === "non_payes" ? !estPaye(p) : true))
@@ -121,28 +115,6 @@ export function PaiementsClient({
     return modifier(p, { recu: p.montant, paye_le: p.paye_le ?? aujourdhui, moyen: p.moyen ?? "especes" });
   }
 
-  async function inserer(lignes: { nom: string; client_id: string | null; montant: number }[]) {
-    if (!lignes.length) return;
-    setEnCours(true);
-    const { data, error } = await supabase
-      .from("application_paiements")
-      .insert(lignes.map((l) => ({ ...l, mois: `${mois}-01` })))
-      .select("id, nom, client_id, montant, recu, moyen, paye_le, note")
-      .returns<Paiement[]>();
-    setEnCours(false);
-    if (error || !data) return setMessage("Non enregistré, réessayez.");
-    setPaiements((prev) => [...prev, ...data.map((p) => ({ ...p, montant: Number(p.montant), recu: Number(p.recu) }))]);
-    setMessage("");
-  }
-
-  async function ajouter() {
-    if (!ajout) return;
-    const nom = ajout.nom.trim().slice(0, 80);
-    if (!nom) return;
-    const connue = personnes.find((x) => sansAccents(x.nom) === sansAccents(nom));
-    await inserer([{ nom: connue?.nom ?? nom, client_id: connue?.clientId ?? null, montant: Math.max(0, Number(ajout.montant.replace(",", ".")) || 0) }]);
-    setAjout(null);
-  }
 
   async function supprimer(p: Paiement) {
     if (!window.confirm(`Supprimer la ligne de ${p.nom} pour ${libelleMois(mois).toLowerCase()} ?`)) return;
@@ -182,9 +154,6 @@ export function PaiementsClient({
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
-  const suggestionsAjout = ajout?.nom.trim()
-    ? personnes.filter((x) => sansAccents(x.nom).includes(sansAccents(ajout.nom)) && !nomsDejaLa.has(sansAccents(x.nom))).slice(0, 6)
-    : [];
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
@@ -215,6 +184,17 @@ export function PaiementsClient({
         </div>
       </div>
 
+      <p className="-mt-2 text-sm text-c2b-muted">
+        <Link href="/admin/cuisine" className="font-semibold text-c2b-green underline">
+          Cuisine
+        </Link>{" "}
+        →{" "}
+        <Link href="/admin/livraison" className="font-semibold text-c2b-green underline">
+          Livraison
+        </Link>{" "}
+        → <strong className="text-c2b-green">Paiements</strong> : chaque personne de la fiche cuisine du mois a sa ligne.
+      </p>
+
       {/* Totaux */}
       <section className="grid grid-cols-2 gap-2">
         <div className="carte p-4">
@@ -233,27 +213,6 @@ export function PaiementsClient({
 
       {message && <p className="text-sm font-semibold text-red-700">{message}</p>}
 
-      {manquants.length > 0 && (
-        <button
-          onClick={() => inserer(manquants.map((x) => ({ nom: x.nom, client_id: x.clientId, montant: 0 })))}
-          disabled={enCours}
-          className="carte flex w-full items-center gap-3 p-4 text-left disabled:opacity-50"
-        >
-          <UserPlus size={20} className="flex-shrink-0 text-c2b-gold" />
-          <span className="text-sm">
-            <strong className="text-c2b-green">
-              Ajouter les {manquants.length} personne{manquants.length > 1 ? "s" : ""} livrée{manquants.length > 1 ? "s" : ""} ce mois
-            </strong>
-            <span className="block text-xs text-c2b-muted">
-              {manquants
-                .slice(0, 8)
-                .map((x) => x.nom)
-                .join(", ")}
-              {manquants.length > 8 ? "…" : ""} (noms de la fiche cuisine)
-            </span>
-          </span>
-        </button>
-      )}
 
       {/* Filtres */}
       <div className="grid grid-cols-3 gap-2">
@@ -280,7 +239,17 @@ export function PaiementsClient({
       <section className="carte divide-y divide-black/5 overflow-hidden">
         {affiches.length === 0 && (
           <p className="p-5 text-center text-sm text-c2b-muted">
-            {paiements.length ? "Personne dans ce filtre." : "Aucun paiement ce mois. Ajoutez les personnes livrées ou un nom."}
+            {paiements.length ? (
+              "Personne dans ce filtre."
+            ) : (
+              <>
+                Personne dans la{" "}
+                <Link href="/admin/cuisine" className="font-bold text-c2b-green underline">
+                  fiche cuisine
+                </Link>{" "}
+                ce mois-ci.
+              </>
+            )}
           </p>
         )}
         {affiches.map((p) => {
@@ -405,9 +374,13 @@ export function PaiementsClient({
                     ) : (
                       <span />
                     )}
-                    <button onClick={() => supprimer(p)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
-                      <Trash2 size={14} /> Supprimer
-                    </button>
+                    {personne?.repas ? (
+                      <span className="text-[11px] text-c2b-muted">Vient de la fiche cuisine</span>
+                    ) : (
+                      <button onClick={() => supprimer(p)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
+                        <Trash2 size={14} /> Supprimer
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -415,59 +388,6 @@ export function PaiementsClient({
           );
         })}
 
-        {/* Ajout à la main */}
-        {ajout ? (
-          <div className="space-y-2 p-4">
-            <div className="grid grid-cols-[1fr_96px] gap-2">
-              <input
-                autoFocus
-                value={ajout.nom}
-                onChange={(e) => setAjout({ ...ajout, nom: e.target.value })}
-                placeholder="Nom"
-                maxLength={80}
-                className="champ py-2 text-sm"
-              />
-              <input
-                value={ajout.montant}
-                onChange={(e) => setAjout({ ...ajout, montant: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && ajouter()}
-                inputMode="decimal"
-                placeholder="DH"
-                className="champ px-2 py-2 text-right text-sm"
-              />
-            </div>
-            {suggestionsAjout.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {suggestionsAjout.map((x) => (
-                  <button
-                    key={x.cle}
-                    onClick={() => setAjout({ ...ajout, nom: x.nom })}
-                    className="rounded-full border border-c2b-green/15 bg-white px-3 py-1 text-xs font-semibold text-c2b-green"
-                  >
-                    {x.nom}
-                    {x.repas ? ` · ${x.repas} repas` : ""}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setAjout(null)} className="rounded-full border border-c2b-green/15 bg-white py-2 text-sm font-bold text-c2b-green">
-                Annuler
-              </button>
-              <button
-                onClick={ajouter}
-                disabled={!ajout.nom.trim() || enCours}
-                className="rounded-full bg-c2b-green py-2 text-sm font-bold text-c2b-cream disabled:opacity-40"
-              >
-                Ajouter
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setAjout({ nom: "", montant: "" })} className="flex w-full items-center justify-center gap-1.5 p-3.5 text-sm font-bold text-c2b-gold">
-            <Plus size={16} /> Ajouter un nom
-          </button>
-        )}
       </section>
 
       {/* Comptabilité du mois */}

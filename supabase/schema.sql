@@ -1353,3 +1353,8 @@ alter table public.application_paiements enable row level security;
 drop policy if exists "paiements_admin" on public.application_paiements;
 create policy "paiements_admin" on public.application_paiements
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+-- Une ligne par personne et par mois (client de l'appli, sinon nom de la
+-- fiche cuisine) : les personnes livrées sont ajoutées automatiquement.
+alter table public.application_paiements add column if not exists cle text
+  generated always as (coalesce('c:' || client_id::text, 'n:' || lower(btrim(nom)))) stored;
+create unique index if not exists application_paiements_mois_cle_idx on public.application_paiements (mois, cle);
