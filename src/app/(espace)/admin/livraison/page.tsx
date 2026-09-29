@@ -1,6 +1,7 @@
 import { exigerAdmin } from "@/lib/admin";
 import { LivraisonClient, type ArretLivraison, type RepasLivre } from "@/app/(espace)/admin/livraison/LivraisonClient";
-import { completerReglages, type ReglagesLivraison } from "@/lib/livraison";
+import { redirect } from "next/navigation";
+import { completerReglages, LIVRAISON_ACTIVE, type ReglagesLivraison } from "@/lib/livraison";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
 import { reprendreLaVeille } from "@/lib/cuisine-reprise";
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 // toutes les personnes de la fiche cuisine du jour, repas du midi et du soir
 // livrés ensemble. Par défaut : aujourd'hui avant 14 h, sinon demain.
 export default async function LivraisonPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  if (!LIVRAISON_ACTIVE) redirect("/admin/cuisine");
   const { supabase } = await exigerAdmin();
   const { date: dateDemandee } = await searchParams;
   const aujourdhui = dateDuJour();

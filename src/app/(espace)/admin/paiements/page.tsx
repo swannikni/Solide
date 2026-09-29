@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const COLONNES = "id, nom, client_id, montant, montant_manuel, recu, moyen, paye_le, note";
 
 // Paiements d'un mois : qui a payé, combien reste à encaisser.
-// Cuisine → Livraison → Paiements : chaque personne de la fiche cuisine du
+// Cuisine → Paiements : chaque personne de la fiche cuisine du
 // mois a sa ligne, créée automatiquement. Montant calculé à la semaine
 // (formule 1 ou 2 repas par jour, ou offre de la personne), modifiable à la main.
 export default async function PaiementsPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {

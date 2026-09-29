@@ -240,10 +240,6 @@ export function PaiementsClient({
         <Link href="/admin/cuisine" className="font-semibold text-c2b-green underline">
           Cuisine
         </Link>{" "}
-        →{" "}
-        <Link href="/admin/livraison" className="font-semibold text-c2b-green underline">
-          Livraison
-        </Link>{" "}
         → <strong className="text-c2b-green">Paiements</strong> : chaque personne de la fiche cuisine du mois a sa ligne.
       </p>
 

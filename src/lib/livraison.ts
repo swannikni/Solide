@@ -1,5 +1,9 @@
 // Réglages des tournées de livraison (table application_livraison_reglages).
 
+// Onglet Livraison mis de côté pour le moment (livraisons organisées à la
+// main) : tout le code est gardé, passer à true pour le réactiver.
+export const LIVRAISON_ACTIVE = false;
+
 export interface ReglagesLivraison {
   depart: { adresse: string; lat: number; lng: number } | null;
   livreurs: { nom: string; telephone: string; tarif: number }[]; // tarif : DH par livraison

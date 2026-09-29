@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LIVRAISON_ACTIVE } from "@/lib/livraison";
 
 const ONGLETS = [
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/suivi", label: "Suivi" },
   { href: "/admin/cuisine", label: "Cuisine" },
-  { href: "/admin/livraison", label: "Livraison" },
+  ...(LIVRAISON_ACTIVE ? [{ href: "/admin/livraison", label: "Livraison" }] : []),
   { href: "/admin/paiements", label: "Paiements" },
   { href: "/admin/menu", label: "Menu & QR" },
   { href: "/admin/recompenses", label: "Récompenses" },
