@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { JWKS } from "@/lib/supabase/jwks";
 
 // /api/questionnaire : reçoit les questionnaires envoyés depuis chef2box.com.
 const PUBLIC_PATHS = ["/login", "/api/questionnaire", "/confidentialite", "/conditions"];
@@ -32,10 +33,10 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // getClaims : vérifie le jeton sur place (clés asymétriques) au lieu d'un
-  // aller-retour vers Supabase à chaque page ; rafraîchit la session si besoin.
+  // getClaims : vérifie le jeton sur place (clés asymétriques, connues dès la
+  // mise en ligne) au lieu d'un aller-retour vers Supabase ; rafraîchit la session si besoin.
   // En cas d'échec de cette vérification, on retombe sur getUser (aller-retour Auth).
-  const { data, error } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims(undefined, { jwks: JWKS });
   let user: { user_metadata?: Record<string, unknown> } | null = data?.claims ?? null;
   if (!user && error) user = (await supabase.auth.getUser()).data.user;
 

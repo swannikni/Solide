@@ -7,7 +7,7 @@ import {
   type PersonneConnue,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
-import { estLundi, reprendreLaVeille } from "@/lib/cuisine-reprise";
+import { estLundi, reprendreLaVeille, sourceReprise } from "@/lib/cuisine-reprise";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +21,9 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
   const date = estDateValide(dateDemandee) ? dateDemandee : heure >= 12 ? decalerDate(aujourdhui, 1) : aujourdhui;
   // Du mardi au vendredi : reprise de la fiche de la veille avant lecture.
-  const reprise = await reprendreLaVeille(supabase, date, aujourdhui);
+  const ajoutes = await reprendreLaVeille(supabase, date, aujourdhui);
 
-  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }, source] = await Promise.all([
     supabase
       .from("application_clients")
       .select("id, nom, palier, cuisine_allergies, cuisine_refus, repas_habituels")
@@ -65,6 +65,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
           complement: string | null;
         })[]
       >(),
+    sourceReprise(supabase, date),
   ]);
   // Dernière fiche connue de chaque nom (sans tenir compte des majuscules).
   const connues = new Map<string, PersonneConnue & { date: string }>();
@@ -107,7 +108,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         platsInitiaux={plats}
         ajoutsInitiaux={ajouts ?? []}
         personnesConnues={personnesConnues}
-        reprise={reprise}
+        reprise={source ? { source, ajoutes } : null}
         lundi={estLundi(date)}
       />
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, use, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, MessageCircle, ShieldCheck, Sparkles, TrendingUp, UserRound } from "lucide-react";
@@ -14,6 +14,27 @@ const LIENS_CLIENT = [
   { href: "/messages", racine: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
+type Pastilles = { messages: number; admin: number };
+
+// Nombre en attente sur un onglet. Les nombres arrivent après la page (promesse
+// envoyée par le serveur) : la barre s'affiche tout de suite, les pastilles
+// apparaissent quand elles sont prêtes.
+function Pastille({ pastilles, href, mobile }: { pastilles: Promise<Pastilles> | Pastilles; href: string; mobile?: boolean }) {
+  const p = "then" in pastilles ? use(pastilles) : pastilles;
+  const n = href === "/messages" ? p.messages : href === "/admin/clients" ? p.admin : 0;
+  if (n <= 0) return null;
+  return mobile ? (
+    <span
+      className="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] rounded-full bg-c2b-gold px-1 text-[10px] font-bold leading-[17px] text-c2b-green text-center"
+      aria-label={`${n} en attente`}
+    >
+      {n > 9 ? "9+" : n}
+    </span>
+  ) : (
+    <span className="ml-1.5 rounded-full bg-c2b-gold px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{n}</span>
+  );
+}
+
 function estActif(pathname: string, racine: string) {
   return pathname === racine || pathname.startsWith(`${racine}/`);
 }
@@ -25,7 +46,7 @@ export function Nav({
 }: {
   estAdmin: boolean;
   // Nombre d'éléments en attente affiché sur l'onglet (messages non lus, etc.).
-  pastilles?: { messages: number; admin: number };
+  pastilles?: Promise<Pastilles> | Pastilles;
   assistantActif?: boolean;
 }) {
   const pathname = usePathname();
@@ -39,8 +60,6 @@ export function Nav({
   const liens = estAdmin
     ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...liensClient]
     : liensClient;
-  const pastille = (href: string) =>
-    href === "/messages" ? pastilles.messages : href === "/admin/clients" ? pastilles.admin : 0;
 
   // Planche d'étiquettes à imprimer : pas de barres.
   if (pathname.includes("/etiquettes")) return null;
@@ -65,11 +84,9 @@ export function Nav({
                 }`}
               >
                 {label}
-                {pastille(href) > 0 && (
-                  <span className="ml-1.5 rounded-full bg-c2b-gold px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">
-                    {pastille(href)}
-                  </span>
-                )}
+                <Suspense fallback={null}>
+                  <Pastille pastilles={pastilles} href={href} />
+                </Suspense>
               </Link>
             ))}
             <Link
@@ -110,14 +127,9 @@ export function Nav({
               >
                 <span className="relative">
                   <Icon size={20} strokeWidth={actif ? 2.4 : 1.8} />
-                  {pastille(href) > 0 && (
-                    <span
-                      className="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] rounded-full bg-c2b-gold px-1 text-[10px] font-bold leading-[17px] text-c2b-green text-center"
-                      aria-label={`${pastille(href)} en attente`}
-                    >
-                      {pastille(href) > 9 ? "9+" : pastille(href)}
-                    </span>
-                  )}
+                  <Suspense fallback={null}>
+                    <Pastille pastilles={pastilles} href={href} mobile />
+                  </Suspense>
                 </span>
                 <span>{label}</span>
                 <span className={`h-1 w-1 rounded-full ${actif ? "bg-c2b-gold" : "bg-transparent"}`} />

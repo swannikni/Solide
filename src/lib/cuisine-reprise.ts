@@ -18,7 +18,8 @@ export const estLundi = (date: string) => jourSemaine(date) === 1;
 // Les jours sont repris dans l'ordre depuis le mardi (ou aujourd'hui), pour
 // qu'un ajout du mardi arrive jusqu'au jeudi même si mercredi n'a pas été
 // ouvert. Les fiches passées ne sont jamais modifiées.
-export async function reprendreLaVeille(supabase: SupabaseClient, date: string, aujourdhui: string): Promise<Reprise | null> {
+// Renvoie le nombre de lignes ajoutées à l'instant à la fiche du jour.
+export async function reprendreLaVeille(supabase: SupabaseClient, date: string, aujourdhui: string): Promise<number> {
   const j = jourSemaine(date);
   let ajoutes = 0;
   if (j >= 2 && j <= 5 && date >= aujourdhui) {
@@ -28,10 +29,11 @@ export async function reprendreLaVeille(supabase: SupabaseClient, date: string, 
       if (d === date) ajoutes = typeof data === "number" ? data : 0;
     }
   }
-  const { data: marque } = await supabase
-    .from("application_cuisine_reprises")
-    .select("source")
-    .eq("date", date)
-    .maybeSingle<{ source: string }>();
-  return marque ? { source: marque.source, ajoutes } : null;
+  return ajoutes;
+}
+
+// Fiche reprise d'un autre jour ? (date de la source, sinon null)
+export async function sourceReprise(supabase: SupabaseClient, date: string): Promise<string | null> {
+  const { data } = await supabase.from("application_cuisine_reprises").select("source").eq("date", date).maybeSingle<{ source: string }>();
+  return data?.source ?? null;
 }

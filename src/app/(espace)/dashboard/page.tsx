@@ -12,8 +12,20 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;
 
-  const [{ data: repas }, { data: repasVeille }, { data: favoris }, { data: derniers }, { data: journalRecent }, { data: pesees }, { data: defisBruts }, { data: parametre }] =
-    await Promise.all([
+  // Arrivée par le QR d'une étiquette (/p/<code>) : cherché en même temps que le reste.
+  const codePlat = searchParams.plat?.slice(0, 64);
+
+  const [
+    { data: repas },
+    { data: repasVeille },
+    { data: favoris },
+    { data: derniers },
+    { data: journalRecent },
+    { data: pesees },
+    { data: defisBruts },
+    { data: parametre },
+    { data: platScanne },
+  ] = await Promise.all([
     supabase
       .from("application_repas_journal")
       .select("*")
@@ -58,6 +70,9 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       .returns<{ date: string; poids_kg: number }[]>(),
     supabase.rpc("application_defis_client"),
     supabase.from("application_parametres").select("valeur").eq("cle", "recompenses_actives").maybeSingle(),
+    codePlat
+      ? supabase.from("application_plats").select("*").eq("qr_code", codePlat).eq("actif", true).maybeSingle<Plat>()
+      : Promise.resolve({ data: null as Plat | null }),
   ]);
 
   // Récents : derniers aliments distincts (par nom), hors box Chef2Box du jour.
@@ -71,9 +86,12 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
     if (recents.length >= 12) break;
   }
 
-  // Points : calculés seulement si les récompenses sont activées par l'admin.
+  // Points (seulement si les récompenses sont activées) et liens des photos : en parallèle.
   const recompensesActives = parametre?.valeur === true;
-  const points = recompensesActives ? ((await supabase.rpc("application_points")).data as Points | null) : null;
+  const [points, repasDuJour] = await Promise.all([
+    recompensesActives ? supabase.rpc("application_points").then((r) => r.data as Points | null) : null,
+    signerPhotos(supabase, repas ?? []),
+  ]);
   const defis = defisBruts as Defi[] | null;
 
   const jours = totauxParJour(journalRecent ?? []);
@@ -88,12 +106,6 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
       )
     : null;
 
-  // Arrivée par le QR d'une étiquette (/p/<code>).
-  const codePlat = searchParams.plat?.slice(0, 64);
-  const { data: platScanne } = codePlat
-    ? await supabase.from("application_plats").select("*").eq("qr_code", codePlat).eq("actif", true).maybeSingle<Plat>()
-    : { data: null };
-
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <DashboardClient
@@ -101,7 +113,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ dat
         client={client}
         date={date}
         aujourdhui={aujourdhui}
-        repasDuJour={await signerPhotos(supabase, repas ?? [])}
+        repasDuJour={repasDuJour}
         repasVeille={repasVeille ?? []}
         favoris={favoris ?? []}
         recents={recents}

@@ -11,7 +11,8 @@ export default async function EspaceLayout({ children }: { children: React.React
   const compter = (requete: PromiseLike<{ count: number | null }>) => Promise.resolve(requete).then((r) => r.count ?? 0);
 
   // Pastilles : messages non lus ; pour l'admin, ce qui l'attend (questionnaires, récompenses).
-  const [nonLus, questionnaires, recompenses] = await Promise.all([
+  // Pas d'attente ici : la page s'affiche, les pastilles suivent quand elles sont prêtes.
+  const pastilles = Promise.all([
     compter(
       estAdmin
         ? supabase
@@ -39,14 +40,16 @@ export default async function EspaceLayout({ children }: { children: React.React
             .eq("statut", "en_attente")
         )
       : 0,
-  ]);
+  ])
+    .then(([nonLus, questionnaires, recompenses]) => ({ messages: nonLus, admin: questionnaires + recompenses }))
+    .catch(() => ({ messages: 0, admin: 0 }));
 
   return (
     <>
       {!estAdmin && <SignalerVisite />}
       <Nav
         estAdmin={estAdmin}
-        pastilles={{ messages: nonLus, admin: questionnaires + recompenses }}
+        pastilles={pastilles}
         // Sans clé Anthropic, l'assistant ne peut pas répondre : on ne montre pas l'onglet.
         assistantActif={!!process.env.ANTHROPIC_API_KEY}
       />

@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { JWKS } from "@/lib/supabase/jwks";
 import type { Client } from "@/lib/types";
 
 // Session du visiteur, lue une seule fois par affichage de page : le layout et
@@ -10,7 +11,7 @@ import type { Client } from "@/lib/types";
 // projet signe ses jetons avec des clés asymétriques (sinon, il interroge Auth).
 export const lireSession = cache(async () => {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims(undefined, { jwks: JWKS });
   let userId = data?.claims?.sub ?? null;
   let email = typeof data?.claims?.email === "string" ? data.claims.email : "";
   // Filet de sécurité : si la vérification locale échoue, on demande à Auth.
