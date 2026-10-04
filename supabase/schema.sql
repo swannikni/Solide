@@ -1450,3 +1450,23 @@ end;
 $$;
 revoke all on function public.application_cuisine_reprendre(date, date) from public, anon;
 grant execute on function public.application_cuisine_reprendre(date, date) to authenticated;
+
+-- ============ ANCIENNES TABLES ============
+-- clients, sessions, journaux : outils d'avant l'appli (inutilisés depuis juin
+-- 2026). Fermées au public (RLS), réservées à l'admin ; données conservées.
+-- Pour rouvrir : alter table public.<table> disable row level security;
+alter table public.clients enable row level security;
+alter table public.sessions enable row level security;
+alter table public.journaux enable row level security;
+drop policy if exists "anciens_clients_admin" on public.clients;
+create policy "anciens_clients_admin" on public.clients
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+drop policy if exists "anciennes_sessions_admin" on public.sessions;
+create policy "anciennes_sessions_admin" on public.sessions
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+drop policy if exists "anciens_journaux_admin" on public.journaux;
+create policy "anciens_journaux_admin" on public.journaux
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Fonction de déclencheur : jamais appelée directement par l'API.
+revoke execute on function public.application_cuisine_depuis_questionnaire() from public, anon, authenticated;
