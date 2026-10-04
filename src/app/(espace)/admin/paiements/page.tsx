@@ -141,7 +141,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         semaine={semaine}
         autresSemainesDuMois={{
           semaines: new Set((lignesDuMois ?? []).map((l) => l.semaine)).size,
-          du: (lignesDuMois ?? []).reduce((t, l) => t + Number(l.montant), 0),
+          du: (lignesDuMois ?? []).reduce((t, l) => t + (Number(l.montant) || Number(l.recu)), 0),
           encaisse: (lignesDuMois ?? []).reduce((t, l) => t + Math.min(Number(l.recu), Number(l.montant) || Number(l.recu)), 0),
         }}
         aujourdhui={aujourdhui}

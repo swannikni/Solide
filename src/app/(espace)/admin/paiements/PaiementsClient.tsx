@@ -99,7 +99,7 @@ export function PaiementsClient({
   const personneDe = (p: Paiement) => parCle.get(cleDe(p)) ?? personnes.find((x) => sansAccents(x.nom) === sansAccents(p.nom));
   const autoDe = (x: PersonneMois, t = tarifs, o = offres) => montantAuto(x.semaines, t, o.get(x.cle)?.prix ?? null);
 
-  const totalDu = paiements.reduce((t, p) => t + p.montant, 0);
+  const totalDu = paiements.reduce((t, p) => t + (p.montant || p.recu), 0);
   const totalPaye = paiements.reduce((t, p) => t + Math.min(p.recu, p.montant || p.recu), 0);
   const totalReste = paiements.reduce((t, p) => t + reste(p), 0);
   const nbPayes = paiements.filter(estPaye).length;
@@ -243,6 +243,16 @@ export function PaiementsClient({
             <ChevronRight size={20} />
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <span className="rounded-full bg-c2b-green py-2.5 text-center text-sm font-bold text-c2b-cream">Par semaine</span>
+        <Link
+          href={`/admin/paiements/bilan?mois=${semaine.slice(0, 7)}`}
+          className="rounded-full border border-c2b-green/15 bg-white py-2.5 text-center text-sm font-bold text-c2b-green"
+        >
+          Bilan du mois
+        </Link>
       </div>
 
       <p className="-mt-2 text-sm text-c2b-muted">
