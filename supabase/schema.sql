@@ -1470,3 +1470,15 @@ create policy "anciens_journaux_admin" on public.journaux
 
 -- Fonction de déclencheur : jamais appelée directement par l'API.
 revoke execute on function public.application_cuisine_depuis_questionnaire() from public, anon, authenticated;
+
+-- Paiements à la semaine (du lundi au vendredi) au lieu du mois : colonne
+-- « semaine » (lundi), une ligne par personne et par semaine. Les lignes
+-- saisies au mois ont été rangées dans leur semaine (septembre → 28/09,
+-- octobre → 05/10). « mois » reste pour l'historique.
+alter table public.application_paiements add column if not exists semaine date;
+alter table public.application_paiements alter column semaine set not null;
+alter table public.application_paiements drop constraint if exists application_paiements_semaine_lundi;
+alter table public.application_paiements add constraint application_paiements_semaine_lundi check (extract(isodow from semaine) = 1);
+alter table public.application_paiements alter column mois drop not null;
+create unique index if not exists application_paiements_semaine_cle_idx on public.application_paiements (semaine, cle);
+create index if not exists application_paiements_client_idx on public.application_paiements (client_id);

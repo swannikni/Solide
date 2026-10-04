@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, MessageCircle,
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { montantAuto, prixSemaine, type SemaineRepas, type Tarifs } from "@/lib/paiements";
+import { decalerDate } from "@/lib/dates";
 
 export interface Paiement {
   id: string;
@@ -19,7 +20,7 @@ export interface Paiement {
   note: string | null;
 }
 
-// Personne de la fiche cuisine du mois : repas, semaines, offre éventuelle.
+// Personne de la fiche cuisine de la semaine : repas, formule, offre éventuelle.
 export interface PersonneMois {
   cle: string; // « c:<client> » ou « n:<nom en minuscules> »
   nom: string;
@@ -48,14 +49,16 @@ const dateCourte = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(
 const reste = (p: Paiement) => Math.max(0, p.montant - p.recu);
 const estPaye = (p: Paiement) => p.montant > 0 && p.recu >= p.montant;
 
-function libelleMois(mois: string) {
-  const t = new Date(`${mois}-15T12:00:00Z`).toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
-  return t.charAt(0).toUpperCase() + t.slice(1);
+// « du 5 au 9 oct. » (lundi → vendredi)
+function libelleSemaine(lundi: string) {
+  const f = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { ...o, timeZone: "UTC" });
+  const vendredi = decalerDate(lundi, 4);
+  const memeMois = lundi.slice(0, 7) === vendredi.slice(0, 7);
+  return `du ${f(lundi, memeMois ? { day: "numeric" } : { day: "numeric", month: "short" })} au ${f(vendredi, { day: "numeric", month: "short" })}`;
 }
-function decalerMois(mois: string, n: number) {
-  const [a, m] = mois.split("-").map(Number);
-  const d = new Date(Date.UTC(a, m - 1 + n, 1));
-  return d.toISOString().slice(0, 7);
+function libelleMois(lundi: string) {
+  const t = new Date(`${lundi}T12:00:00Z`).toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" });
+  return t;
 }
 
 // Numéro marocain → format international pour wa.me (0612… → 212612…).
@@ -68,13 +71,16 @@ function numeroWhatsApp(telephone: string | null) {
 }
 
 export function PaiementsClient({
-  mois,
+  semaine,
+  autresSemainesDuMois,
   aujourdhui,
   paiementsInitiaux,
   personnes,
   tarifsInitiaux,
 }: {
-  mois: string;
+  semaine: string; // lundi
+  // Les autres semaines du même mois (lundi dans le mois), pour le récapitulatif.
+  autresSemainesDuMois: { semaines: number; du: number; encaisse: number };
   aujourdhui: string;
   paiementsInitiaux: Paiement[];
   personnes: PersonneMois[];
@@ -168,7 +174,7 @@ export function PaiementsClient({
   }
 
   async function supprimer(p: Paiement) {
-    if (!window.confirm(`Supprimer la ligne de ${p.nom} pour ${libelleMois(mois).toLowerCase()} ?`)) return;
+    if (!window.confirm(`Supprimer la ligne de ${p.nom} pour la semaine ${libelleSemaine(semaine)} ?`)) return;
     const { error } = await supabase.from("application_paiements").delete().eq("id", p.id);
     if (error) return setMessage("Non supprimé, réessayez.");
     setPaiements((prev) => prev.filter((x) => x.id !== p.id));
@@ -178,14 +184,14 @@ export function PaiementsClient({
   function exporter() {
     const champ = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const lignes = [
-      ["Mois", "Nom", "Repas", "Semaines", "Montant (DH)", "Montant", "Reçu (DH)", "Reste (DH)", "Statut", "Moyen", "Payé le", "Note"],
+      ["Semaine (lundi)", "Nom", "Repas", "Formule", "Montant (DH)", "Montant", "Reçu (DH)", "Reste (DH)", "Statut", "Moyen", "Payé le", "Note"],
       ...[...paiements]
         .sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
         .map((p) => [
-          mois,
+          semaine,
           p.nom,
           personneDe(p)?.repas ?? "",
-          personneDe(p)?.semaines.length ?? "",
+          personneDe(p)?.semaines[0] ? `${personneDe(p)!.semaines[0].formule} repas/j` : "",
           p.montant,
           p.montant_manuel ? "Modifié à la main" : offres.has(cleDe(p)) ? "Offre" : "Tarif",
           p.recu,
@@ -202,7 +208,7 @@ export function PaiementsClient({
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `paiements-chef2box-${mois}.csv`;
+    a.download = `paiements-chef2box-semaine-${semaine}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
@@ -219,17 +225,20 @@ export function PaiementsClient({
         </div>
         <div className="flex items-center gap-1 pb-1">
           <Link
-            href={`/admin/paiements?mois=${decalerMois(mois, -1)}`}
+            href={`/admin/paiements?semaine=${decalerDate(semaine, -7)}`}
             className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
-            aria-label="Mois précédent"
+            aria-label="Semaine précédente"
           >
             <ChevronLeft size={20} />
           </Link>
-          <span className="min-w-[120px] text-center text-sm font-bold text-c2b-green">{libelleMois(mois)}</span>
+          <span className="min-w-[120px] text-center text-sm font-bold leading-tight text-c2b-green">
+            Semaine
+            <span className="block text-xs font-semibold">{libelleSemaine(semaine)}</span>
+          </span>
           <Link
-            href={`/admin/paiements?mois=${decalerMois(mois, 1)}`}
+            href={`/admin/paiements?semaine=${decalerDate(semaine, 7)}`}
             className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
-            aria-label="Mois suivant"
+            aria-label="Semaine suivante"
           >
             <ChevronRight size={20} />
           </Link>
@@ -240,7 +249,7 @@ export function PaiementsClient({
         <Link href="/admin/cuisine" className="font-semibold text-c2b-green underline">
           Cuisine
         </Link>{" "}
-        → <strong className="text-c2b-green">Paiements</strong> : chaque personne de la fiche cuisine du mois a sa ligne.
+        → <strong className="text-c2b-green">Paiements</strong> : chaque personne de la fiche cuisine de la semaine a sa ligne. Chaque lundi, on repart à zéro.
       </p>
 
       {/* Totaux */}
@@ -294,7 +303,7 @@ export function PaiementsClient({
                 <Link href="/admin/cuisine" className="font-bold text-c2b-green underline">
                   fiche cuisine
                 </Link>{" "}
-                ce mois-ci.
+                cette semaine.
               </>
             )}
           </p>
@@ -427,7 +436,7 @@ export function PaiementsClient({
                         </label>
                       </div>
                       <p className="mt-1 text-[11px] text-c2b-muted">
-                        L&apos;offre remplace le tarif de chaque semaine, ce mois-ci et les suivants. Videz la case pour l&apos;enlever.
+                        L&apos;offre remplace le tarif, cette semaine et les suivantes. Videz la case pour l&apos;enlever.
                       </p>
                     </div>
                   )}
@@ -485,7 +494,7 @@ export function PaiementsClient({
                     {!paye && reste(p) > 0 && numero ? (
                       <a
                         href={`https://wa.me/${numero}?text=${encodeURIComponent(
-                          `Bonjour ${p.nom.split(/\s+/)[0]} ! Petit rappel pour le règlement Chef2Box de ${libelleMois(mois).toLowerCase()} : ${dh(reste(p))}. Merci beaucoup 🙏`
+                          `Bonjour ${p.nom.split(/\s+/)[0]} ! Petit rappel pour le règlement Chef2Box de la semaine ${libelleSemaine(semaine)} : ${dh(reste(p))}. Merci beaucoup 🙏`
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -541,14 +550,14 @@ export function PaiementsClient({
           ))}
         </div>
         <p className="mt-2 text-[11px] text-c2b-muted">
-          Chaque semaine où la personne est sur la fiche cuisine compte une formule (2 repas si midi et soir). Une semaine compte
-          dans le mois de son lundi. Les montants modifiés à la main ne bougent pas.
+          Une formule par semaine pour chaque personne de la fiche cuisine (2 repas si midi et soir un même jour). Les montants
+          modifiés à la main ne bougent pas.
         </p>
       </section>
 
-      {/* Comptabilité du mois */}
+      {/* Comptabilité de la semaine */}
       <section className="carte p-4">
-        <h2 className="font-serif text-2xl text-c2b-green">Comptabilité · {libelleMois(mois)}</h2>
+        <h2 className="font-serif text-2xl text-c2b-green">Comptabilité · semaine {libelleSemaine(semaine)}</h2>
         <dl className="mt-3 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <dt className="text-c2b-muted">Chiffre d&apos;affaires attendu</dt>
@@ -575,6 +584,19 @@ export function PaiementsClient({
             <dd className="font-bold tabular-nums text-red-700">{dh(totalReste)}</dd>
           </div>
         </dl>
+        {autresSemainesDuMois.semaines > 0 && (
+          <div className="mt-3 rounded-xl bg-c2b-cream/60 px-3 py-2 text-xs">
+            <p className="font-bold text-c2b-green">
+              Mois de {libelleMois(semaine)} ({autresSemainesDuMois.semaines + 1} semaines)
+            </p>
+            <p className="mt-0.5 flex justify-between">
+              <span className="text-c2b-muted">Encaissé / attendu</span>
+              <span className="tabular-nums font-semibold">
+                {dh(autresSemainesDuMois.encaisse + totalPaye)} / {dh(autresSemainesDuMois.du + totalDu)}
+              </span>
+            </p>
+          </div>
+        )}
         {sansMontant > 0 && (
           <p className="mt-2 text-xs text-amber-700">
             {sansMontant} ligne{sansMontant > 1 ? "s" : ""} sans montant : pas encore comptée{sansMontant > 1 ? "s" : ""}.
@@ -585,7 +607,7 @@ export function PaiementsClient({
           disabled={!paiements.length}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 bg-white py-2.5 text-sm font-bold text-c2b-green disabled:opacity-40"
         >
-          <Download size={15} /> Exporter le mois (Excel / CSV)
+          <Download size={15} /> Exporter la semaine (Excel / CSV)
         </button>
       </section>
     </main>

@@ -1,27 +1,40 @@
 import { exigerAdmin } from "@/lib/admin";
 import { PaiementsClient, type Paiement, type PersonneMois } from "@/app/(espace)/admin/paiements/PaiementsClient";
-import { dateDuJour } from "@/lib/dates";
-import { completerTarifs, montantAuto, periodeDuMois, semainesDe, type Tarifs } from "@/lib/paiements";
+import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
+import { completerTarifs, lundiDe, montantAuto, semainesDe, type Tarifs } from "@/lib/paiements";
 
 export const dynamic = "force-dynamic";
 
 const COLONNES = "id, nom, client_id, montant, montant_manuel, recu, moyen, paye_le, note";
 
-// Paiements d'un mois : qui a payé, combien reste à encaisser.
-// Cuisine → Paiements : chaque personne de la fiche cuisine du
-// mois a sa ligne, créée automatiquement. Montant calculé à la semaine
-// (formule 1 ou 2 repas par jour, ou offre de la personne), modifiable à la main.
-export default async function PaiementsPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {
+// Paiements de la semaine (du lundi au vendredi) : qui a payé, combien reste
+// à encaisser. Cuisine → Paiements : chaque personne de la fiche cuisine de la
+// semaine a sa ligne, créée automatiquement. Montant de la formule (1 ou 2
+// repas par jour, ou offre de la personne), modifiable à la main.
+// Par défaut : la semaine en cours ; le week-end, celle qui commence lundi.
+export default async function PaiementsPage({ searchParams }: { searchParams: Promise<{ semaine?: string }> }) {
   const { supabase } = await exigerAdmin();
-  const { mois: moisDemande } = await searchParams;
+  const { semaine: semaineDemandee } = await searchParams;
   const aujourdhui = dateDuJour();
-  const mois = /^\d{4}-(0[1-9]|1[0-2])$/.test(moisDemande ?? "") ? moisDemande! : aujourdhui.slice(0, 7);
-  const debutMois = `${mois}-01`;
-  const periode = periodeDuMois(mois);
+  const jour = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
+  const semaineParDefaut = jour === 0 || jour === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
+  const semaine = estDateValide(semaineDemandee) ? lundiDe(semaineDemandee) : semaineParDefaut;
+  const periode = { debut: semaine, fin: decalerDate(semaine, 4) };
+  // Récapitulatif du mois : semaines dont le lundi tombe dans ce mois.
+  const mois = semaine.slice(0, 7);
+  const [an, m] = mois.split("-").map(Number);
+  const moisSuivant = new Date(Date.UTC(an, m, 1)).toISOString().slice(0, 10);
 
-  const [{ data: paiementsExistants }, { data: clients }, { data: commandes }, { data: extras }, { data: parametre }, { data: offres }] =
-    await Promise.all([
-      supabase.from("application_paiements").select(COLONNES).eq("mois", debutMois).order("nom").returns<Paiement[]>(),
+  const [
+    { data: paiementsExistants },
+    { data: clients },
+    { data: commandes },
+    { data: extras },
+    { data: parametre },
+    { data: offres },
+    { data: lignesDuMois },
+  ] = await Promise.all([
+      supabase.from("application_paiements").select(COLONNES).eq("semaine", semaine).order("nom").returns<Paiement[]>(),
       supabase
         .from("application_clients")
         .select("id, nom, telephone")
@@ -47,6 +60,13 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         .from("application_tarifs_perso")
         .select("cle, prix_semaine, note")
         .returns<{ cle: string; prix_semaine: number; note: string | null }[]>(),
+      supabase
+        .from("application_paiements")
+        .select("semaine, montant, recu")
+        .gte("semaine", `${mois}-01`)
+        .lt("semaine", moisSuivant)
+        .neq("semaine", semaine)
+        .returns<{ semaine: string; montant: number; recu: number }[]>(),
     ]);
   const tarifs = completerTarifs(parametre?.valeur);
   const offreDe = new Map((offres ?? []).map((o) => [o.cle, { prix: Number(o.prix_semaine), note: o.note }]));
@@ -98,7 +118,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
     paiements = paiements.map((p) => (nouveaux.has(p.id) ? { ...p, montant: nouveaux.get(p.id)! } : p));
   }
 
-  // Personnes de la fiche cuisine sans ligne ce mois : ajoutées (sans
+  // Personnes de la fiche cuisine sans ligne cette semaine : ajoutées (sans
   // doublon, même si la page est ouverte deux fois en même temps).
   const presentes = new Set(paiements.map(cleDe));
   const manquantes = personnes.filter((x) => !presentes.has(x.cle));
@@ -106,8 +126,8 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
     const { data: ajoutees } = await supabase
       .from("application_paiements")
       .upsert(
-        manquantes.map((x) => ({ mois: debutMois, nom: x.nom.slice(0, 80), client_id: x.clientId, montant: x.montantAuto })),
-        { onConflict: "mois,cle", ignoreDuplicates: true }
+        manquantes.map((x) => ({ semaine, nom: x.nom.slice(0, 80), client_id: x.clientId, montant: x.montantAuto })),
+        { onConflict: "semaine,cle", ignoreDuplicates: true }
       )
       .select(COLONNES)
       .returns<Paiement[]>();
@@ -117,8 +137,13 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <PaiementsClient
-        key={mois}
-        mois={mois}
+        key={semaine}
+        semaine={semaine}
+        autresSemainesDuMois={{
+          semaines: new Set((lignesDuMois ?? []).map((l) => l.semaine)).size,
+          du: (lignesDuMois ?? []).reduce((t, l) => t + Number(l.montant), 0),
+          encaisse: (lignesDuMois ?? []).reduce((t, l) => t + Math.min(Number(l.recu), Number(l.montant) || Number(l.recu)), 0),
+        }}
         aujourdhui={aujourdhui}
         paiementsInitiaux={paiements}
         personnes={personnes}
