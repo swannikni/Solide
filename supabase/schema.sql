@@ -1482,3 +1482,20 @@ alter table public.application_paiements add constraint application_paiements_se
 alter table public.application_paiements alter column mois drop not null;
 create unique index if not exists application_paiements_semaine_cle_idx on public.application_paiements (semaine, cle);
 create index if not exists application_paiements_client_idx on public.application_paiements (client_id);
+
+-- ============ DÉPENSES ============
+-- Dépenses de l'activité (admin seulement), pour le bénéfice du bilan du mois.
+create table if not exists public.application_depenses (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  categorie text not null check (categorie in ('courses', 'emballage', 'livraison', 'marketing', 'autres')),
+  montant numeric(10,2) not null check (montant > 0 and montant < 1000000),
+  libelle text check (libelle is null or char_length(libelle) <= 120),
+  moyen text check (moyen is null or moyen in ('especes', 'virement', 'carte', 'autre')),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_depenses_date_idx on public.application_depenses (date);
+alter table public.application_depenses enable row level security;
+drop policy if exists "depenses_admin" on public.application_depenses;
+create policy "depenses_admin" on public.application_depenses
+  for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());

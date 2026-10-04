@@ -2,6 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { BilanClient, type LigneBilan } from "@/app/(espace)/admin/paiements/bilan/BilanClient";
 import { dateDuJour } from "@/lib/dates";
 import { periodeDuMois } from "@/lib/paiements";
+import type { CategorieDepense } from "@/lib/depenses";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function BilanPage({ searchParams }: { searchParams: Promis
   const precedent = moisPrecedent(mois);
   const periode = periodeDuMois(mois);
 
-  const [{ data: lignes }, { data: lignesPrecedent }, { data: extras }, { data: commandes }] = await Promise.all([
+  const [{ data: lignes }, { data: lignesPrecedent }, { data: extras }, { data: commandes }, { data: depenses }] = await Promise.all([
     supabase
       .from("application_paiements")
       .select("semaine, nom, montant, recu, moyen, montant_manuel")
@@ -54,6 +55,13 @@ export default async function BilanPage({ searchParams }: { searchParams: Promis
       .neq("statut", "annulee")
       .limit(20000)
       .returns<{ date_livraison: string; repas_type: "dejeuner" | "diner" }[]>(),
+    // Dépenses du mois (dates du mois).
+    supabase
+      .from("application_depenses")
+      .select("categorie, montant")
+      .gte("date", `${mois}-01`)
+      .lt("date", `${moisSuivant(mois)}-01`)
+      .returns<{ categorie: CategorieDepense; montant: number }[]>(),
   ]);
 
   // Week-end exclu, comme les formules.
@@ -83,6 +91,7 @@ export default async function BilanPage({ searchParams }: { searchParams: Promis
           encaisse: prec.reduce((t, l) => t + Math.min(l.recu, l.montant || l.recu), 0),
         }}
         lundis={periode.lundis}
+        depenses={(depenses ?? []).map((d) => ({ categorie: d.categorie, montant: Number(d.montant) }))}
       />
     </div>
   );

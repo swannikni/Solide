@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Download, Share2 } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { decalerDate } from "@/lib/dates";
+import { PaiementsOnglets } from "@/app/(espace)/admin/paiements/PaiementsOnglets";
+import { CATEGORIES, type CategorieDepense } from "@/lib/depenses";
 
 export interface LigneBilan {
   semaine: string;
@@ -44,6 +46,7 @@ export function BilanClient({
   repasSoir,
   precedent,
   lundis,
+  depenses,
 }: {
   mois: string;
   moisEnCours: boolean;
@@ -52,7 +55,13 @@ export function BilanClient({
   repasSoir: number;
   precedent: { mois: string; du: number; encaisse: number };
   lundis: string[];
+  depenses: { categorie: CategorieDepense; montant: number }[];
 }) {
+  const totalDepenses = depenses.reduce((t, d) => t + d.montant, 0);
+  const depensesParCategorie = CATEGORIES.map((c) => ({
+    ...c,
+    total: depenses.filter((d) => d.categorie === c.cle).reduce((t, d) => t + d.montant, 0),
+  })).filter((c) => c.total > 0);
   const du = lignes.reduce((t, l) => t + attendu(l), 0);
   const recu = lignes.reduce((t, l) => t + encaisse(l), 0);
   const resteTotal = lignes.reduce((t, l) => t + reste(l), 0);
@@ -100,6 +109,8 @@ export function BilanClient({
     `Encaissé : *${dh(recu)}* sur ${dh(du)} attendus (${taux} %)`,
     `Reste à encaisser : ${dh(resteTotal)}`,
     `${clients} clients · ${formulesVendues} formules · ${repasMidi + repasSoir} repas préparés`,
+    `Dépenses : ${dh(totalDepenses)}`,
+    `*Bénéfice : ${dh(recu - totalDepenses)}*${recu > 0 ? ` (marge ${Math.round(((recu - totalDepenses) / recu) * 100)} %)` : ""}`,
     evolution !== null ? `Évolution vs ${nomMois(precedent.mois, false).toLowerCase()} : ${evolution >= 0 ? "+" : ""}${evolution} %` : "",
   ]
     .filter(Boolean)
@@ -172,15 +183,49 @@ export function BilanClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Link href="/admin/paiements" className="rounded-full border border-c2b-green/15 bg-white py-2.5 text-center text-sm font-bold text-c2b-green">
-          Par semaine
-        </Link>
-        <span className="rounded-full bg-c2b-green py-2.5 text-center text-sm font-bold text-c2b-cream">Bilan du mois</span>
-      </div>
+      <PaiementsOnglets actif="bilan" mois={mois} />
 
       {moisEnCours && (
         <p className="-mt-1 text-xs text-c2b-muted">Mois en cours : le bilan se met à jour à chaque paiement coché.</p>
+      )}
+
+      {/* Bénéfice : encaissé − dépenses */}
+      {(lignes.length > 0 || totalDepenses > 0) && (
+        <section className="carte p-4">
+          <p className={`text-[11px] font-bold uppercase tracking-wider ${recu - totalDepenses >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+            Bénéfice {moisEnCours ? "à ce jour" : "du mois"}
+          </p>
+          <p className={`mt-1 font-serif text-[34px] leading-none ${recu - totalDepenses >= 0 ? "text-emerald-800" : "text-red-700"}`}>
+            {dh(recu - totalDepenses)}
+          </p>
+          <dl className="mt-3 space-y-1 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-c2b-muted">Encaissé</dt>
+              <dd className="tabular-nums font-semibold text-emerald-700">+ {dh(recu)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-c2b-muted">Dépenses</dt>
+              <dd className="tabular-nums font-semibold text-red-700">− {dh(totalDepenses)}</dd>
+            </div>
+            {depensesParCategorie.map((c) => (
+              <div key={c.cle} className="flex justify-between pl-4 text-xs">
+                <dt className="text-c2b-muted">
+                  {c.emoji} {c.libelle}
+                </dt>
+                <dd className="tabular-nums">{dh(c.total)}</dd>
+              </div>
+            ))}
+            {recu > 0 && (
+              <div className="flex justify-between border-t border-black/5 pt-1">
+                <dt className="font-bold text-c2b-green">Marge</dt>
+                <dd className="tabular-nums font-bold text-c2b-green">{Math.round(((recu - totalDepenses) / recu) * 100)} %</dd>
+              </div>
+            )}
+          </dl>
+          <Link href={`/admin/paiements/depenses?mois=${mois}`} className="mt-2 block text-sm font-semibold text-c2b-gold">
+            {totalDepenses > 0 ? "Voir les dépenses →" : "Ajouter les dépenses du mois →"}
+          </Link>
+        </section>
       )}
 
       {lignes.length === 0 ? (

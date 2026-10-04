@@ -7,6 +7,7 @@ import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { montantAuto, prixSemaine, type SemaineRepas, type Tarifs } from "@/lib/paiements";
 import { decalerDate } from "@/lib/dates";
+import { PaiementsOnglets } from "@/app/(espace)/admin/paiements/PaiementsOnglets";
 
 export interface Paiement {
   id: string;
@@ -245,15 +246,7 @@ export function PaiementsClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <span className="rounded-full bg-c2b-green py-2.5 text-center text-sm font-bold text-c2b-cream">Par semaine</span>
-        <Link
-          href={`/admin/paiements/bilan?mois=${semaine.slice(0, 7)}`}
-          className="rounded-full border border-c2b-green/15 bg-white py-2.5 text-center text-sm font-bold text-c2b-green"
-        >
-          Bilan du mois
-        </Link>
-      </div>
+      <PaiementsOnglets actif="semaine" mois={semaine.slice(0, 7)} semaine={semaine} />
 
       <p className="-mt-2 text-sm text-c2b-muted">
         <Link href="/admin/cuisine" className="font-semibold text-c2b-green underline">
