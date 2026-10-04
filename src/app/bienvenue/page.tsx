@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
+import { MESSAGE_PIRATE, motDePassePirate } from "@/lib/mot-de-passe";
 
 // Première connexion (ou code provisoire renvoyé par l'admin) :
 // le client choisit son propre mot de passe.
@@ -25,6 +26,10 @@ export default function BienvenuePage() {
     if (motDePasse !== confirmation) return setErreur("Les deux mots de passe ne sont pas identiques.");
 
     setEnCours(true);
+    if (await motDePassePirate(motDePasse)) {
+      setEnCours(false);
+      return setErreur(MESSAGE_PIRATE);
+    }
     const { error } = await supabase.auth.updateUser({ password: motDePasse, data: { doit_choisir_mdp: false } });
     setEnCours(false);
     if (error) {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Eye, EyeOff, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { MESSAGE_PIRATE, motDePassePirate } from "@/lib/mot-de-passe";
 import { FormulaireProfil, depuisProfil, versProfil, type ProfilSaisi } from "@/components/FormulaireProfil";
 import { RappelSoir } from "@/components/RappelSoir";
 import { calculerObjectifs, profilComplet } from "@/lib/objectifs";
@@ -139,6 +140,10 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
     if (mdp.nouveau.length < 8) return setMsgMdp("8 caractères minimum.");
     if (mdp.nouveau !== mdp.confirmation) return setMsgMdp("Les deux mots de passe ne sont pas identiques.");
     setEnCours(true);
+    if (await motDePassePirate(mdp.nouveau)) {
+      setEnCours(false);
+      return setMsgMdp(MESSAGE_PIRATE);
+    }
     const { error } = await supabase.auth.updateUser({ password: mdp.nouveau });
     setEnCours(false);
     if (error) {
