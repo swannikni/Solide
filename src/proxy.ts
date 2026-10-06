@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { JWKS } from "@/lib/supabase/jwks";
 
 // /api/questionnaire : reçoit les questionnaires envoyés depuis chef2box.com.
-const PUBLIC_PATHS = ["/login", "/api/questionnaire", "/confidentialite", "/conditions"];
+const PUBLIC_PATHS = ["/login", "/inscription", "/api/inscription", "/api/questionnaire", "/confidentialite", "/conditions"];
 
 interface CookieAEcrire {
   name: string;
@@ -61,6 +61,14 @@ export async function proxy(request: NextRequest) {
     url.search = "";
     const suite = chemin + request.nextUrl.search;
     if (suite !== "/") url.searchParams.set("suite", suite);
+    return NextResponse.redirect(url);
+  }
+
+  // Inscription libre : questionnaire de profil (objectifs) avant le reste.
+  if (user?.user_metadata?.doit_completer_profil && !isPublic && !chemin.startsWith("/bienvenue") && !chemin.startsWith("/api")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/bienvenue/profil";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

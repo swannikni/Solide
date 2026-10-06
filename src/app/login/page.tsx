@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -98,8 +99,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-[13px] text-c2b-muted mt-5">
-          Pas encore de compte ?{" "}
+        <Link
+          href="/inscription"
+          className="mt-4 block w-full rounded-full border-2 border-c2b-green py-3.5 text-center text-sm font-bold text-c2b-green"
+        >
+          Pas encore de compte ? Créer mon compte
+        </Link>
+        <p className="text-center text-[13px] text-c2b-muted mt-4">
+          Une question ?{" "}
           <a href="https://wa.me/212660831640" target="_blank" rel="noreferrer" className="font-semibold text-c2b-green underline-offset-2 hover:underline">
             Écrivez-nous sur WhatsApp
           </a>
