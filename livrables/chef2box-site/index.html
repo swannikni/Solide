@@ -321,6 +321,11 @@ h2.ttl.inv { color: var(--cream); }
 .repas-info { position: absolute; bottom: 0; left: 0; right: 0; padding: 20px 20px; }
 .repas-n { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
 .repas-m { font-size: 12px; color: rgba(255,255,255,0.6); }
+.repas-cta { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; padding: 22px; text-decoration: none; transition: background 0.2s; }
+.repas-cta:hover { background: var(--green-mid); }
+.repas-cta-l { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--gold-light); }
+.repas-cta-t { font-family: 'Bebas Neue', sans-serif; font-size: 34px; line-height: 1; letter-spacing: 1px; color: #fff; }
+.repas-cta-b { margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--gold-light); }
 .repas-note { text-align: center; margin-top: 20px; font-size: 13px; color: #aaa; font-style: italic; }
 
 /* ── FORMULES ── */
@@ -488,6 +493,10 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
   /* — Repas — */
   .repas-grid { grid-template-columns: 1fr 1fr !important; gap: 8px; }
   .repas-card { aspect-ratio: 4/3 !important; }
+  .repas-cta { padding: 14px; gap: 4px; }
+  .repas-cta-l { font-size: 9px; letter-spacing: 1.5px; }
+  .repas-cta-t { font-size: 26px; }
+  .repas-cta-b { font-size: 12px; margin-top: 2px; }
 
   /* — Formules — */
   .formules { grid-template-columns: 1fr; max-width: 100%; }
@@ -813,17 +822,17 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
   <p class="sub">Des recettes conçues pour allier plaisir et performance.</p>
   <div class="repas-grid">
     <div class="repas-card">
-      <img src="images/plat-poulet-grille.jpg" alt="Poulet grillé, riz, salade grecque & tzatziki" loading="lazy">
-      <div class="repas-grad"></div>
-      <div class="repas-info">
-        <div class="repas-n">Poulet grillé, riz & salade grecque</div>
-      </div>
-    </div>
-    <div class="repas-card">
       <img src="images/plat-crevettes-mangue.jpg" alt="Crevettes, riz & salsa mangue-avocat" loading="lazy">
       <div class="repas-grad"></div>
       <div class="repas-info">
         <div class="repas-n">Crevettes, riz & salsa mangue</div>
+      </div>
+    </div>
+    <div class="repas-card">
+      <img src="images/plat-poulet-croustillant.jpg" alt="Riz sauté, poulet croustillant, œuf & citron vert" loading="lazy">
+      <div class="repas-grad"></div>
+      <div class="repas-info">
+        <div class="repas-n">Riz sauté, poulet croustillant & œuf</div>
       </div>
     </div>
     <div class="repas-card">
@@ -834,10 +843,10 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
       </div>
     </div>
     <div class="repas-card">
-      <img src="images/plat-poulet-croustillant.jpg" alt="Riz sauté, poulet croustillant, œuf & citron vert" loading="lazy">
+      <img src="images/plat-poulet-houmous.jpg" alt="Bowl poulet, houmous, œuf mollet & crudités" loading="lazy">
       <div class="repas-grad"></div>
       <div class="repas-info">
-        <div class="repas-n">Riz sauté, poulet croustillant & œuf</div>
+        <div class="repas-n">Bowl poulet, houmous & œuf</div>
       </div>
     </div>
     <div class="repas-card">
@@ -861,13 +870,11 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
         <div class="repas-n">Linguine aux boulettes</div>
       </div>
     </div>
-    <div class="repas-card">
-      <img src="images/plat-poulet-houmous.jpg" alt="Bowl poulet, houmous, œuf mollet & crudités" loading="lazy">
-      <div class="repas-grad"></div>
-      <div class="repas-info">
-        <div class="repas-n">Bowl poulet, houmous & œuf</div>
-      </div>
-    </div>
+    <a href="#formules" class="repas-card repas-cta">
+      <span class="repas-cta-l">Chaque semaine</span>
+      <span class="repas-cta-t">Un nouveau menu</span>
+      <span class="repas-cta-b">Voir les formules →</span>
+    </a>
   </div>
   <p class="repas-note">Le menu tourne chaque semaine — voici un aperçu.</p>
 </div>
