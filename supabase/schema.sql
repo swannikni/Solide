@@ -1499,3 +1499,7 @@ alter table public.application_depenses enable row level security;
 drop policy if exists "depenses_admin" on public.application_depenses;
 create policy "depenses_admin" on public.application_depenses
   for all to authenticated using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- Limites IA actuelles : assistant 20 questions/jour/personne ; photo du plat
+-- mise de côté (0) ; étiquette 5 ; total appli 500/jour.
+update public.application_parametres set valeur = valeur || '{"assistant": 20, "plat": 0}'::jsonb where cle = 'ia_limites';

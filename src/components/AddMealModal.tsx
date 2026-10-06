@@ -15,6 +15,8 @@ import { BUCKET_PHOTOS } from "@/lib/photos";
 import { reduirePhoto } from "@/lib/image";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
+import { PHOTO_ASSIETTE_ACTIVE, SCAN_ETIQUETTE_CHEF2BOX_ACTIVE } from "@/lib/fonctions";
+
 
 type Etape =
   | "choix"
@@ -1228,6 +1230,7 @@ export function AddMealModal({
                 </div>
               </button>
 
+              {SCAN_ETIQUETTE_CHEF2BOX_ACTIVE && (
               <button
                 onClick={() => setEtape("scan_chef2box")}
                 className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
@@ -1238,6 +1241,7 @@ export function AddMealModal({
                   <p className="text-xs text-c2b-muted">Macros exactes, ajout instantané</p>
                 </div>
               </button>
+              )}
 
               <button
                 onClick={() => setEtape("scan_barcode")}
@@ -1250,7 +1254,7 @@ export function AddMealModal({
                 </div>
               </button>
 
-              {iaActive && (
+              {iaActive && PHOTO_ASSIETTE_ACTIVE && (
                 <label className="carte w-full flex items-center gap-4 p-5 text-left transition hover:border-c2b-gold/40 cursor-pointer">
                   <Camera className="text-c2b-green" />
                   <div className="flex-1">
