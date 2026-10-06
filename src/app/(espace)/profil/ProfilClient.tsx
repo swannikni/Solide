@@ -9,6 +9,7 @@ import { MESSAGE_PIRATE, motDePassePirate } from "@/lib/mot-de-passe";
 import { FormulaireProfil, depuisProfil, versProfil, type ProfilSaisi } from "@/components/FormulaireProfil";
 import { RappelSoir } from "@/components/RappelSoir";
 import { calculerObjectifs, profilComplet } from "@/lib/objectifs";
+import { BadgePremium, OffrePremium } from "@/components/OffrePremium";
 import type { Client } from "@/lib/types";
 
 type Macros = { calories: string; proteines: string; glucides: string; lipides: string };
@@ -185,7 +186,20 @@ export function ProfilClient({ client, email }: { client: Client; email: string 
           Mon <em>profil</em>
         </h1>
         <p className="text-sm text-c2b-muted mt-1">{email}</p>
+        {(client.premium || client.est_admin) && (
+          <div className="mt-2">
+            <BadgePremium />
+          </div>
+        )}
       </div>
+
+      {!client.premium && !client.est_admin && (
+        <OffrePremium
+          palier={client.palier}
+          titre="Passez au niveau Chef2Box"
+          texte="Avec les box : messagerie avec l'équipe, 20 questions par jour à l'assistant (au lieu de 5), vos plats Chef2Box ajoutés en un geste et le bilan détaillé de la semaine."
+        />
+      )}
 
       <section className="carte p-5">
         <h2 className="font-serif text-xl text-c2b-green">Mes objectifs du jour</h2>

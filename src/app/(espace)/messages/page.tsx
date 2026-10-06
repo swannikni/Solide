@@ -1,5 +1,6 @@
 import { exigerSession } from "@/lib/session";
 import { MessagesThread } from "@/components/MessagesThread";
+import { OffrePremium } from "@/components/OffrePremium";
 import { AdminMessagesClient } from "@/app/(espace)/messages/AdminMessagesClient";
 import type { Client, Message } from "@/lib/types";
 
@@ -52,6 +53,18 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           expediteurActuel="client"
           messagesInitiaux={messages ?? []}
           className="flex-1 min-h-0"
+          saisie={
+            moi.premium ? undefined : (
+              <div className="border-t border-black/5 bg-c2b-cream p-3">
+                <OffrePremium
+                  compact
+                  palier={moi.palier}
+                  titre="Échangez directement avec l'équipe Chef2Box"
+                  texte="Conseils, questions sur vos repas, ajustement de vos objectifs : la messagerie est incluse avec les box."
+                />
+              </div>
+            )
+          }
         />
       </main>
     </div>

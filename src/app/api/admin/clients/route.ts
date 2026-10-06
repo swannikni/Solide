@@ -92,6 +92,7 @@ export async function POST(request: Request) {
     objectif_proteines: proteines,
     objectif_glucides: glucides,
     objectif_lipides: lipides,
+    premium: true, // créé par l'admin : client Chef2Box
   });
   if (erreurFiche) {
     await admin.auth.admin.deleteUser(cree.user.id);

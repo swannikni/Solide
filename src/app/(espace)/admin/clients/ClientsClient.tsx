@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
@@ -102,6 +102,21 @@ export function ClientsClient({
   const [erreur, setErreur] = useState("");
   const [acces, setAcces] = useState<Acces | null>(null);
   const [copie, setCopie] = useState(false);
+  const [filtre, setFiltre] = useState<"tous" | "premium" | "gratuits">("tous");
+  const nbPremium = clients.filter((c) => c.premium).length;
+  const clientsAffiches = clients.filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true));
+
+  // Client Chef2Box (Premium) : messagerie, assistant 20/jour, « Mon plat », bilan.
+  async function basculerPremium(c: Client) {
+    const premium = !c.premium;
+    if (!premium && !confirm(`Retirer le Premium de ${c.nom} ? Il ne pourra plus vous écrire et aura 5 questions par jour à l'assistant.`)) return;
+    setClients((prev) => prev.map((x) => (x.id === c.id ? { ...x, premium } : x)));
+    const { error } = await supabase.from("application_clients").update({ premium }).eq("id", c.id);
+    if (error) {
+      setClients((prev) => prev.map((x) => (x.id === c.id ? { ...x, premium: c.premium } : x)));
+      setErreur("Changement impossible, réessayez.");
+    }
+  }
 
   function ouvrirNouveau() {
     setErreur("");
@@ -405,7 +420,26 @@ export function ClientsClient({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {clients.map((c) => (
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ["tous", `Tous (${clients.length})`],
+                ["premium", `Premium (${nbPremium})`],
+                ["gratuits", `Gratuits (${clients.length - nbPremium})`],
+              ] as const
+            ).map(([f, libelle]) => (
+              <button
+                key={f}
+                onClick={() => setFiltre(f)}
+                className={`rounded-full py-2 text-[13px] font-bold ${
+                  filtre === f ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
+                }`}
+              >
+                {libelle}
+              </button>
+            ))}
+          </div>
+          {clientsAffiches.map((c) => (
             <div key={c.id} className="carte p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -416,6 +450,16 @@ export function ClientsClient({
                   <p className="text-xs text-c2b-muted truncate">
                     {[emailsConnus[c.id], c.telephone].filter(Boolean).join(" · ") || "—"}
                   </p>
+                  <button
+                    onClick={() => basculerPremium(c)}
+                    className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                      c.premium ? "bg-c2b-gold/15 text-c2b-gold" : "border border-c2b-green/15 bg-white text-c2b-muted"
+                    }`}
+                    aria-pressed={!!c.premium}
+                    title={c.premium ? "Retirer le Premium" : "Passer en Premium (client Chef2Box)"}
+                  >
+                    <Crown size={12} /> {c.premium ? "Premium" : "Gratuit · passer Premium"}
+                  </button>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   <button

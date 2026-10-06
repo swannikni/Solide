@@ -11,12 +11,15 @@ export function MessagesThread({
   expediteurActuel,
   messagesInitiaux,
   className = "h-[calc(100dvh-160px)]",
+  saisie,
 }: {
   clientId: string;
   expediteurActuel: "client" | "admin";
   messagesInitiaux: Message[];
   // Hauteur de la conversation (la liste défile à l'intérieur, pas la page).
   className?: string;
+  // Remplace la zone de saisie (ex. utilisateur gratuit : offre Chef2Box).
+  saisie?: React.ReactNode;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -83,7 +86,7 @@ export function MessagesThread({
       <div ref={listeRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-2">
         {messages.length === 0 && (
           <p className="text-sm text-c2b-muted italic text-center mt-8">
-            Aucun message pour l'instant. Dites bonjour !
+            {saisie ? "Aucun message pour l'instant." : "Aucun message pour l'instant. Dites bonjour !"}
           </p>
         )}
         {messages.map((m, i) => {
@@ -112,21 +115,23 @@ export function MessagesThread({
         })}
       </div>
 
-      <div className="border-t border-black/5 p-3 flex gap-2 bg-c2b-cream">
-        <input
-          value={texte}
-          onChange={(e) => setTexte(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && envoyer()}
-          placeholder="Votre message..."
-          className="champ flex-1 rounded-full px-5"
-        />
-        <button
-          onClick={envoyer}
-          className="w-12 h-12 rounded-full bg-c2b-green hover:bg-c2b-green-mid text-white flex items-center justify-center flex-shrink-0 transition"
-        >
-          <Send size={16} />
-        </button>
-      </div>
+      {saisie ?? (
+        <div className="border-t border-black/5 p-3 flex gap-2 bg-c2b-cream">
+          <input
+            value={texte}
+            onChange={(e) => setTexte(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && envoyer()}
+            placeholder="Votre message..."
+            className="champ flex-1 rounded-full px-5"
+          />
+          <button
+            onClick={envoyer}
+            className="w-12 h-12 rounded-full bg-c2b-green hover:bg-c2b-green-mid text-white flex items-center justify-center flex-shrink-0 transition"
+          >
+            <Send size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

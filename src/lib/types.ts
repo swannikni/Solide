@@ -12,6 +12,8 @@ export interface Client {
   objectif_glucides: number;
   objectif_lipides: number;
   est_admin: boolean;
+  // Client Chef2Box (box) : messagerie, assistant 20/jour, « Mon plat », bilan de la semaine.
+  premium?: boolean;
   profil?: import("@/lib/objectifs").Profil | null;
   poids_objectif?: number | null;
   // Fiche cuisine (admin) : allergies, aliments refusés, repas pris d'habitude.

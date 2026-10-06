@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check, Sparkles } from "lucide-react";
+import { X, QrCode, Barcode, PenLine, Camera, Search, Loader2, Star, History, UtensilsCrossed, Pencil, Trash2, Plus, Check, Sparkles, Crown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scanner } from "@/components/Scanner";
 import { Pastille } from "@/components/Pastille";
@@ -16,6 +16,7 @@ import { reduirePhoto } from "@/lib/image";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS } from "@/lib/macros";
 import type { Aliment, ElementRepas, Favori, ProduitRestaurant, RepasJournal, RepasType, SourceRepas } from "@/lib/types";
 import { PHOTO_ASSIETTE_ACTIVE, SCAN_ETIQUETTE_CHEF2BOX_ACTIVE } from "@/lib/fonctions";
+import { lienCommande } from "@/components/OffrePremium";
 
 
 type Etape =
@@ -166,6 +167,7 @@ export function AddMealModal({
   onClose,
   onAjoute,
   iaActive = false,
+  premium = true,
 }: {
   clientId: string;
   date: string;
@@ -177,6 +179,8 @@ export function AddMealModal({
   onAjoute: () => void;
   // Clé Anthropic configurée : lecture d'étiquette et photo du plat.
   iaActive?: boolean;
+  // Client Chef2Box : « Mon plat Chef2Box » disponible (sinon offre).
+  premium?: boolean;
 }) {
   const supabase = createClient();
   const [etape, setEtape] = useState<Etape>(prefillTrouve ? "confirmation" : "choix");
@@ -1219,16 +1223,33 @@ export function AddMealModal({
           )}
           {etape === "choix" && (
             <div className="space-y-3">
-              <button
-                onClick={ouvrirMonPlat}
-                className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
-              >
-                <UtensilsCrossed className="text-c2b-gold" />
-                <div>
-                  <p className="font-bold text-c2b-green">Mon plat Chef2Box</p>
-                  <p className="text-xs text-c2b-muted">Recopiez les macros écrites sur votre box</p>
-                </div>
-              </button>
+              {premium ? (
+                <button
+                  onClick={ouvrirMonPlat}
+                  className="carte w-full flex items-center gap-4 border-c2b-gold/40 p-5 text-left transition hover:border-c2b-gold"
+                >
+                  <UtensilsCrossed className="text-c2b-gold" />
+                  <div>
+                    <p className="font-bold text-c2b-green">Mon plat Chef2Box</p>
+                    <p className="text-xs text-c2b-muted">Recopiez les macros écrites sur votre box</p>
+                  </div>
+                </button>
+              ) : (
+                <a
+                  href={lienCommande()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="carte w-full flex items-center gap-4 border-c2b-gold/40 bg-c2b-gold/[0.05] p-5 text-left"
+                >
+                  <UtensilsCrossed className="text-c2b-gold/60" />
+                  <div className="flex-1">
+                    <p className="flex items-center gap-1.5 font-bold text-c2b-green/70">
+                      Mon plat Chef2Box <Crown size={14} className="text-c2b-gold" />
+                    </p>
+                    <p className="text-xs text-c2b-muted">Réservé aux clients Chef2Box : découvrir les box →</p>
+                  </div>
+                </a>
+              )}
 
               {SCAN_ETIQUETTE_CHEF2BOX_ACTIVE && (
               <button

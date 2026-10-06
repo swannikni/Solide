@@ -1503,3 +1503,18 @@ create policy "depenses_admin" on public.application_depenses
 -- Limites IA actuelles : assistant 20 questions/jour/personne ; photo du plat
 -- mise de côté (0) ; étiquette 5 ; total appli 500/jour.
 update public.application_parametres set valeur = valeur || '{"assistant": 20, "plat": 0}'::jsonb where cle = 'ia_limites';
+
+-- ============ PREMIUM (CLIENTS CHEF2BOX) ============
+-- Activé à la main par l'admin (Admin → Clients). Premium : messagerie,
+-- assistant 20 questions/jour (gratuits : 5), « Mon plat Chef2Box », bilan
+-- de la semaine. Seul l'admin modifie les fiches clients (RLS).
+alter table public.application_clients add column if not exists premium boolean not null default false;
+update public.application_parametres set valeur = valeur || '{"assistant_gratuit": 5}'::jsonb where cle = 'ia_limites';
+-- application_reserver_ia : limite « assistant_gratuit » si ni premium ni admin
+-- (voir la fonction en base), et messagerie réservée aux Premium :
+alter policy "messages_insert" on public.application_messages
+  with check (
+    (auth.uid() = client_id and expediteur = 'client'
+      and exists (select 1 from public.application_clients c where c.id = auth.uid() and c.premium))
+    or (public.application_is_admin() and expediteur = 'admin')
+  );

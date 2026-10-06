@@ -14,6 +14,7 @@ import { EditMealModal } from "@/components/EditMealModal";
 import { InstallerAppli } from "@/components/InstallerAppli";
 import { RappelSoir } from "@/components/RappelSoir";
 import { BilanSemaine, type StatsSemaine } from "@/components/BilanSemaine";
+import { BadgePremium, OffrePremium } from "@/components/OffrePremium";
 import { ORDRE_REPAS, REPAS_TYPE_LABELS, repasSelonHeure, totauxDuJour } from "@/lib/macros";
 import { decalerDate, libelleDate } from "@/lib/dates";
 import type { Client, Defi, Favori, Plat, RepasJournal, RepasType } from "@/lib/types";
@@ -217,7 +218,7 @@ export function DashboardClient({
             </>
           )}
         </h1>
-        {estAujourdhui && (serie > 0 || points !== null || defiEnCours) && (
+        {estAujourdhui && (serie > 0 || points !== null || defiEnCours || client.premium) && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {serie > 0 && (
               <Link
@@ -236,6 +237,7 @@ export function DashboardClient({
                 ⭐ {points.toLocaleString("fr-FR")} pts
               </Link>
             )}
+            {client.premium && <BadgePremium />}
             {defiEnCours && (
               <Link
                 href="/history"
@@ -255,7 +257,16 @@ export function DashboardClient({
 
       {/* Une seule carte d'info à la fois : bilan du lundi, sinon installation, sinon rappel. */}
       {statsSemaine && statsSemaine.joursNotes > 0 ? (
-        <BilanSemaine stats={statsSemaine} />
+        client.premium ? (
+          <BilanSemaine stats={statsSemaine} />
+        ) : (
+          <OffrePremium
+            compact
+            palier={client.palier}
+            titre={`Votre bilan de la semaine est prêt (${statsSemaine.joursNotes} jour${statsSemaine.joursNotes > 1 ? "s" : ""} notés)`}
+            texte="Moyennes, protéines, évolution du poids et conseils : le bilan détaillé est inclus avec les box Chef2Box."
+          />
+        )
       ) : (
         estAujourdhui && (
           <>
@@ -384,6 +395,7 @@ export function DashboardClient({
         <AddMealModal
           clientId={client.id}
           iaActive={assistantActif}
+          premium={!!client.premium || client.est_admin}
           date={date}
           repasTypeParDefaut={repasCible}
           favoris={favoris}

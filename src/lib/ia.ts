@@ -19,7 +19,7 @@ export const MODELE_PLAT = "claude-sonnet-5";
 const MESSAGES: Record<string, (type: TypeIA) => string> = {
   limite_jour: (type) =>
     type === "assistant"
-      ? "Vous avez atteint la limite de questions pour aujourd'hui. À demain !"
+      ? "Vous avez atteint la limite de questions pour aujourd'hui (les clients Chef2Box en ont 20 par jour). À demain !"
       : "Vous avez utilisé toutes vos analyses photo pour aujourd'hui. À demain ! En attendant, la recherche par nom marche toujours.",
   limite_globale: () => "L'IA est très demandée aujourd'hui, réessayez demain. La recherche par nom marche toujours.",
   trop_rapide: () => "Une analyse est déjà en cours, patientez quelques secondes.",
