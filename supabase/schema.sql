@@ -1518,3 +1518,112 @@ alter policy "messages_insert" on public.application_messages
       and exists (select 1 from public.application_clients c where c.id = auth.uid() and c.premium))
     or (public.application_is_admin() and expediteur = 'admin')
   );
+
+-- ============ FRÉQUENTATION DU SITE chef2box.com ============
+-- Visites, clics WhatsApp et questionnaire, envoyés par le site via
+-- /api/site (clé serveur). Sans cookies ni données personnelles : ni IP, ni
+-- identifiant de visiteur. Lecture réservée à l'admin (Admin → Site).
+create table if not exists public.application_site_evenements (
+  id bigint generated always as identity primary key,
+  type text not null check (type in ('visite', 'whatsapp', 'questionnaire_debut', 'questionnaire_fin')),
+  detail text check (detail is null or char_length(detail) <= 80),
+  source text check (source is null or char_length(source) <= 40),
+  appareil text check (appareil is null or appareil in ('mobile', 'ordinateur')),
+  created_at timestamptz not null default now()
+);
+create index if not exists application_site_evenements_date_idx on public.application_site_evenements (created_at);
+alter table public.application_site_evenements enable row level security;
+drop policy if exists "site_evenements_admin" on public.application_site_evenements;
+create policy "site_evenements_admin" on public.application_site_evenements
+  for select to authenticated using (public.application_is_admin());
+-- Droits explicites (Supabase n'en donne plus automatiquement aux nouvelles tables).
+revoke all on table public.application_site_evenements from anon, authenticated;
+grant select on table public.application_site_evenements to authenticated;
+grant all on table public.application_site_evenements to service_role;
+
+-- Enregistrement (appelé par /api/site avec la clé serveur uniquement).
+-- Plafond anti-abus : 3 000 événements par heure au total.
+create or replace function public.application_site_noter(p_type text, p_detail text, p_source text, p_appareil text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_type is null or p_type not in ('visite', 'whatsapp', 'questionnaire_debut', 'questionnaire_fin') then
+    return false;
+  end if;
+  if (select count(*) from public.application_site_evenements where created_at > now() - interval '1 hour') >= 3000 then
+    return false;
+  end if;
+  insert into public.application_site_evenements (type, detail, source, appareil)
+  values (
+    p_type,
+    left(nullif(trim(p_detail), ''), 80),
+    left(nullif(trim(p_source), ''), 40),
+    case when p_appareil in ('mobile', 'ordinateur') then p_appareil end
+  );
+  return true;
+end;
+$$;
+revoke execute on function public.application_site_noter(text, text, text, text) from public, anon, authenticated;
+grant execute on function public.application_site_noter(text, text, text, text) to service_role;
+
+-- Statistiques d'une période (dates du Maroc, bornes incluses) : admin seulement.
+create or replace function public.application_site_stats(p_debut date, p_fin date)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  resultat jsonb;
+begin
+  if not public.application_is_admin() then
+    raise exception 'Accès réservé à l''admin';
+  end if;
+  with ev as (
+    select type, detail, source, appareil, (created_at at time zone 'Africa/Casablanca')::date as jour
+    from public.application_site_evenements
+    where created_at >= (p_debut::timestamp at time zone 'Africa/Casablanca')
+      and created_at < ((p_fin + 1)::timestamp at time zone 'Africa/Casablanca')
+  )
+  select jsonb_build_object(
+    'jours', coalesce((
+      select jsonb_agg(jsonb_build_object('jour', jour, 'visites', v, 'whatsapp', w, 'q_debut', qd, 'q_fin', qf) order by jour)
+      from (
+        select jour,
+          count(*) filter (where type = 'visite') as v,
+          count(*) filter (where type = 'whatsapp') as w,
+          count(*) filter (where type = 'questionnaire_debut') as qd,
+          count(*) filter (where type = 'questionnaire_fin') as qf
+        from ev group by jour
+      ) j), '[]'::jsonb),
+    'sources', coalesce((
+      select jsonb_agg(jsonb_build_object('source', source, 'visites', v, 'whatsapp', w) order by v desc, w desc)
+      from (
+        select coalesce(source, 'Direct') as source,
+          count(*) filter (where type = 'visite') as v,
+          count(*) filter (where type = 'whatsapp') as w
+        from ev group by 1
+      ) s), '[]'::jsonb),
+    'boutons', coalesce((
+      select jsonb_agg(jsonb_build_object('bouton', bouton, 'clics', n) order by n desc)
+      from (
+        select coalesce(detail, 'Autre') as bouton, count(*) as n
+        from ev where type = 'whatsapp' group by 1
+      ) b), '[]'::jsonb),
+    'appareils', coalesce((
+      select jsonb_object_agg(appareil, n)
+      from (
+        select coalesce(appareil, 'inconnu') as appareil, count(*) as n
+        from ev where type = 'visite' group by 1
+      ) a), '{}'::jsonb),
+    'premier', (select min(created_at) from public.application_site_evenements)
+  ) into resultat;
+  return resultat;
+end;
+$$;
+revoke execute on function public.application_site_stats(date, date) from public, anon;
+grant execute on function public.application_site_stats(date, date) to authenticated;

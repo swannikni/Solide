@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { entetesCors } from "@/lib/cors-site";
 import { GRIGNOTAGE, LIMITES, METIERS, PLAISIR, SEANCES, calculerObjectifs, profilComplet, type Profil } from "@/lib/objectifs";
 
 // Réception des questionnaires remplis sur chef2box.com. Route publique
@@ -7,18 +8,6 @@ import { GRIGNOTAGE, LIMITES, METIERS, PLAISIR, SEANCES, calculerObjectifs, prof
 // côté serveur, et on range la demande pour que l'admin crée le compte.
 
 export const dynamic = "force-dynamic";
-
-const ORIGINES = ["https://chef2box.com", "https://www.chef2box.com", "https://chef2box-questionnaire.netlify.app"];
-
-function entetesCors(origine: string | null): Record<string, string> {
-  const autorisee = origine && ORIGINES.includes(origine) ? origine : ORIGINES[0];
-  return {
-    "Access-Control-Allow-Origin": autorisee,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    Vary: "Origin",
-  };
-}
 
 export async function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: entetesCors(request.headers.get("origin")) });

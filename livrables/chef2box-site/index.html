@@ -652,7 +652,7 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
     </p>
     <div class="hero-btns">
       <a href="#questionnaire" onclick="ouvrirQuestionnaire(); return false;" class="btn-primary">Calculer mes besoins</a>
-      <a href="https://wa.me/212660831640" class="btn-secondary" target="_blank">Parler à l'équipe</a>
+      <a href="https://wa.me/212660831640" class="btn-secondary" target="_blank" data-stat="Parler à l'équipe (haut de page)">Parler à l'équipe</a>
     </div>
   </div>
   <div class="hero-right">
@@ -919,7 +919,7 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
         <li>Adapté à votre profil</li>
         <li>Sans engagement</li>
       </ul>
-      <a href="https://wa.me/212660831640?text=Je%20souhaite%20commander%20la%20formule%20Déjeuner" class="btn-block dark" target="_blank">Démarrer ma semaine</a>
+      <a href="https://wa.me/212660831640?text=Je%20souhaite%20commander%20la%20formule%20Déjeuner" class="btn-block dark" target="_blank" data-stat="Formule Déjeuner">Démarrer ma semaine</a>
     </div>
     <div class="formule feat">
       <span class="f-badge">Le plus populaire</span>
@@ -932,7 +932,7 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
         <li>Adapté à votre profil</li>
         <li>Sans engagement</li>
       </ul>
-      <a href="https://wa.me/212660831640?text=Je%20souhaite%20commander%20la%20formule%20Déjeuner%20%2B%20Dîner" class="btn-block light" target="_blank">Démarrer ma semaine</a>
+      <a href="https://wa.me/212660831640?text=Je%20souhaite%20commander%20la%20formule%20Déjeuner%20%2B%20Dîner" class="btn-block light" target="_blank" data-stat="Formule Déjeuner + Dîner">Démarrer ma semaine</a>
     </div>
   </div>
 </div>
@@ -1236,7 +1236,7 @@ HA
 
   <!-- CTA WhatsApp -->
   <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap">
-    <a class="btn-primary" id="res-wa" href="https://wa.me/212660831640" target="_blank">📲 Recevoir mon bilan complet sur WhatsApp</a>
+    <a class="btn-primary" id="res-wa" href="https://wa.me/212660831640" target="_blank" data-stat="Bilan du questionnaire">📲 Recevoir mon bilan complet sur WhatsApp</a>
   </div>
   <p style="font-size:12px;color:#aaa;margin-top:10px">Votre bilan détaillé 2 pages vous sera envoyé gratuitement sous 24h.</p>
 </div>
@@ -1250,7 +1250,7 @@ HA
   <p class="cta-sub">Nous préparons vos repas. Vous vous concentrez sur vos objectifs.</p>
   <div class="cta-price">À partir de 790 MAD / semaine · Sans engagement · Livraison Marrakech</div>
   <div class="cta-btns">
-    <a href="https://wa.me/212660831640" class="btn-cream-lg" target="_blank">Commander sur WhatsApp</a>
+    <a href="https://wa.me/212660831640" class="btn-cream-lg" target="_blank" data-stat="Commander (bas de page)">Commander sur WhatsApp</a>
     <a href="#questionnaire" onclick="ouvrirQuestionnaire(); return false;" class="btn-outline-lg">Refaire mon bilan</a>
   </div>
 </div>
@@ -1279,18 +1279,18 @@ HA
     <div class="footer-links-group">
       <h4>Contact</h4>
       <a href="mailto:hello@chef2box.com">hello@chef2box.com</a>
-      <a href="https://wa.me/212660831640" target="_blank">+212 660 831640</a>
+      <a href="https://wa.me/212660831640" target="_blank" data-stat="Numéro (pied de page)">+212 660 831640</a>
       <span>Marrakech, Maroc</span>
     </div>
     <div class="footer-links-group">
       <h4>Suivre</h4>
       <a href="https://instagram.com/chef2box_" target="_blank">Instagram @chef2box_</a>
-      <a href="https://wa.me/212660831640" target="_blank">WhatsApp</a>
+      <a href="https://wa.me/212660831640" target="_blank" data-stat="WhatsApp (pied de page)">WhatsApp</a>
     </div>
     <div class="footer-links-group">
       <h4>Démarrer</h4>
       <a href="#questionnaire" onclick="ouvrirQuestionnaire(); return false;">Calculer mes besoins</a>
-      <a href="https://wa.me/212660831640" target="_blank">Commander</a>
+      <a href="https://wa.me/212660831640" target="_blank" data-stat="Commander (pied de page)">Commander</a>
     </div>
   </div>
   <div class="footer-bottom">
@@ -1300,6 +1300,48 @@ HA
 </footer>
 
 
+<script>
+// Fréquentation du site (visible dans l'appli : Admin → Site). Sans cookies ni
+// données personnelles : type d'action, source du visiteur, mobile/ordinateur.
+(function () {
+  var URL_STATS = 'https://chef2box-appli.netlify.app/api/site';
+  var params = new URLSearchParams(location.search);
+  var memoire = null, session = null;
+  try { memoire = window.localStorage; session = window.sessionStorage; } catch (e) {}
+  // chef2box.com/?moi=1 : ne plus compter les visites de cet appareil (l'admin).
+  if (params.get('moi') === '1') {
+    try { memoire.setItem('c2b_moi', '1'); } catch (e) {}
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+    alert('C\'est noté : vos visites sur cet appareil ne seront plus comptées.');
+  }
+  var ignorer = false;
+  try { ignorer = memoire && memoire.getItem('c2b_moi') === '1'; } catch (e) {}
+  var ref = '';
+  try { ref = document.referrer ? new URL(document.referrer).hostname : ''; } catch (e) {}
+  if (ref === location.hostname) ref = '';
+  var utm = params.get('utm_source') || '';
+  var appareil = window.matchMedia && window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'ordinateur';
+  var dejaNote = {};
+
+  window.c2bNoter = function (type, detail, unique) {
+    if (ignorer || (unique && dejaNote[type])) return;
+    dejaNote[type] = true;
+    var corps = JSON.stringify({ type: type, detail: detail || '', ref: ref, utm: utm, appareil: appareil });
+    try { if (navigator.sendBeacon && navigator.sendBeacon(URL_STATS, corps)) return; } catch (e) {}
+    try { fetch(URL_STATS, { method: 'POST', body: corps, keepalive: true, mode: 'no-cors' }).catch(function () {}); } catch (e) {}
+  };
+
+  // Une visite par onglet ouvert (pas recomptée en rechargeant la page).
+  var dejaVu = false;
+  try { dejaVu = session.getItem('c2b_vu') === '1'; session.setItem('c2b_vu', '1'); } catch (e) {}
+  if (!dejaVu) window.c2bNoter('visite');
+
+  document.addEventListener('click', function (e) {
+    var lien = e.target && e.target.closest ? e.target.closest('a[href*="wa.me/212660831640"]') : null;
+    if (lien) window.c2bNoter('whatsapp', lien.getAttribute('data-stat') || lien.textContent.trim().slice(0, 60));
+  }, true);
+})();
+</script>
 <script>
 var EMAILJS_SERVICE_ID  = 'service_3spccri';
 var EMAILJS_TEMPLATE_ID = 'template_wn52dyp';
@@ -1374,6 +1416,7 @@ function genererBilan() {
     return;
   }
   errEl.style.display = 'none';
+  if (window.c2bNoter) c2bNoter('questionnaire_fin', '', true);
 
   // BMR Mifflin-St Jeor
   var bmr = sexe === 'Femme'
@@ -1567,6 +1610,7 @@ function toggleQuestionnaire() {
   if (content.style.maxHeight === '0px' || content.style.maxHeight === '0') {
     content.style.maxHeight = content.scrollHeight + 'px';
     btn.textContent = 'Fermer ✕';
+    if (window.c2bNoter) c2bNoter('questionnaire_debut', '', true);
   } else {
     content.style.maxHeight = '0';
     btn.textContent = 'Commencer mon bilan →';
@@ -1578,6 +1622,7 @@ function ouvrirQuestionnaire() {
   var btn = document.getElementById('q-toggle-btn');
   content.style.maxHeight = content.scrollHeight + 'px';
   btn.textContent = 'Fermer ✕';
+  if (window.c2bNoter) c2bNoter('questionnaire_debut', '', true);
   setTimeout(function(){
     document.getElementById('questionnaire').scrollIntoView({behavior:'smooth', block:'start'});
   }, 100);

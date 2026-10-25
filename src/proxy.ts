@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { JWKS } from "@/lib/supabase/jwks";
 
 // /api/questionnaire : reçoit les questionnaires envoyés depuis chef2box.com.
-const PUBLIC_PATHS = ["/login", "/inscription", "/api/inscription", "/api/questionnaire", "/confidentialite", "/conditions"];
+const PUBLIC_PATHS = ["/login", "/inscription", "/api/inscription", "/api/questionnaire", "/api/site", "/confidentialite", "/conditions"];
 
 interface CookieAEcrire {
   name: string;

@@ -10,6 +10,7 @@ const ONGLETS = [
   { href: "/admin/cuisine", label: "Cuisine" },
   ...(LIVRAISON_ACTIVE ? [{ href: "/admin/livraison", label: "Livraison" }] : []),
   { href: "/admin/paiements", label: "Paiements" },
+  { href: "/admin/site", label: "Site" },
   { href: "/admin/menu", label: "Menu & QR" },
   { href: "/admin/recompenses", label: "Récompenses" },
 ];
