@@ -3,7 +3,6 @@ import { LivraisonClient, type ArretLivraison, type RepasLivre } from "@/app/(es
 import { redirect } from "next/navigation";
 import { completerReglages, LIVRAISON_ACTIVE, type ReglagesLivraison } from "@/lib/livraison";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
-import { reprendreLaVeille } from "@/lib/cuisine-reprise";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +16,6 @@ export default async function LivraisonPage({ searchParams }: { searchParams: Pr
   const aujourdhui = dateDuJour();
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
   const date = estDateValide(dateDemandee) ? dateDemandee : heure < 14 ? aujourdhui : decalerDate(aujourdhui, 1);
-  // Mêmes noms que la fiche cuisine, même si elle n'a pas encore été ouverte.
-  await reprendreLaVeille(supabase, date, aujourdhui);
 
   const [{ data: commandes }, { data: ajouts }, { data: parametre }, { data: planEnregistre }] = await Promise.all([
     supabase

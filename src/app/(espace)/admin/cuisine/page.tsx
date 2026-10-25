@@ -7,23 +7,21 @@ import {
   type PersonneConnue,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
-import { estLundi, reprendreLaVeille, sourceReprise } from "@/lib/cuisine-reprise";
 
 export const dynamic = "force-dynamic";
 
 // Fiche cuisine d'un jour : qui mange à midi et le soir, par palier, avec
-// les aliments refusés et les allergies. Par défaut : demain à partir de
-// midi (la veille au soir), aujourd'hui le matin.
+// les aliments refusés et les allergies. Les repas se cochent dans le
+// planning de la semaine (ou ici, jour par jour). Par défaut : demain à
+// partir de midi (la veille au soir), aujourd'hui le matin.
 export default async function CuisinePage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const { supabase } = await exigerAdmin();
   const { date: dateDemandee } = await searchParams;
   const aujourdhui = dateDuJour();
   const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(new Date()));
   const date = estDateValide(dateDemandee) ? dateDemandee : heure >= 12 ? decalerDate(aujourdhui, 1) : aujourdhui;
-  // Du mardi au vendredi : reprise de la fiche de la veille avant lecture.
-  const ajoutes = await reprendreLaVeille(supabase, date, aujourdhui);
 
-  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }, source] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: services }, { data: ajouts }, { data: historique }] = await Promise.all([
     supabase
       .from("application_clients")
       .select("id, nom, palier, cuisine_allergies, cuisine_refus, repas_habituels")
@@ -65,7 +63,6 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
           complement: string | null;
         })[]
       >(),
-    sourceReprise(supabase, date),
   ]);
   // Dernière fiche connue de chaque nom (sans tenir compte des majuscules).
   const connues = new Map<string, PersonneConnue & { date: string }>();
@@ -108,8 +105,6 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         platsInitiaux={plats}
         ajoutsInitiaux={ajouts ?? []}
         personnesConnues={personnesConnues}
-        reprise={source ? { source, ajoutes } : null}
-        lundi={estLundi(date)}
       />
     </div>
   );

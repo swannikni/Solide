@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, FileDown, Pencil, Printer, Send, UserPlus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Copy, FileDown, Pencil, Printer, Send, UserPlus } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
-import type { Reprise } from "@/lib/cuisine-reprise";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate, libelleDate } from "@/lib/dates";
@@ -75,7 +74,6 @@ function nomCourt(nom: string) {
 
 const dateLongue = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-const jourCourt = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", timeZone: "UTC" });
 
 const AJOUT_VIDE = {
   nom: "",
@@ -102,8 +100,6 @@ export function CuisineClient({
   platsInitiaux,
   ajoutsInitiaux,
   personnesConnues = [],
-  reprise = null,
-  lundi = false,
 }: {
   date: string;
   aujourdhui: string;
@@ -112,8 +108,6 @@ export function CuisineClient({
   platsInitiaux: Record<Service, string>;
   ajoutsInitiaux: AjoutCuisine[];
   personnesConnues?: PersonneConnue[];
-  reprise?: Reprise | null;
-  lundi?: boolean;
 }) {
   const supabase = createClient();
   const [clients, setClients] = useState(clientsInitiaux);
@@ -135,7 +129,6 @@ export function CuisineClient({
     refus: string;
     note: string;
   } | null>(null);
-  const [enCours, setEnCours] = useState(false);
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
@@ -221,7 +214,6 @@ export function CuisineClient({
   });
   const total = fiche.reduce((t, s) => t + s.total, 0);
   const nbAllergies = fiche.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
-  const habitudes = SERVICES.map((s) => ({ ...s, n: clients.filter((c) => c.repas_habituels.includes(s.cle)).length }));
 
   function texteFiche() {
     const lignes = [`*FICHE CUISINE — ${dateLongue(date)}*`, `Total : ${total} repas (${fiche.map((s) => `${s.total} ${s.libelle.toLowerCase()}`).join(" · ")})`];
@@ -263,32 +255,6 @@ export function CuisineClient({
     lien.download = fichier.name;
     lien.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  }
-
-  // Lundi : nouvelle semaine, reprise de la fiche du vendredi à la demande.
-  async function reprendreVendredi() {
-    setEnCours(true);
-    const { error } = await supabase.rpc("application_cuisine_reprendre", { p_date: date, p_source: decalerDate(date, -3) });
-    if (error) {
-      setEnCours(false);
-      return setMessage("Reprise impossible, réessayez.");
-    }
-    window.location.reload();
-  }
-
-  async function preparer() {
-    setEnCours(true);
-    const lignes = clients.flatMap((c) =>
-      c.repas_habituels.map((service) => ({ client_id: c.id, date_livraison: date, repas_type: service, statut: "confirmee" }))
-    );
-    const { data, error } = await supabase
-      .from("application_commandes")
-      .upsert(lignes, { onConflict: "client_id,date_livraison,repas_type" })
-      .select("id, client_id, repas_type, note, palier")
-      .returns<CommandeCuisine[]>();
-    setEnCours(false);
-    if (error) return setMessage("Préparation impossible, réessayez.");
-    setCommandes(data ?? []);
   }
 
   async function basculer(client: ClientCuisine, service: Service) {
@@ -526,36 +492,14 @@ export function CuisineClient({
           </div>
         </div>
 
-        {reprise && (
-          <p className="rounded-xl bg-c2b-gold/10 px-4 py-3 text-sm text-c2b-green">
-            ↻ <strong>Fiche reprise de {jourCourt(reprise.source)}</strong>
-            {reprise.ajoutes > 0 && ` (${reprise.ajoutes} ligne${reprise.ajoutes > 1 ? "s" : ""} ajoutée${reprise.ajoutes > 1 ? "s" : ""})`}. Retirez les
-            absents, ajoutez les nouveaux. Les noms ajoutés plus tard sur la fiche de {jourCourt(reprise.source)} arrivent aussi ici.
-          </p>
-        )}
-
-        {lundi && !reprise && (
-          <section className="carte p-4 space-y-2">
-            <p className="text-sm text-c2b-muted">
-              Nouvelle semaine : la fiche de lundi ne reprend pas automatiquement celle de vendredi.
-            </p>
-            <button onClick={reprendreVendredi} disabled={enCours} className="btn-primary w-full">
-              {enCours ? "Reprise..." : `Reprendre la fiche du ${dateLongue(decalerDate(date, -3))}`}
-            </button>
-          </section>
-        )}
+        <Link href={`/admin/cuisine/semaine?lundi=${date}`} className="btn-primary w-full">
+          <CalendarDays size={17} /> Planning de la semaine (midi / soir par jour)
+        </Link>
 
         {commandes.length === 0 && ajouts.length === 0 && (
-          <section className="carte border-c2b-gold/50 p-5 space-y-3">
-            <p className="font-bold text-c2b-green">La fiche du {dateLongue(date)} n&apos;est pas encore préparée.</p>
-            <p className="text-sm text-c2b-muted">
-              Elle reprend les repas habituels de chaque client ({habitudes.map((h) => `${h.n} ${h.libelle.toLowerCase()}`).join(", ")}).
-              Vous ajustez ensuite les absents, les paliers et ajoutez des noms à la main.
-            </p>
-            <button onClick={preparer} disabled={enCours} className="btn-primary w-full">
-              {enCours ? "Préparation..." : "Préparer la fiche"}
-            </button>
-          </section>
+          <p className="carte border-c2b-gold/50 p-4 text-sm text-c2b-muted">
+            Personne sur la fiche du {dateLongue(date)}. Cochez les repas de chacun dans le planning de la semaine, ou ajoutez une personne plus bas.
+          </p>
         )}
       </div>
 
