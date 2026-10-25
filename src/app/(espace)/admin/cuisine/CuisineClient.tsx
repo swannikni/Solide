@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MoreHorizontal, Send, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, Send, UserPlus } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
@@ -140,9 +140,9 @@ export function CuisineClient({
   // Fiche des personnes ajoutées ou modifiées à l'instant.
   const [nouvelles, setNouvelles] = useState<Personne[]>([]);
   const [enCours, setEnCours] = useState<Set<string>>(new Set());
-  const [actions, setActions] = useState<string | null>(null);
   const [formulaire, setFormulaire] = useState<Formulaire | null>(null);
-  const [jourFiche, setJourFiche] = useState<string>(jourChoisi ?? (cetteSemaine(aujourdhui) ? aujourdhui : lundi));
+  // Jour déroulé (un seul à la fois).
+  const [jourOuvert, setJourOuvert] = useState<string | null>(jourChoisi ?? (cetteSemaine(aujourdhui) ? aujourdhui : lundi));
   const [message, setMessage] = useState("");
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
@@ -302,13 +302,11 @@ export function CuisineClient({
   }
 
   async function toutLaSemaine(p: Personne, service: Service) {
-    setActions(null);
     for (const d of jours) await poser(p, d, service, true);
   }
 
   // Retire tous les repas de la semaine et enlève la ligne du planning.
   async function retirer(p: Personne) {
-    setActions(null);
     const lignes = lignesSemaine(p);
     if (lignes.length && !window.confirm(`Retirer ${p.nom} du planning ? Ses ${lignes.length} repas de la semaine seront supprimés.`)) return;
     debut(p.cle);
@@ -372,12 +370,10 @@ export function CuisineClient({
   // ---- Ajouter / modifier une personne ----
 
   function ouvrirAjout() {
-    setActions(null);
     setFormulaire({ cle: null, clientId: null, nom: "", palier: "", allergies: "", refus: "", note: "", cases: [] });
   }
 
   function ouvrirModification(p: Personne) {
-    setActions(null);
     setFormulaire({
       cle: p.cle,
       clientId: p.clientId,
@@ -602,19 +598,11 @@ export function CuisineClient({
   }
 
   const titreSemaine = `${dateCourte(lundi, { day: "numeric", month: "short" })} – ${dateCourte(vendredi, { day: "numeric", month: "short" })}`;
-  const grille = "grid grid-cols-[30px_repeat(5,minmax(0,1fr))] gap-1";
-  const ficheJour = fiche(jourFiche);
-  const totalFiche = ficheJour.reduce((t, s) => t + s.total, 0);
-  const allergiesFiche = ficheJour.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
+  const nbAllergies = (f: ReturnType<typeof fiche>) => f.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
 
-  // Cases midi/soir × jours : planning d'une personne, ou formulaire d'ajout.
-  const cases = (
-    nom: string,
-    estCoche: (d: string, s: Service) => boolean,
-    basculer: (d: string, s: Service) => void,
-    attente: (d: string, s: Service) => boolean = () => false
-  ) => (
-    <div className={`mt-2 ${grille}`}>
+  // Cases midi/soir × jours du formulaire d'ajout.
+  const cases = (estCoche: (d: string, s: Service) => boolean, basculer: (d: string, s: Service) => void) => (
+    <div className="mt-2 grid grid-cols-[30px_repeat(5,minmax(0,1fr))] gap-1">
       <span />
       {jours.map((d) => (
         <span key={d} className="text-center text-[10px] font-bold uppercase text-c2b-muted">
@@ -628,18 +616,16 @@ export function CuisineClient({
           </span>
           {jours.map((d) => {
             const actif = estCoche(d, s.cle);
-            const bloque = attente(d, s.cle);
             return (
               <button
                 key={d}
                 type="button"
                 onClick={() => basculer(d, s.cle)}
-                disabled={bloque}
                 aria-pressed={actif}
-                aria-label={`${nom}, ${s.libelle.toLowerCase()} ${dateCourte(d, { weekday: "long" })}`}
+                aria-label={`${s.libelle} ${dateCourte(d, { weekday: "long" })}`}
                 className={`h-10 rounded-xl text-sm font-bold transition ${
                   actif ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-transparent"
-                } ${bloque ? "opacity-50" : ""} ${d < aujourdhui ? "opacity-60" : ""}`}
+                }`}
               >
                 ✓
               </button>
@@ -650,6 +636,7 @@ export function CuisineClient({
     </div>
   );
 
+  const personneModifiee = formulaire?.cle ? personnes.get(formulaire.cle) : undefined;
   const champsFormulaire = formulaire && (
     <section className="carte p-4 space-y-3 border-c2b-gold/50">
       <p className="flex items-center gap-2 font-bold text-c2b-green">
@@ -723,13 +710,36 @@ export function CuisineClient({
         maxLength={200}
         className="champ py-2.5 text-sm"
       />
-      {formulaire.cle ? (
-        <p className="text-[11px] text-c2b-muted">S&apos;applique à tous ses repas de la semaine.</p>
+      {personneModifiee ? (
+        <>
+          <p className="text-[11px] text-c2b-muted">S&apos;applique à tous ses repas de la semaine.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SERVICES.map((s) => (
+              <button
+                key={s.cle}
+                type="button"
+                onClick={() => toutLaSemaine(personneModifiee, s.cle)}
+                className="rounded-full bg-white border border-c2b-green/15 px-3 py-1.5 text-xs font-bold text-c2b-green"
+              >
+                {s.icone} {s.libelle} toute la semaine
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setFormulaire(null);
+                retirer(personneModifiee);
+              }}
+              className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-700"
+            >
+              Retirer du planning
+            </button>
+          </div>
+        </>
       ) : (
         <div>
           <p className="text-xs font-bold text-c2b-muted">Ses repas cette semaine</p>
           {cases(
-            formulaire.nom || "Nouvelle personne",
             (d, s) => formulaire.cases.includes(`${d}|${s}`),
             (d, s) => {
               const k = `${d}|${s}`;
@@ -740,7 +750,7 @@ export function CuisineClient({
       )}
       <div className="flex gap-2">
         <button onClick={enregistrerFormulaire} disabled={occupe("formulaire")} className="btn-primary flex-1 py-2.5 text-sm">
-          {occupe("formulaire") ? "Enregistrement..." : formulaire.cle ? "Enregistrer" : "Ajouter au planning"}
+          {occupe("formulaire") ? "Enregistrement..." : formulaire.cle ? "Enregistrer" : "Ajouter"}
         </button>
         <button onClick={() => setFormulaire(null)} className="btn-secondary flex-1 py-2.5 text-sm">
           Annuler
@@ -749,8 +759,151 @@ export function CuisineClient({
     </section>
   );
 
+  // Contenu d'un jour déroulé : plats, clients (midi / soir), fiche à l'écran.
+  function contenuJour(date: string) {
+    const f = fiche(date);
+    const total = f.reduce((t, s) => t + s.total, 0);
+    // Ceux qui mangent ce jour-là d'abord, puis le reste du planning.
+    const mange = (p: Personne) => SERVICES.some((s) => coche(p, date, s.cle));
+    const ordre = [...liste.filter(mange), ...liste.filter((p) => !mange(p))];
+    return (
+      <div className="space-y-4 border-t border-c2b-green/10 px-3 pb-4 pt-3">
+        <div className="grid grid-cols-2 gap-2">
+          {SERVICES.map((s) => (
+            <input
+              key={`${date}-${s.cle}`}
+              defaultValue={plats[date]?.[s.cle] ?? ""}
+              onChange={(e) => setPlats((p) => ({ ...p, [date]: { ...(p[date] ?? { dejeuner: "", diner: "" }), [s.cle]: e.target.value } }))}
+              onBlur={(e) => enregistrerPlat(date, s.cle, e.target.value)}
+              placeholder={`${s.icone} Plat du ${s.libelle.toLowerCase()}`}
+              maxLength={120}
+              className="champ py-2 text-sm"
+            />
+          ))}
+        </div>
+
+        {/* Clients : midi et soir de ce jour, d'un toucher. */}
+        <div>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-c2b-muted">Clients</p>
+          {ordre.length === 0 && <p className="py-2 text-sm text-c2b-muted">Personne dans le planning cette semaine.</p>}
+          <ul className="divide-y divide-c2b-green/10">
+            {ordre.map((p) =>
+              formulaire?.cle === p.cle ? (
+                <li key={p.cle} className="py-2">
+                  {champsFormulaire}
+                </li>
+              ) : (
+                <li key={p.cle} className="flex items-center gap-2 py-2">
+                  <button onClick={() => ouvrirModification(p)} className="min-w-0 flex-1 text-left" aria-label={`Modifier ${p.nom}`}>
+                    <p className={`truncate text-sm font-bold ${mange(p) ? "text-c2b-green" : "text-c2b-muted"}`}>
+                      {p.nom}
+                      <span className="ml-1.5 rounded-full bg-c2b-gold/[0.15] px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
+                    </p>
+                    {(p.allergies || p.refus || p.note) && (
+                      <p className="truncate text-[11px] text-c2b-muted">
+                        {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
+                        {p.refus && <span>· sans {p.refus} </span>}
+                        {p.note && <span className="italic">· {p.note}</span>}
+                      </p>
+                    )}
+                  </button>
+                  {SERVICES.map((s) => {
+                    const actif = coche(p, date, s.cle);
+                    const attente = occupe(`${p.cle}|${date}|${s.cle}`);
+                    return (
+                      <button
+                        key={s.cle}
+                        onClick={() => poser(p, date, s.cle, !actif)}
+                        disabled={attente}
+                        aria-pressed={actif}
+                        aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
+                        className={`flex h-10 w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-bold transition ${
+                          actif ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-muted"
+                        } ${attente ? "opacity-50" : ""}`}
+                      >
+                        {s.icone} {s.libelle}
+                      </button>
+                    );
+                  })}
+                </li>
+              )
+            )}
+          </ul>
+          {formulaire && !formulaire.cle ? (
+            <div className="pt-2">{champsFormulaire}</div>
+          ) : (
+            <button onClick={ouvrirAjout} className="btn-secondary mt-2 w-full py-2.5 text-sm">
+              <UserPlus size={16} /> Ajouter une personne
+            </button>
+          )}
+        </div>
+
+        {/* La fiche du jour, à l'écran (la même que le PDF). */}
+        <div className="space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-c2b-muted">Fiche du {dateLongue(date)}</p>
+          {nbAllergies(f) > 0 && (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+              ⚠️ {nbAllergies(f)} repas avec allergie : bien vérifier avant de fermer les boîtes.
+            </p>
+          )}
+          {f.map((s) => (
+            <div key={s.cle}>
+              <h3 className="flex items-baseline justify-between gap-2 rounded-lg bg-c2b-green px-3 py-2 text-c2b-cream">
+                <span className="font-bold">
+                  {s.icone} {s.court}
+                  {s.plat && <span className="font-semibold"> ({s.plat})</span>}
+                </span>
+                <span className="text-lg font-bold whitespace-nowrap">{s.total} repas</span>
+              </h3>
+              {s.total === 0 ? (
+                <p className="px-1 py-2 text-sm text-c2b-muted">Aucun repas</p>
+              ) : (
+                s.paliers.map((g) => (
+                  <div key={g.palier ?? "aucun"} className="mt-2">
+                    <p className="flex justify-between border-b border-c2b-green/20 pb-1 text-sm font-bold text-c2b-green">
+                      <span>{libellePalier(g.palier)}</span>
+                      <span className="text-c2b-muted">{g.lignes.length}</span>
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {g.lignes.map((l) => (
+                        <li key={l.cle} className="text-sm leading-snug">
+                          <span className="font-bold text-c2b-green">{l.nom}</span>
+                          {l.allergies && <span className="ml-1.5 font-bold text-red-700">⚠️ {l.allergies}</span>}
+                          {l.refus && <span className="text-c2b-text"> · sans {l.refus}</span>}
+                          {l.note && <span className="italic text-c2b-text"> · {l.note}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </div>
+          ))}
+          {total > 0 && (
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <button onClick={() => envoyerPdf(date)} className="btn-primary px-3 py-2.5 text-sm">
+                <FileDown size={15} /> PDF
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(texteFiche(date))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
+              >
+                <Send size={15} /> Texte
+              </a>
+              <button onClick={() => copierFiche(date)} className="btn-secondary px-3 py-2 text-sm">
+                <Copy size={15} /> Copier
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
+    <main className="max-w-3xl mx-auto px-4 pt-6 space-y-4">
       <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
@@ -779,169 +932,41 @@ export function CuisineClient({
         </Link>
       </div>
 
-      {/* Fiche du jour : plats, PDF et texte pour les chefs. */}
-      <section className="carte p-4 space-y-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="font-bold text-c2b-green">Fiche du jour</h2>
-          <span className="text-xs font-semibold text-c2b-muted">
-            {totalFiche} repas
-            {allergiesFiche > 0 && (
-              <span className="text-red-700">
-                {" "}
-                · ⚠️ {allergiesFiche} allergie{allergiesFiche > 1 ? "s" : ""}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="grid grid-cols-5 gap-1">
-          {jours.map((d) => (
-            <button
-              key={d}
-              onClick={() => setJourFiche(d)}
-              className={`rounded-xl py-1.5 text-center leading-tight ${
-                d === jourFiche ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
-              }`}
-            >
-              <span className="block text-[11px] font-bold uppercase">{jourCourt(d)}</span>
-              <span className="block text-[11px] opacity-80">{dateCourte(d, { day: "numeric" })}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {SERVICES.map((s) => (
-            <input
-              key={`${jourFiche}-${s.cle}`}
-              defaultValue={plats[jourFiche]?.[s.cle] ?? ""}
-              onChange={(e) => setPlats((p) => ({ ...p, [jourFiche]: { ...(p[jourFiche] ?? { dejeuner: "", diner: "" }), [s.cle]: e.target.value } }))}
-              onBlur={(e) => enregistrerPlat(jourFiche, s.cle, e.target.value)}
-              placeholder={`${s.icone} Plat du ${s.libelle.toLowerCase()}`}
-              maxLength={120}
-              className="champ py-2 text-sm"
-            />
-          ))}
-        </div>
-        <button onClick={() => envoyerPdf(jourFiche)} disabled={totalFiche === 0} className="btn-primary w-full py-3">
-          <FileDown size={18} /> PDF du {dateLongue(jourFiche)}
-        </button>
-        <div className="grid grid-cols-2 gap-2">
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(texteFiche(jourFiche))}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
-          >
-            <Send size={15} /> Texte WhatsApp
-          </a>
-          <button onClick={() => copierFiche(jourFiche)} className="btn-secondary px-3 py-2 text-sm">
-            <Copy size={15} /> Copier
-          </button>
-        </div>
-      </section>
-
       {aReprendre > 0 && (
         <button onClick={reprendreSemaineAvant} disabled={occupe("reprise")} className="btn-secondary w-full">
           <CopyPlus size={17} /> {occupe("reprise") ? "Reprise..." : `Reprendre la semaine dernière (${aReprendre})`}
         </button>
       )}
 
-      {formulaire && !formulaire.cle ? (
-        champsFormulaire
-      ) : (
-        <button onClick={ouvrirAjout} className="btn-primary w-full">
-          <UserPlus size={17} /> Ajouter une personne
-        </button>
-      )}
-
       {message && <p className="text-sm font-semibold text-c2b-green">{message}</p>}
 
-      {/* Totaux par jour, toujours visibles en haut pendant qu'on coche. */}
-      <div className="sticky top-[68px] md:top-20 z-10 -mx-4 bg-c2b-cream/95 px-4 py-2 backdrop-blur">
-        <div className={grille}>
-          <span />
-          {jours.map((d) => (
-            <button
-              key={d}
-              onClick={() => setJourFiche(d)}
-              className={`rounded-lg py-1 text-center leading-tight ${d === aujourdhui ? "bg-c2b-gold/20" : ""}`}
-            >
-              <span className="block text-[11px] font-bold uppercase text-c2b-green">{jourCourt(d)}</span>
-              <span className="block text-[11px] text-c2b-muted">{dateCourte(d, { day: "numeric" })}</span>
-              <span className="block text-[11px] tabular-nums text-c2b-text">
-                ☀️{totalJour(d, "dejeuner")} 🌙{totalJour(d, "diner")}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {liste.length === 0 && (
-        <section className="carte p-5 text-center text-sm text-c2b-muted">
-          Personne cette semaine. Ajoutez des personnes{aReprendre > 0 ? " ou reprenez la semaine dernière" : ""}.
-        </section>
-      )}
-
+      {/* Les jours : on en déroule un pour voir ses clients et sa fiche. */}
       <ul className="space-y-2">
-        {liste.map((p) => {
-          if (formulaire?.cle === p.cle) return <li key={p.cle}>{champsFormulaire}</li>;
-          const n = lignesSemaine(p).length;
+        {jours.map((d) => {
+          const ouvert = jourOuvert === d;
+          const allergies = nbAllergies(fiche(d));
           return (
-            <li key={p.cle} className="carte p-3">
-              <div className="flex items-start justify-between gap-2">
-                <button onClick={() => ouvrirModification(p)} className="min-w-0 text-left" aria-label={`Modifier ${p.nom}`}>
-                  <p className="font-bold text-c2b-green">
-                    {p.nom}
-                    <span className="ml-2 rounded-full bg-c2b-gold/[0.15] px-2 py-0.5 text-[11px] font-bold text-c2b-green">{p.palier ?? "Sans palier"}</span>
-                    <span className="ml-1.5 text-[11px] font-semibold text-c2b-muted">
-                      {n} repas{p.clientId ? " · appli" : ""}
-                    </span>
-                  </p>
-                  {(p.allergies || p.refus || p.note) && (
-                    <p className="mt-0.5 text-xs text-c2b-muted">
-                      {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
-                      {p.refus && <span>· sans {p.refus} </span>}
-                      {p.note && <span className="italic">· {p.note}</span>}
-                    </p>
-                  )}
-                </button>
-                <button
-                  onClick={() => setActions(actions === p.cle ? null : p.cle)}
-                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-c2b-muted hover:bg-c2b-green/[0.06]"
-                  aria-label={`Options pour ${p.nom}`}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              </div>
-
-              {actions === p.cle && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <button onClick={() => ouvrirModification(p)} className="rounded-full bg-c2b-gold/20 px-3 py-1.5 text-xs font-bold text-c2b-green">
-                    ✏️ Palier, allergies, consigne
-                  </button>
-                  {SERVICES.map((s) => (
-                    <button
-                      key={s.cle}
-                      onClick={() => toutLaSemaine(p, s.cle)}
-                      className="rounded-full bg-white border border-c2b-green/15 px-3 py-1.5 text-xs font-bold text-c2b-green"
-                    >
-                      {s.icone} {s.libelle} tous les jours
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => retirer(p)}
-                    disabled={occupe(p.cle)}
-                    className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-700"
-                  >
-                    Retirer du planning
-                  </button>
-                </div>
-              )}
-
-              {cases(
-                p.nom,
-                (d, s) => coche(p, d, s),
-                (d, s) => poser(p, d, s, !coche(p, d, s)),
-                (d, s) => occupe(`${p.cle}|${d}|${s}`)
-              )}
+            <li key={d} className={`carte overflow-hidden ${ouvert ? "border-c2b-green/30" : ""}`}>
+              <button
+                onClick={() => {
+                  setFormulaire(null);
+                  setJourOuvert(ouvert ? null : d);
+                }}
+                aria-expanded={ouvert}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+              >
+                <span className="flex-1">
+                  <span className="block font-bold text-c2b-green first-letter:uppercase">
+                    {dateCourte(d, { weekday: "long", day: "numeric", month: "short" })}
+                    {d === aujourdhui && <span className="ml-2 rounded-full bg-c2b-gold/20 px-2 py-0.5 text-[10px] font-bold">Aujourd&apos;hui</span>}
+                  </span>
+                  {allergies > 0 && <span className="text-[11px] font-bold text-red-700">⚠️ {allergies} allergie{allergies > 1 ? "s" : ""}</span>}
+                </span>
+                <span className="text-sm font-bold tabular-nums text-c2b-text">☀️ {totalJour(d, "dejeuner")}</span>
+                <span className="text-sm font-bold tabular-nums text-c2b-text">🌙 {totalJour(d, "diner")}</span>
+                <ChevronDown size={18} className={`text-c2b-muted transition-transform ${ouvert ? "rotate-180" : ""}`} />
+              </button>
+              {ouvert && contenuJour(d)}
             </li>
           );
         })}
