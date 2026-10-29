@@ -1627,3 +1627,39 @@ end;
 $$;
 revoke execute on function public.application_site_stats(date, date) from public, anon;
 grant execute on function public.application_site_stats(date, date) to authenticated;
+
+-- ============ NOTIFICATION « NOUVELLE INSCRIPTION » ============
+-- Quand un client s'inscrit lui-même (page /inscription), les admins abonnés
+-- aux notifications sont prévenus (fonction « rappels », type inscription).
+create or replace function public.application_notifier_inscription()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Seulement les inscriptions faites par le client lui-même (page /inscription).
+  if new.est_admin or not exists (
+    select 1 from auth.users u where u.id = new.id and u.raw_user_meta_data->>'inscription' = 'appli'
+  ) then
+    return new;
+  end if;
+  perform net.http_post(
+    url := 'https://gsptgfzgkefgmequnhzk.supabase.co/functions/v1/rappels',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name = 'rappel_cron_secret')),
+    body := jsonb_build_object('type', 'inscription', 'nom', new.nom),
+    timeout_milliseconds := 10000
+  );
+  return new;
+exception when others then
+  -- La notification ne doit jamais empêcher une inscription.
+  return new;
+end;
+$$;
+revoke execute on function public.application_notifier_inscription() from public, anon, authenticated;
+
+drop trigger if exists application_clients_notif_inscription on public.application_clients;
+create trigger application_clients_notif_inscription
+  after insert on public.application_clients
+  for each row execute function public.application_notifier_inscription();

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, Send, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, Search, Send, UserPlus, X } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
@@ -144,6 +144,8 @@ export function CuisineClient({
   // Jour déroulé (un seul à la fois).
   const [jourOuvert, setJourOuvert] = useState<string | null>(jourChoisi ?? (cetteSemaine(aujourdhui) ? aujourdhui : lundi));
   const [message, setMessage] = useState("");
+  // Recherche dans la liste des clients du jour déroulé.
+  const [rechercheJour, setRechercheJour] = useState("");
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
@@ -370,7 +372,7 @@ export function CuisineClient({
   // ---- Ajouter / modifier une personne ----
 
   function ouvrirAjout() {
-    setFormulaire({ cle: null, clientId: null, nom: "", palier: "", allergies: "", refus: "", note: "", cases: [] });
+    setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), palier: "", allergies: "", refus: "", note: "", cases: [] });
   }
 
   function ouvrirModification(p: Personne) {
@@ -765,7 +767,8 @@ export function CuisineClient({
     const total = f.reduce((t, s) => t + s.total, 0);
     // Ceux qui mangent ce jour-là d'abord, puis le reste du planning.
     const mange = (p: Personne) => SERVICES.some((s) => coche(p, date, s.cle));
-    const ordre = [...liste.filter(mange), ...liste.filter((p) => !mange(p))];
+    const filtre = sansAccents(rechercheJour);
+    const ordre = [...liste.filter(mange), ...liste.filter((p) => !mange(p))].filter((p) => !filtre || sansAccents(p.nom).includes(filtre));
     return (
       <div className="space-y-4 border-t border-c2b-green/10 px-3 pb-4 pt-3">
         <div className="grid grid-cols-2 gap-2">
@@ -785,7 +788,32 @@ export function CuisineClient({
         {/* Clients : midi et soir de ce jour, d'un toucher. */}
         <div>
           <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-c2b-muted">Clients</p>
-          {ordre.length === 0 && <p className="py-2 text-sm text-c2b-muted">Personne dans le planning cette semaine.</p>}
+          {liste.length > 6 && (
+            <div className="relative mb-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
+              <input
+                value={rechercheJour}
+                onChange={(e) => setRechercheJour(e.target.value)}
+                placeholder="Rechercher un nom"
+                autoComplete="off"
+                className="champ py-2 pl-8 pr-8 text-sm"
+              />
+              {rechercheJour && (
+                <button
+                  onClick={() => setRechercheJour("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
+                  aria-label="Effacer la recherche"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )}
+          {ordre.length === 0 && (
+            <p className="py-2 text-sm text-c2b-muted">
+              {filtre ? "Personne de ce nom dans le planning : ajoutez-la ci-dessous." : "Personne dans le planning cette semaine."}
+            </p>
+          )}
           <ul className="divide-y divide-c2b-green/10">
             {ordre.map((p) =>
               formulaire?.cle === p.cle ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
@@ -104,7 +104,13 @@ export function ClientsClient({
   const [copie, setCopie] = useState(false);
   const [filtre, setFiltre] = useState<"tous" | "premium" | "gratuits">("tous");
   const nbPremium = clients.filter((c) => c.premium).length;
-  const clientsAffiches = clients.filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true));
+  const [recherche, setRecherche] = useState("");
+  // Recherche sur le nom, l'e-mail ou le téléphone (sans tenir compte des accents).
+  const normaliser = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const saisie = normaliser(recherche);
+  const clientsAffiches = clients
+    .filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true))
+    .filter((c) => !saisie || normaliser([c.nom, emailsConnus[c.id], c.telephone].filter(Boolean).join(" ")).includes(saisie));
 
   // Client Chef2Box (Premium) : messagerie, assistant 20/jour, « Mon plat », bilan.
   async function basculerPremium(c: Client) {
@@ -439,6 +445,26 @@ export function ClientsClient({
               </button>
             ))}
           </div>
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
+            <input
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder="Rechercher un nom, un e-mail, un téléphone"
+              autoComplete="off"
+              className="champ py-2.5 pl-9 pr-9 text-sm"
+            />
+            {recherche && (
+              <button
+                onClick={() => setRecherche("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
+                aria-label="Effacer la recherche"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          {clientsAffiches.length === 0 && <p className="py-3 text-center text-sm text-c2b-muted">Aucun client trouvé.</p>}
           {clientsAffiches.map((c) => (
             <div key={c.id} className="carte p-4">
               <div className="flex items-start justify-between gap-3">
