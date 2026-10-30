@@ -138,16 +138,18 @@ export interface RepasSemaine {
 
 const JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
 
-// Titre d'une liste repliable (Mes clients, Questionnaires, Comptes appli).
+// Titre d'une liste repliable (clients de la semaine, tous nos clients, questionnaires, comptes appli).
 function EnTeteSection({
   icone,
   titre,
+  sousTitre,
   nombre,
   ouvert,
   basculer,
 }: {
   icone: React.ReactNode;
   titre: string;
+  sousTitre?: string;
   nombre: number;
   ouvert: boolean;
   basculer: () => void;
@@ -155,7 +157,10 @@ function EnTeteSection({
   return (
     <button onClick={basculer} aria-expanded={ouvert} className="carte flex w-full items-center gap-3 px-4 py-3.5 text-left">
       <span className="text-c2b-gold">{icone}</span>
-      <span className="flex-1 font-serif text-[20px] text-c2b-green">{titre}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-serif text-[20px] leading-tight text-c2b-green">{titre}</span>
+        {sousTitre && <span className="block text-[11px] text-c2b-muted">{sousTitre}</span>}
+      </span>
       <span className="pastille py-0.5 px-2">{nombre}</span>
       <ChevronDown size={18} className={`text-c2b-muted transition-transform ${ouvert ? "rotate-180" : ""}`} />
     </button>
@@ -658,7 +663,8 @@ export function ClientsClient({
             <section className="space-y-2.5">
               <EnTeteSection
                 icone={<CalendarDays size={18} />}
-                titre="Clients de la semaine"
+                titre="Nos clients de la semaine"
+                sousTitre="Qui mange quoi, jour par jour"
                 nombre={tous.length}
                 ouvert={ouvert}
                 basculer={() => basculerListe("semaine")}
@@ -751,11 +757,12 @@ export function ClientsClient({
           );
         })()}
 
-      {/* 1. Mes clients : les fiches de la cuisine. */}
+      {/* 1. Tous nos clients : les fiches de la cuisine. */}
       <section className="space-y-2.5">
         <EnTeteSection
           icone={<Users size={18} />}
-          titre="Mes clients"
+          titre="Tous nos clients"
+          sousTitre="Depuis le début · prix, lien, relance"
           nombre={fiches.length}
           ouvert={ouvertes.has("clients") || !!saisie}
           basculer={() => basculerListe("clients")}
@@ -929,6 +936,7 @@ export function ClientsClient({
         <EnTeteSection
           icone={<Inbox size={18} />}
           titre="Questionnaires reçus"
+          sousTitre="Prospects du site, pas encore clients"
           nombre={questionnaires.filter((q) => suiviDe(q) === "a_contacter").length}
           ouvert={ouvertes.has("questionnaires") || !!saisie}
           basculer={() => basculerListe("questionnaires")}
@@ -1052,6 +1060,7 @@ export function ClientsClient({
         <EnTeteSection
           icone={<Smartphone size={18} />}
           titre="Comptes de l'appli"
+          sousTitre="Inscrits sur l'appli · Premium"
           nombre={clients.length}
           ouvert={ouvertes.has("appli") || !!saisie}
           basculer={() => basculerListe("appli")}
