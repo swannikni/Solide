@@ -1,4 +1,4 @@
-import { exigerSession } from "@/lib/session";
+import { exigerClient } from "@/lib/session";
 import { DashboardClient } from "@/app/(espace)/dashboard/DashboardClient";
 import type { Defi, Favori, Plat, Points, RepasJournal } from "@/lib/types";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
@@ -7,7 +7,7 @@ import { bilanSemaine, semaineAResumer, serieActuelle, totauxParJour } from "@/l
 
 export default async function DashboardPage(props: { searchParams: Promise<{ date?: string; plat?: string }> }) {
   const searchParams = await props.searchParams;
-  const { supabase, userId, client } = await exigerSession();
+  const { supabase, userId, client } = await exigerClient();
 
   const aujourdhui = dateDuJour();
   const date = estDateValide(searchParams.date) && searchParams.date <= aujourdhui ? searchParams.date : aujourdhui;

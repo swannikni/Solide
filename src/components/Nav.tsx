@@ -3,10 +3,18 @@
 import { Suspense, use, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageCircle, ShieldCheck, Sparkles, TrendingUp, UserRound } from "lucide-react";
+import { ChefHat, LayoutDashboard, MessageCircle, Sparkles, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 // racine : partie de l'adresse qui allume l'onglet (Admin couvre /admin/...).
+// L'admin a sa propre barre : la gestion seulement (pas l'appli client).
+const LIENS_ADMIN = [
+  { href: "/admin/cuisine", racine: "/admin/cuisine", label: "Cuisine", icon: ChefHat },
+  { href: "/admin/clients", racine: "/admin/clients", label: "Clients", icon: Users },
+  { href: "/admin/paiements", racine: "/admin/paiements", label: "Paiements", icon: Wallet },
+  { href: "/messages", racine: "/messages", label: "Messages", icon: MessageCircle },
+];
+
 const LIENS_CLIENT = [
   { href: "/dashboard", racine: "/dashboard", label: "Aujourd'hui", icon: LayoutDashboard },
   { href: "/assistant", racine: "/assistant", label: "Assistant", icon: Sparkles },
@@ -57,9 +65,7 @@ export function Nav({
   const setCible = (href: string) => setTouche({ href, depuis: pathname });
 
   const liensClient = LIENS_CLIENT.filter((l) => assistantActif || l.href !== "/assistant");
-  const liens = estAdmin
-    ? [{ href: "/admin/cuisine", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...liensClient]
-    : liensClient;
+  const liens = estAdmin ? LIENS_ADMIN : liensClient;
 
   // Planche d'étiquettes à imprimer : pas de barres.
   if (pathname.includes("/etiquettes")) return null;

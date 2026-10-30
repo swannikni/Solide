@@ -1,4 +1,4 @@
-import { exigerSession } from "@/lib/session";
+import { exigerClient } from "@/lib/session";
 import { totauxDuJour } from "@/lib/macros";
 import type { Defi, DemandeRecompense, Points, Poids, Recompense, RepasJournal } from "@/lib/types";
 import { Progres } from "@/components/Progres";
@@ -12,7 +12,7 @@ import Link from "next/link";
 import { UtensilsCrossed } from "lucide-react";
 
 export default async function HistoryPage() {
-  const { supabase, userId, client } = await exigerSession();
+  const { supabase, userId, client } = await exigerClient();
 
   const aujourdhui = dateDuJour();
   const debutSemaine = decalerDate(aujourdhui, -6);

@@ -31,3 +31,11 @@ export async function exigerSession() {
   if (!session?.client) redirect("/login");
   return { ...session, client: session.client };
 }
+
+// Pages de l'appli client (journal, progrès, assistant) : l'admin a sa
+// propre appli de gestion, il est renvoyé vers la Cuisine.
+export async function exigerClient() {
+  const session = await exigerSession();
+  if (session.client.est_admin) redirect("/admin/cuisine");
+  return session;
+}

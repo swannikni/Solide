@@ -1,8 +1,8 @@
-import { exigerSession } from "@/lib/session";
+import { exigerClient } from "@/lib/session";
 import { AssistantChat } from "@/components/AssistantChat";
 
 export default async function AssistantPage() {
-  const { supabase, userId, client } = await exigerSession();
+  const { supabase, userId, client } = await exigerClient();
   if (!process.env.ANTHROPIC_API_KEY) {
     return (
       <div className="min-h-screen pt-[68px] md:pt-20 pb-28">

@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Chef2Box — Suivi nutrition",
     short_name: "Chef2Box",
     description: "Prêt. Sain. Maîtrisé.",
-    start_url: "/dashboard",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
