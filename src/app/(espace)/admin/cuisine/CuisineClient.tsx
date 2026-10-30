@@ -888,16 +888,32 @@ export function CuisineClient({
   // ---- « Ma semaine » : lien client et semaines à valider ----
 
   // Envoie au client son lien personnel sur WhatsApp (créé la première fois).
+  // Crée le lien personnel s'il n'existe pas encore (renvoie le jeton).
+  async function creerLien(nom: string) {
+    const fc = fiches.get(cleNom(nom));
+    if (!fc) {
+      setMessage("Enregistrez d'abord sa fiche (bouton Enregistrer), puis renvoyez le lien.");
+      return null;
+    }
+    if (fc.jeton) return fc.jeton;
+    const jeton = nouveauJeton();
+    const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
+    if (error) {
+      setMessage("Lien impossible à créer, réessayez.");
+      return null;
+    }
+    setFiches((m) => new Map(m).set(cleNom(nom), { ...fc, jeton }));
+    return jeton;
+  }
+  const lienEspace = (nom: string) => {
+    const jeton = fiches.get(cleNom(nom))?.jeton;
+    return jeton && typeof window !== "undefined" ? `${window.location.origin}/ma-semaine/${jeton}` : null;
+  };
+
   async function envoyerLien(nom: string, telephone: string | null) {
     const fc = fiches.get(cleNom(nom));
-    if (!fc) return setMessage("Enregistrez d'abord sa fiche (bouton Enregistrer), puis renvoyez le lien.");
-    let jeton = fc.jeton;
-    if (!jeton) {
-      jeton = nouveauJeton();
-      const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
-      if (error) return setMessage("Lien impossible à créer, réessayez.");
-      setFiches((m) => new Map(m).set(cleNom(nom), { ...fc, jeton }));
-    }
+    const jeton = await creerLien(nom);
+    if (!fc || !jeton) return;
     const lien = `${window.location.origin}/ma-semaine/${jeton}`;
     const prenom = nom.trim().split(/\s+/)[0];
     const texteLien = `Bonjour ${prenom} 👋 Voici ton espace Chef2Box : tu y commandes tes repas (midi, soir) avec le menu et le prix, tu modifies jusqu'à la veille 20 h et tu suis tes paiements. Garde ce lien : ${lien}`;
@@ -1161,13 +1177,48 @@ export function CuisineClient({
       {personneModifiee ? (
         <>
           {!personneModifiee.clientId && (
-            <button
-              type="button"
-              onClick={() => envoyerLien(personneModifiee.nom, texte(formulaire.telephone, 30))}
-              className="w-full rounded-full bg-[#25D366] py-2.5 text-sm font-bold text-white"
-            >
-              📲 Envoyer le lien « Ma semaine »
-            </button>
+            <div className="space-y-1.5 rounded-xl bg-white p-3">
+              <p className="text-xs font-bold text-c2b-muted">📲 Lien « Mon espace » (commandes du client)</p>
+              {lienEspace(personneModifiee.nom) ? (
+                <p className="select-all break-all rounded-lg bg-c2b-cream px-2.5 py-2 text-xs text-c2b-green">{lienEspace(personneModifiee.nom)}</p>
+              ) : (
+                <button type="button" onClick={() => creerLien(personneModifiee.nom)} className="btn-secondary w-full py-2 text-xs">
+                  Créer son lien
+                </button>
+              )}
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => envoyerLien(personneModifiee.nom, texte(formulaire.telephone, 30))}
+                  className="rounded-full bg-[#25D366] py-2 text-xs font-bold text-white"
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  disabled={!lienEspace(personneModifiee.nom)}
+                  onClick={() => {
+                    const lien = lienEspace(personneModifiee.nom);
+                    if (lien)
+                      navigator.clipboard
+                        .writeText(lien)
+                        .then(() => setMessage("Lien copié ✓"))
+                        .catch(() => window.prompt("Copiez ce lien :", lien));
+                  }}
+                  className="btn-secondary py-2 text-xs disabled:opacity-40"
+                >
+                  Copier
+                </button>
+                <a
+                  href={lienEspace(personneModifiee.nom) ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`btn-secondary py-2 text-xs ${lienEspace(personneModifiee.nom) ? "" : "pointer-events-none opacity-40"}`}
+                >
+                  Ouvrir
+                </a>
+              </div>
+            </div>
           )}
           <p className="text-[11px] text-c2b-muted">S&apos;applique à sa fiche et à tous ses repas, cette semaine et les suivantes.</p>
           <div className="rounded-xl bg-white p-3">

@@ -284,15 +284,36 @@ export function ClientsClient({
 
   // Lien personnel « Ma semaine » (créé la première fois), envoyé sur
   // WhatsApp : le client choisit ses repas, voit le prix et envoie.
-  async function envoyerLien(fc: FicheResume) {
-    let jeton = fc.jeton;
-    if (!jeton) {
-      jeton = nouveauJeton();
+  // Le menu du lien s'ouvre ; le lien est créé tout de suite s'il n'existe
+  // pas, pour que « Copier » marche d'un seul toucher (iPhone).
+  const [lienOuvert, setLienOuvert] = useState<string | null>(null);
+  const [lienCopie, setLienCopie] = useState(false);
+  const lienDe = (fc: FicheResume) => (fc.jeton ? `${window.location.origin}/ma-semaine/${fc.jeton}` : null);
+  async function ouvrirMenuLien(fc: FicheResume) {
+    setLienCopie(false);
+    if (lienOuvert === fc.id) return setLienOuvert(null);
+    setLienOuvert(fc.id);
+    if (!fc.jeton) {
+      const jeton = nouveauJeton();
       const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
-      if (error) return alert("Lien impossible à créer, réessayez.");
+      if (error) {
+        setLienOuvert(null);
+        return alert("Lien impossible à créer, réessayez.");
+      }
       setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, jeton } : f)));
     }
-    const lien = `${window.location.origin}/ma-semaine/${jeton}`;
+  }
+  function copierLien(fc: FicheResume) {
+    const lien = lienDe(fc);
+    if (!lien) return;
+    navigator.clipboard
+      .writeText(lien)
+      .then(() => setLienCopie(true))
+      .catch(() => window.prompt("Copiez ce lien :", lien));
+  }
+  function envoyerLien(fc: FicheResume) {
+    const lien = lienDe(fc);
+    if (!lien) return;
     const prenom = fc.nom.trim().split(/\s+/)[0];
     const message = `Bonjour ${prenom} 👋 Voici ton espace Chef2Box : tu y commandes tes repas (midi, soir) avec le menu et le prix, tu modifies jusqu'à la veille 20 h et tu suis tes paiements. Garde ce lien : ${lien}`;
     const numero = numeroWhatsApp(fc.telephone);
@@ -577,7 +598,8 @@ export function ClientsClient({
                 const compte = fc.client_id ? clients.find((c) => c.id === fc.client_id) : null;
                 const numero = numeroWhatsApp(fc.telephone);
                 return (
-                  <li key={fc.id} className="carte flex items-center gap-2 p-3">
+                  <li key={fc.id} className="carte p-3">
+                    <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-c2b-green">
                         {fc.nom}
@@ -603,10 +625,11 @@ export function ClientsClient({
                       </>
                     )}
                     <button
-                      onClick={() => envoyerLien(fc)}
+                      onClick={() => ouvrirMenuLien(fc)}
+                      aria-expanded={lienOuvert === fc.id}
                       className="flex h-9 flex-shrink-0 items-center justify-center rounded-full bg-[#25D366] px-3 text-xs font-bold text-white"
-                      aria-label={`Envoyer le lien Ma semaine à ${fc.nom}`}
-                      title="Envoyer le lien « Ma semaine »"
+                      aria-label={`Lien « Mon espace » de ${fc.nom}`}
+                      title="Lien « Mon espace »"
                     >
                       📲
                     </button>
@@ -617,6 +640,30 @@ export function ClientsClient({
                     >
                       🍳
                     </a>
+                    </div>
+                    {lienOuvert === fc.id && (
+                      <div className="mt-2 space-y-2 rounded-xl bg-c2b-cream p-3">
+                        <p className="text-xs font-bold text-c2b-muted">Lien « Mon espace » de {fc.nom}</p>
+                        {lienDe(fc) ? (
+                          <>
+                            <p className="select-all break-all rounded-lg bg-white px-2.5 py-2 text-xs text-c2b-green">{lienDe(fc)}</p>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <button onClick={() => envoyerLien(fc)} className="rounded-full bg-[#25D366] py-2 text-xs font-bold text-white">
+                                WhatsApp
+                              </button>
+                              <button onClick={() => copierLien(fc)} className="btn-secondary py-2 text-xs">
+                                {lienCopie ? "Copié ✓" : "Copier"}
+                              </button>
+                              <a href={lienDe(fc)!} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2 text-xs">
+                                Ouvrir
+                              </a>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-c2b-muted">Création du lien…</p>
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
