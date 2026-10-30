@@ -1780,3 +1780,72 @@ end;
 $$;
 revoke execute on function public.application_renommer_personne(text, text) from public, anon;
 grant execute on function public.application_renommer_personne(text, text) to authenticated;
+
+-- ============ MA SEMAINE (LIEN CLIENT WHATSAPP) ============
+
+-- Lien personnel (jeton) et zone de livraison sur la fiche client.
+alter table public.application_personnes add column if not exists jeton text unique
+  check (jeton is null or char_length(jeton) between 16 and 64);
+alter table public.application_personnes add column if not exists zone text
+  check (zone is null or zone in ('retrait', 'z10', 'z15', 'z20', 'devis'));
+alter table public.application_personnes add column if not exists quartier text
+  check (quartier is null or char_length(quartier) <= 60);
+
+-- Semaines envoyées par les clients, à valider par l'admin.
+create table if not exists public.application_demandes_semaine (
+  id uuid primary key default gen_random_uuid(),
+  personne_id uuid not null references public.application_personnes (id) on delete cascade,
+  semaine date not null,
+  repas jsonb not null default '[]'::jsonb,
+  allergies text check (allergies is null or char_length(allergies) <= 300),
+  refus text check (refus is null or char_length(refus) <= 300),
+  note text check (note is null or char_length(note) <= 200),
+  zone text check (zone is null or zone in ('retrait', 'z10', 'z15', 'z20', 'devis')),
+  quartier text check (quartier is null or char_length(quartier) <= 60),
+  adresse text check (adresse is null or char_length(adresse) <= 200),
+  lat double precision check (lat is null or lat between -90 and 90),
+  lng double precision check (lng is null or lng between -180 and 180),
+  prix_repas integer,
+  prix_livraison integer,
+  total integer,
+  statut text not null default 'a_valider' check (statut in ('a_valider', 'validee', 'refusee')),
+  created_at timestamptz not null default now(),
+  traitee_le timestamptz
+);
+create index if not exists application_demandes_semaine_statut_idx on public.application_demandes_semaine (statut, semaine);
+create index if not exists application_demandes_semaine_personne_idx on public.application_demandes_semaine (personne_id);
+alter table public.application_demandes_semaine enable row level security;
+drop policy if exists "demandes_semaine_admin" on public.application_demandes_semaine;
+create policy "demandes_semaine_admin" on public.application_demandes_semaine
+  for all to authenticated using ((select public.application_is_admin())) with check ((select public.application_is_admin()));
+revoke all on table public.application_demandes_semaine from anon;
+grant select, insert, update, delete on table public.application_demandes_semaine to authenticated;
+grant all on table public.application_demandes_semaine to service_role;
+
+-- Notification à l'admin quand une semaine arrive.
+create or replace function public.application_notifier_demande()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform net.http_post(
+    url := 'https://gsptgfzgkefgmequnhzk.supabase.co/functions/v1/rappels',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name = 'rappel_cron_secret')),
+    body := jsonb_build_object('type', 'demande', 'nom',
+      (select nom from public.application_personnes where id = new.personne_id),
+      'repas', jsonb_array_length(new.repas)),
+    timeout_milliseconds := 10000
+  );
+  return new;
+exception when others then
+  return new;
+end;
+$$;
+revoke execute on function public.application_notifier_demande() from public, anon, authenticated;
+drop trigger if exists application_demandes_semaine_notif on public.application_demandes_semaine;
+create trigger application_demandes_semaine_notif
+  after insert on public.application_demandes_semaine
+  for each row execute function public.application_notifier_demande();
