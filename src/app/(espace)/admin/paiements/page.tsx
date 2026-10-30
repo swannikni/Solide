@@ -19,7 +19,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   const jour = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
   const semaineParDefaut = jour === 0 || jour === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
   const semaine = estDateValide(semaineDemandee) ? lundiDe(semaineDemandee) : semaineParDefaut;
-  const periode = { debut: semaine, fin: decalerDate(semaine, 5) }; // samedi compris
+  const periode = { debut: semaine, fin: decalerDate(semaine, 4) };
   // Récapitulatif du mois : semaines dont le lundi tombe dans ce mois.
   const mois = semaine.slice(0, 7);
   const [an, m] = mois.split("-").map(Number);
@@ -76,8 +76,8 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   const noter = (cle: string, nom: string, clientId: string | null, telephone: string | null, date: string, quantite: number | null) => {
     const p = repas.get(cle) ?? { nom, clientId, telephone, jours: new Map<string, RepasDuJour>() };
     const q = quantite && quantite > 0 ? quantite : 1;
-    const j = p.jours.get(date) ?? { services: 0, boites: 0, max: 0 };
-    p.jours.set(date, { services: j.services + 1, boites: j.boites + q, max: Math.max(j.max, q) });
+    const j = p.jours.get(date) ?? { services: 0, boites: 0 };
+    p.jours.set(date, { services: j.services + 1, boites: j.boites + q });
     if (!p.telephone && telephone) p.telephone = telephone;
     repas.set(cle, p);
   };

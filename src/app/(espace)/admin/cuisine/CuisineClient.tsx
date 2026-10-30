@@ -145,11 +145,12 @@ export function CuisineClient({
   platsInitiaux: Record<string, { dejeuner: string; diner: string }>;
 }) {
   const supabase = createClient();
-  // Du lundi au samedi (le samedi seulement pour les livraisons ponctuelles).
-  const jours = Array.from({ length: 6 }, (_, i) => decalerDate(lundi, i));
-  const samedi = jours[5];
+  // Du lundi au vendredi (pas de livraison le week-end : le repas du samedi
+  // se prend en double le vendredi, ×2).
+  const jours = Array.from({ length: 5 }, (_, i) => decalerDate(lundi, i));
+  const vendredi = jours[4];
   const lundiAvant = decalerDate(lundi, -7);
-  const cetteSemaine = (d: string) => d >= lundi && d <= samedi;
+  const cetteSemaine = (d: string) => d >= lundi && d <= vendredi;
 
   const [clients, setClients] = useState(clientsInitiaux);
   const [commandes, setCommandes] = useState(commandesInitiales);
@@ -670,12 +671,12 @@ export function CuisineClient({
     if (error) setMessage("Plat non enregistré, réessayez.");
   }
 
-  const titreSemaine = `${dateCourte(lundi, { day: "numeric", month: "short" })} – ${dateCourte(samedi, { day: "numeric", month: "short" })}`;
+  const titreSemaine = `${dateCourte(lundi, { day: "numeric", month: "short" })} – ${dateCourte(vendredi, { day: "numeric", month: "short" })}`;
   const nbAllergies = (f: ReturnType<typeof fiche>) => f.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
 
   // Cases midi/soir × jours du formulaire d'ajout.
   const cases = (estCoche: (d: string, s: Service) => boolean, basculer: (d: string, s: Service) => void) => (
-    <div className="mt-2 grid grid-cols-[30px_repeat(6,minmax(0,1fr))] gap-1">
+    <div className="mt-2 grid grid-cols-[30px_repeat(5,minmax(0,1fr))] gap-1">
       <span />
       {jours.map((d) => (
         <span key={d} className="text-center text-[10px] font-bold uppercase text-c2b-muted">
@@ -824,7 +825,9 @@ export function CuisineClient({
                   );
                 })}
               </div>
-              <p className="mt-2 text-[11px] text-c2b-muted">Ex. 2 portions pour la même personne. Compté ×2 en cuisine, dans le sac et au paiement.</p>
+              <p className="mt-2 text-[11px] text-c2b-muted">
+                Ex. le vendredi en double pour le samedi, ou 2 portions. Compté en cuisine, dans le sac, et au paiement (prix d&apos;un repas par boîte en plus).
+              </p>
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">

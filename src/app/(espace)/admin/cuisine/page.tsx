@@ -17,18 +17,18 @@ function lundiDe(date: string) {
 }
 
 // Cuisine : planning de la semaine. Pour chaque personne, midi et/ou soir du
-// lundi au samedi ; chaque case cochée est un repas sur la fiche du jour
+// lundi au vendredi ; chaque case cochée est un repas sur la fiche du jour
 // (PDF à envoyer aux chefs). Par défaut : cette semaine, ou la suivante à
-// partir du dimanche. `?date=` ouvre la semaine de ce jour.
+// partir du samedi. `?date=` ouvre la semaine de ce jour.
 export default async function CuisinePage({ searchParams }: { searchParams: Promise<{ lundi?: string; date?: string }> }) {
   const { supabase } = await exigerAdmin();
   const { lundi: demande, date: jourDemande } = await searchParams;
   const aujourdhui = dateDuJour();
   const jourActuel = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
-  const parDefaut = jourActuel === 0 ? lundiDe(decalerDate(aujourdhui, 1)) : lundiDe(aujourdhui);
+  const parDefaut = jourActuel === 0 || jourActuel === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
   const choisi = estDateValide(demande) ? demande : estDateValide(jourDemande) ? jourDemande : null;
   const lundi = choisi ? lundiDe(choisi) : parDefaut;
-  const samedi = decalerDate(lundi, 5);
+  const vendredi = decalerDate(lundi, 4);
   const lundiAvant = decalerDate(lundi, -7);
 
   const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }] = await Promise.all([
@@ -43,14 +43,14 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
       .from("application_commandes")
       .select("id, client_id, date_livraison, repas_type, note, palier, quantite")
       .gte("date_livraison", lundiAvant)
-      .lte("date_livraison", samedi)
+      .lte("date_livraison", vendredi)
       .neq("statut", "annulee")
       .returns<CommandeSemaine[]>(),
     supabase
       .from("application_cuisine_extras")
       .select("id, date, repas_type, nom, palier, allergies, refus, note, quantite, adresse, lat, lng, telephone, complement")
       .gte("date", lundiAvant)
-      .lte("date", samedi)
+      .lte("date", vendredi)
       .order("created_at")
       .returns<ExtraSemaine[]>(),
     // Personnes ajoutées à la main ces derniers mois : leur dernière fiche
@@ -66,7 +66,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
       .from("application_cuisine_services")
       .select("date, repas_type, plat")
       .gte("date", lundi)
-      .lte("date", samedi)
+      .lte("date", vendredi)
       .returns<{ date: string; repas_type: "dejeuner" | "diner"; plat: string | null }[]>(),
   ]);
 
@@ -92,7 +92,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         key={lundi}
         lundi={lundi}
         aujourdhui={aujourdhui}
-        jourChoisi={estDateValide(jourDemande) && jourDemande >= lundi && jourDemande <= samedi ? jourDemande : null}
+        jourChoisi={estDateValide(jourDemande) && jourDemande >= lundi && jourDemande <= vendredi ? jourDemande : null}
         clients={clients ?? []}
         commandesInitiales={commandes ?? []}
         extrasInitiaux={extras ?? []}
