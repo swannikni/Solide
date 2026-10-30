@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MapPin } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { ZONES, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
+import { ZONES, debutAVenir, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
 import type { Tarifs } from "@/lib/paiements";
 
 export interface SemaineOuverte {
@@ -155,7 +155,8 @@ export function MonEspaceClient({
   // ---- Données dérivées ----
   const tousPrevus = semainesCompte.flatMap((s) => s.repas);
   const enAttente = semainesOuvertes.flatMap((s) => s.enAttente ?? []);
-  const aVenir = [...tousPrevus.filter((r) => r.date >= aujourdhui), ...enAttente.filter((r) => !tousPrevus.some((p) => cle(p) === cle(r)))].sort((a, b) =>
+  const depuis = debutAVenir() > aujourdhui ? debutAVenir() : aujourdhui;
+  const aVenir = [...tousPrevus, ...enAttente.filter((r) => !tousPrevus.some((p) => cle(p) === cle(r)))].filter((r) => r.date >= depuis).sort((a, b) =>
     cle(a).localeCompare(cle(b))
   );
   const platDe = (r: RepasChoisi) => {
@@ -386,7 +387,9 @@ export function MonEspaceClient({
       {/* ---- À venir ---- */}
       {onglet === "avenir" &&
         (aVenir.length === 0 ? (
-          <p className="carte p-5 text-center text-sm text-c2b-muted">Aucun repas prévu. Commandez dans l&apos;onglet 🛒 Commander.</p>
+          <p className="carte p-5 text-center text-sm text-c2b-muted">{depuis > aujourdhui
+              ? "Votre semaine est terminée. Choisissez la semaine prochaine dans l'onglet 🛒 Commander."
+              : "Aucun repas prévu. Commandez dans l'onglet 🛒 Commander."}</p>
         ) : (
           <ul className="space-y-2">
             {aVenir.map((r) => {

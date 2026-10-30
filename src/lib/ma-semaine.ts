@@ -99,6 +99,16 @@ export function encoreModifiable(date: string, maintenant = new Date()) {
   return heure < 20;
 }
 
+// Premier jour affiché dans « À venir » : aujourd'hui, mais la semaine
+// s'arrête le vendredi à 15 h (livraisons faites) → lundi suivant.
+export function debutAVenir(maintenant = new Date()) {
+  const aujourdhui = dateDuJour(maintenant);
+  const j = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
+  const heure = Number(new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, hour: "numeric", hour12: false }).format(maintenant));
+  if (j === 5 && heure >= 15) return decalerDate(aujourdhui, 3);
+  return aujourdhui;
+}
+
 // Lundi de la semaine d'une date.
 export function lundiDe(date: string) {
   const j = new Date(`${date}T12:00:00Z`).getUTCDay();
