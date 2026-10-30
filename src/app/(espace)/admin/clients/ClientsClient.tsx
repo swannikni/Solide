@@ -377,6 +377,14 @@ export function ClientsClient({
     }
   }
 
+  // Crée le lien personnel d'un client s'il n'en a pas encore.
+  async function assurerLien(fc: FicheResume) {
+    if (fc.jeton) return;
+    const jeton = nouveauJeton();
+    const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
+    if (!error) setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, jeton } : f)));
+  }
+
   function copierLien(fc: FicheResume) {
     const lien = lienDe(fc);
     if (!lien) return;
@@ -831,7 +839,11 @@ export function ClientsClient({
                           <li key={p.nom} className="carte px-3 py-2.5">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => setSemaineOuverte(semaineOuverte === p.nom ? null : p.nom)}
+                                onClick={() => {
+                                  setLienCopie(false);
+                                  setSemaineOuverte(semaineOuverte === p.nom ? null : p.nom);
+                                  if (fc && semaineOuverte !== p.nom) assurerLien(fc);
+                                }}
                                 aria-expanded={semaineOuverte === p.nom}
                                 className="min-w-0 flex-1 truncate text-left text-sm font-bold text-c2b-green"
                               >
@@ -849,11 +861,13 @@ export function ClientsClient({
                               </button>
                               {numeroWhatsApp(fc?.telephone ?? null).length >= 9 && (
                                 <a
-                                  href={`tel:+${numeroWhatsApp(fc?.telephone ?? null)}`}
-                                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-c2b-green/20 text-c2b-green"
-                                  aria-label={`Appeler ${p.nom}`}
+                                  href={`https://wa.me/${numeroWhatsApp(fc?.telephone ?? null)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white"
+                                  aria-label={`Écrire à ${p.nom} sur WhatsApp`}
                                 >
-                                  <Phone size={14} />
+                                  <MessageCircle size={15} />
                                 </a>
                               )}
                             </div>
@@ -982,6 +996,26 @@ export function ClientsClient({
                                           </p>
                                         </div>
                                         <p className="text-[11px] text-c2b-muted">Tout est enregistré tout de suite : la Cuisine, son espace et les Paiements suivent.</p>
+                                      </div>
+                                    ) : null}
+                                    {fc ? (
+                                      <div className="space-y-2 rounded-lg bg-white p-2.5">
+                                        <p className="text-xs font-bold text-c2b-muted">📲 Son lien de commande</p>
+                                        {lienDe(fc) ? (
+                                          <div className="grid grid-cols-3 gap-1.5">
+                                            <button onClick={() => envoyerLien(fc)} className="rounded-full bg-[#25D366] py-2 text-xs font-bold text-white">
+                                              WhatsApp
+                                            </button>
+                                            <button onClick={() => copierLien(fc)} className="btn-secondary py-2 text-xs">
+                                              {lienCopie ? "Copié ✓" : "Copier"}
+                                            </button>
+                                            <a href={lienDe(fc)!} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2 text-xs">
+                                              Ouvrir
+                                            </a>
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-c2b-muted">Création du lien…</p>
+                                        )}
                                       </div>
                                     ) : (
                                       <p className="text-xs text-c2b-muted">Compte appli sans fiche client : le prix se règle dans Paiements.</p>
