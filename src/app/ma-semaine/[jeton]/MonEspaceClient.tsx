@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MapPin } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { ZONES, debutAVenir, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
+import { ZONES, debutAVenir, prixZone, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
 import type { Tarifs } from "@/lib/paiements";
 
 export interface SemaineOuverte {
@@ -78,6 +78,8 @@ export function MonEspaceClient({
   const coches = choix[lundi] ?? [];
   const repasSemaine = coches.map(versRepas);
   const prix = prixDemande(repasSemaine, zone, tarifs, conditions);
+  const livraisonNormale = (prixZone(zone) ?? 0) * prix.jours;
+  const economie = prix.brut - prix.prixRepas + (conditions.livraisonOfferte ? livraisonNormale : 0);
   const lundiActuel = lundiDe(aujourdhui);
 
   async function appeler(corps: object, cleEnCours: string) {
@@ -364,19 +366,55 @@ export function MonEspaceClient({
                 </p>
               )}
               {prix.remise > 0 && prix.brut > 0 && (
+                <>
+                  <p className="flex justify-between border-t border-c2b-green/10 pt-2">
+                    <span>Prix des repas</span>
+                    <span>{prix.brut} DH</span>
+                  </p>
+                  <p className="flex justify-between font-semibold text-emerald-700">
+                    <span>🎁 Votre remise {prix.remise} %</span>
+                    <span>−{prix.brut - prix.prixRepas} DH</span>
+                  </p>
+                  <p className="flex justify-between font-semibold text-c2b-green">
+                    <span>Repas après remise</span>
+                    <span>{prix.prixRepas} DH</span>
+                  </p>
+                </>
+              )}
+              {conditions.livraisonOfferte ? (
                 <p className="flex justify-between font-semibold text-emerald-700">
-                  <span>🎁 Remise {prix.remise} %</span>
-                  <span>−{prix.brut - prix.prixRepas} DH</span>
+                  <span>
+                    🚚 Livraison offerte 🎁
+                    {livraisonNormale ? (
+                      <span className="block text-[11px] font-normal">
+                        au lieu de {prix.jours} × {prixZone(zone)} DH
+                      </span>
+                    ) : null}
+                  </span>
+                  <span>
+                    {livraisonNormale ? <s className="mr-1.5 font-normal text-c2b-muted">{livraisonNormale} DH</s> : null}0 DH
+                  </span>
+                </p>
+              ) : (
+                <p className="flex justify-between">
+                  <span>Livraison{zone && prix.jours > 0 && prixZone(zone) ? ` (${prix.jours} × ${prixZone(zone)} DH)` : ""}</span>
+                  <span>{!zone ? "—" : prix.prixLivraison == null ? "sur devis" : prix.prixLivraison === 0 ? "gratuit" : `${prix.prixLivraison} DH`}</span>
                 </p>
               )}
-              <p className="flex justify-between">
-                <span>Livraison{conditions.livraisonOfferte ? " 🎁" : ""}{zone && prix.jours > 0 && ZONES.find((z) => z.cle === zone)?.prix ? ` (${prix.jours} × ${ZONES.find((z) => z.cle === zone)?.prix} DH)` : ""}</span>
-                <span>{!zone ? "—" : prix.prixLivraison == null ? "sur devis" : prix.prixLivraison === 0 ? "gratuit" : `${prix.prixLivraison} DH`}</span>
-              </p>
               <p className="flex justify-between border-t border-c2b-green/10 pt-2 text-base font-bold text-c2b-green">
                 <span>Total</span>
-                <span>{zone && prix.total != null ? `${prix.total} DH` : prix.prixRepas ? `${prix.prixRepas} DH + livraison` : "—"}</span>
+                <span>
+                  {zone && prix.total != null && economie > 0 && (
+                    <s className="mr-2 text-sm font-normal text-c2b-muted">{prix.total + economie} DH</s>
+                  )}
+                  {zone && prix.total != null ? `${prix.total} DH` : prix.prixRepas ? `${prix.prixRepas} DH + livraison` : "—"}
+                </span>
               </p>
+              {economie > 0 && (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-center text-sm font-bold text-emerald-700">
+                  🎉 Vous économisez {economie} DH
+                </p>
+              )}
             </section>
             <button onClick={commander} disabled={enCours === "commander"} className="btn-primary w-full py-3.5 text-base">
               {enCours === "commander" ? "Envoi…" : semaine.prevus.length ? "Mettre à jour ma commande" : "Valider ma commande"}
