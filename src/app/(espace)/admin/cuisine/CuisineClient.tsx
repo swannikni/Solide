@@ -512,6 +512,18 @@ export function CuisineClient({
     else setExtras((prev) => prev.map((e) => (e.id === ligne.id ? { ...e, quantite: q } : e)));
   }
 
+  // Retire un repas depuis la fiche du jour (✕ à côté du nom).
+  async function supprimerRepas(id: string, nom: string, libelle: string) {
+    if (!window.confirm(`Retirer le repas ${libelle} de ${nom} ?`)) return;
+    const commande = commandes.some((c) => c.id === id);
+    debut(id);
+    const { error } = await supabase.from(commande ? "application_commandes" : "application_cuisine_extras").delete().eq("id", id);
+    fin(id);
+    if (error) return setMessage("Suppression impossible, vérifiez la connexion et réessayez.");
+    if (commande) setCommandes((prev) => prev.filter((c) => c.id !== id));
+    else setExtras((prev) => prev.filter((e) => e.id !== id));
+  }
+
   // Retire ses repas (midi et soir) d'un seul jour.
   async function retirerJour(p: Personne, date: string) {
     if (!window.confirm(`Retirer ${p.nom} le ${new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", timeZone: "UTC" })} ?`)) return;
@@ -1249,7 +1261,7 @@ export function CuisineClient({
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-sm font-semibold text-c2b-green">Remise</span>
-                {[0, 5, 10, 15, 20, 30, 50].map((r) => (
+                {[0, 5, 10, 15, 20, 30, 50, 100].map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -1258,7 +1270,7 @@ export function CuisineClient({
                       (formulaire.remise ?? 0) === r ? "bg-c2b-gold text-c2b-green" : "bg-c2b-cream border border-c2b-green/15 text-c2b-green"
                     }`}
                   >
-                    {r === 0 ? "Aucune" : `${r} %`}
+                    {r === 0 ? "Aucune" : r === 100 ? "🎁 Offert" : `${r} %`}
                   </button>
                 ))}
               </div>
@@ -1803,12 +1815,22 @@ export function CuisineClient({
                     </p>
                     <ul className="mt-1 space-y-0.5">
                       {g.lignes.map((l) => (
-                        <li key={l.cle} className="text-sm leading-snug">
+                        <li key={l.cle} className="flex items-start gap-2 text-sm leading-snug">
+                          <span className="min-w-0 flex-1">
                           <span className="font-bold text-c2b-green">{l.nom}</span>
                           {(l.quantite ?? 1) > 1 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs font-extrabold text-white">×{l.quantite}</span>}
                           {l.allergies && <span className="ml-1.5 font-bold text-red-700">⚠️ {l.allergies}</span>}
                           {l.refus && <span className="text-c2b-text"> · sans {l.refus}</span>}
                           {l.note && <span className="italic text-c2b-text"> · {l.note}</span>}
+                          </span>
+                          <button
+                            onClick={() => supprimerRepas(l.cle, l.nom, `du ${s.libelle.toLowerCase()} (${dateLongue(date)})`)}
+                            disabled={occupe(l.cle)}
+                            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-red-200 text-red-600 disabled:opacity-40"
+                            aria-label={`Retirer ${l.nom}`}
+                          >
+                            <X size={14} />
+                          </button>
                         </li>
                       ))}
                     </ul>

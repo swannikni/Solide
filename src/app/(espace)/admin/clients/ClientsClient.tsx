@@ -693,7 +693,7 @@ export function ClientsClient({
                         {fc.palier && <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{fc.palier}</span>}
                         {(fc.livraison_offerte || (fc.remise ?? 0) > 0) && (
                           <span className="ml-1.5 text-[10px] font-bold text-emerald-700">
-                            🎁 {[(fc.remise ?? 0) > 0 && `−${fc.remise} %`, fc.livraison_offerte && "livraison"].filter(Boolean).join(" · ")}
+                            🎁 {[(fc.remise ?? 0) >= 100 ? "offert" : (fc.remise ?? 0) > 0 && `−${fc.remise} %`, fc.livraison_offerte && "livraison"].filter(Boolean).join(" · ")}
                           </span>
                         )}
                         {compte && (
@@ -748,7 +748,7 @@ export function ClientsClient({
                           </label>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-sm font-semibold text-c2b-green">Remise</span>
-                            {[0, 5, 10, 15, 20, 30, 50].map((r) => (
+                            {[0, 5, 10, 15, 20, 30, 50, 100].map((r) => (
                               <button
                                 key={r}
                                 onClick={() => changerPrix(fc, { remise: r })}
@@ -756,7 +756,7 @@ export function ClientsClient({
                                   (fc.remise ?? 0) === r ? "bg-c2b-gold text-c2b-green" : "bg-c2b-cream border border-c2b-green/15 text-c2b-green"
                                 }`}
                               >
-                                {r === 0 ? "Aucune" : `${r} %`}
+                                {r === 0 ? "Aucune" : r === 100 ? "🎁 Offert" : `${r} %`}
                               </button>
                             ))}
                           </div>

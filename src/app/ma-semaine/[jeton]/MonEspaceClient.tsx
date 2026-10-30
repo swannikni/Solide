@@ -372,7 +372,7 @@ export function MonEspaceClient({
                     <span>{prix.brut} DH</span>
                   </p>
                   <p className="flex justify-between font-semibold text-emerald-700">
-                    <span>🎁 Votre remise {prix.remise} %</span>
+                    <span>{prix.remise >= 100 ? "🎁 Offert par Chef2Box" : `🎁 Votre remise ${prix.remise} %`}</span>
                     <span>−{prix.brut - prix.prixRepas} DH</span>
                   </p>
                   <p className="flex justify-between font-semibold text-c2b-green">
