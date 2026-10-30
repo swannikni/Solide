@@ -78,7 +78,7 @@ export function MonEspaceClient({
   const coches = choix[lundi] ?? [];
   const repasSemaine = coches.map(versRepas);
   const prix = prixDemande(repasSemaine, zone, tarifs, conditions);
-  const livraisonNormale = (prixZone(zone) ?? 0) * prix.jours;
+  const livraisonNormale = (prixZone(zone) ?? 0) * prix.jours1;
   const economie = prix.brut - prix.prixRepas + (conditions.livraisonOfferte ? livraisonNormale : 0);
   const lundiActuel = lundiDe(aujourdhui);
 
@@ -387,7 +387,7 @@ export function MonEspaceClient({
                     🚚 Livraison offerte 🎁
                     {livraisonNormale ? (
                       <span className="block text-[11px] font-normal">
-                        au lieu de {prix.jours} × {prixZone(zone)} DH
+                        au lieu de {prix.jours1} × {prixZone(zone)} DH
                       </span>
                     ) : null}
                   </span>
@@ -397,7 +397,15 @@ export function MonEspaceClient({
                 </p>
               ) : (
                 <p className="flex justify-between">
-                  <span>Livraison{zone && prix.jours > 0 && prixZone(zone) ? ` (${prix.jours} × ${prixZone(zone)} DH)` : ""}</span>
+                  <span>
+                    Livraison{zone && prix.jours1 > 0 && prixZone(zone) ? ` (${prix.jours1} × ${prixZone(zone)} DH)` : ""}
+                    {zone && zone !== "devis" && prix.jours2 > 0 && (
+                      <span className="block text-[11px] font-semibold text-emerald-700">
+                        🎁 offerte les jours midi + soir ({prix.jours2} jour{prix.jours2 > 1 ? "s" : ""})
+                      </span>
+                    )}
+                    {zone === "devis" && <span className="block text-[11px] text-c2b-muted">Hors zone : Chef2Box vous contacte pour le prix.</span>}
+                  </span>
                   <span>{!zone ? "—" : prix.prixLivraison == null ? "sur devis" : prix.prixLivraison === 0 ? "gratuit" : `${prix.prixLivraison} DH`}</span>
                 </p>
               )}

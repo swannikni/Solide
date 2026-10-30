@@ -72,8 +72,10 @@ export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tar
   const brut = prixParJour(jours - jours2, jours2, tarifs);
   const remise = Math.min(100, Math.max(0, conditions.remise ?? 0));
   const prixRepas = Math.round((brut * (100 - remise)) / 100);
+  // Livraison par jour livré selon la zone ; offerte les jours midi + soir
+  // (dans la zone de la carte ; au-delà, sur devis).
   const parJourLivraison = conditions.livraisonOfferte ? 0 : prixZone(zone);
-  const prixLivraison = parJourLivraison == null ? null : parJourLivraison * jours;
+  const prixLivraison = parJourLivraison == null ? null : parJourLivraison * (jours - jours2);
   return {
     jours,
     jours1: jours - jours2,

@@ -103,7 +103,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
     .map(([cle, p]) => {
       const frais = fraisJour.get(cle) ?? 0;
       const remise = remiseDe.get(cle) ?? 0;
-      const semaines = semainesDe(p.jours).map((s) => ({ ...s, ...(frais ? { livraison: s.jours * frais } : {}), ...(remise ? { remise } : {}) }));
+      const semaines = semainesDe(p.jours).map((s) => ({ ...s, ...(frais ? { livraison: (s.jours - (s.jours2 ?? 0)) * frais } : {}), ...(remise ? { remise } : {}) }));
       const offre = offreDe.get(cle) ?? null;
       return {
         cle,
