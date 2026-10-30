@@ -7,6 +7,7 @@ import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
+import { lundiDe } from "@/lib/paiements";
 import { boitesDe, genererFichePdf, libellePalier, nomAvecBoites, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
 import type { Palier } from "@/lib/types";
 
@@ -104,7 +105,8 @@ interface Formulaire {
   allergies: string;
   refus: string;
   note: string;
-  cases: string[]; // « date|service » à cocher (ajout seulement)
+  cases: string[]; // « date|service » à cocher (ajout seulement), toutes semaines
+  semaine: string; // lundi de la semaine affichée dans le formulaire d'ajout
 }
 
 const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[] = [
@@ -281,6 +283,8 @@ export function CuisineClient({
       refus: fc?.refus ?? "",
       note: fc?.note ?? "",
       cases: [],
+      // Nouveau client : on démarre la semaine suivante (modifiable).
+      semaine: lundi <= aujourdhui ? decalerDate(lundi, 7) : lundi,
     });
     try {
       window.history.replaceState(null, "", window.location.pathname + window.location.search.replace(/[?&]ajouter=[^&]*/, "").replace(/^&/, "?"));
@@ -541,7 +545,7 @@ export function CuisineClient({
 
   function ouvrirAjout() {
     setHistorique(null);
-    setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), telephone: "", adresse: "", palier: "", allergies: "", refus: "", note: "", cases: [] });
+    setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), telephone: "", adresse: "", palier: "", allergies: "", refus: "", note: "", cases: [], semaine: lundi });
   }
 
   function ouvrirModification(p: Personne) {
@@ -559,6 +563,7 @@ export function CuisineClient({
       refus: p.refus ?? "",
       note: p.note ?? "",
       cases: [],
+      semaine: lundi,
     });
     // Historique de paiement (8 dernières semaines), chargé à l'ouverture.
     setHistorique(null);
@@ -709,6 +714,12 @@ export function CuisineClient({
     }
     setActifs((s) => new Set(s).add(cle));
     setFormulaire(null);
+    // Repas d'une autre semaine seulement : on ouvre la première de ces semaines.
+    const dates = repas.map(([d]) => d).sort();
+    if (dates.length && !dates.some(cetteSemaine)) {
+      window.location.href = `/admin/cuisine?date=${dates[0]}`;
+      return;
+    }
     setMessage(`${nom} est ajouté(e) au planning${repas.length ? ` (${repas.length} repas)` : " : cochez ses repas"}.`);
   }
 
@@ -741,6 +752,7 @@ export function CuisineClient({
       refus: s.refus ?? "",
       note: "",
       cases: f?.cases ?? [],
+      semaine: f?.semaine ?? lundi,
     }));
   }
 
@@ -833,12 +845,13 @@ export function CuisineClient({
   const nbAllergies = (f: ReturnType<typeof fiche>) => f.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
 
   // Cases midi/soir × jours du formulaire d'ajout.
-  const cases = (estCoche: (d: string, s: Service) => boolean, basculer: (d: string, s: Service) => void) => (
+  const cases = (joursGrille: string[], estCoche: (d: string, s: Service) => boolean, basculer: (d: string, s: Service) => void) => (
     <div className="mt-2 grid grid-cols-[30px_repeat(5,minmax(0,1fr))] gap-1">
       <span />
-      {jours.map((d) => (
-        <span key={d} className="text-center text-[10px] font-bold uppercase text-c2b-muted">
+      {joursGrille.map((d) => (
+        <span key={d} className="text-center text-[10px] font-bold uppercase leading-tight text-c2b-muted">
           {jourCourt(d)}
+          <span className="block font-semibold">{dateCourte(d, { day: "numeric" })}</span>
         </span>
       ))}
       {SERVICES.map((s) => (
@@ -846,18 +859,20 @@ export function CuisineClient({
           <span className="flex items-center justify-center text-base" title={s.libelle}>
             {s.icone}
           </span>
-          {jours.map((d) => {
+          {joursGrille.map((d) => {
             const actif = estCoche(d, s.cle);
+            const passe = d < aujourdhui;
             return (
               <button
                 key={d}
                 type="button"
+                disabled={passe}
                 onClick={() => basculer(d, s.cle)}
                 aria-pressed={actif}
                 aria-label={`${s.libelle} ${dateCourte(d, { weekday: "long" })}`}
                 className={`h-10 rounded-xl text-sm font-bold transition ${
-                  actif ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-transparent"
-                }`}
+                  actif ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-transparent"
+                } ${passe ? "opacity-30" : ""}`}
               >
                 ✓
               </button>
@@ -1090,37 +1105,80 @@ export function CuisineClient({
         </>
       ) : (
         <div>
-          <p className="text-xs font-bold text-c2b-muted">Ses repas cette semaine</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {(
-              [
-                ["☀️ Midi toute la semaine", ["dejeuner"]],
-                ["🌙 Soir toute la semaine", ["diner"]],
-                ["☀️🌙 Midi + soir", ["dejeuner", "diner"]],
-              ] as const
-            ).map(([libelle, services]) => (
-              <button
-                key={libelle}
-                type="button"
-                onClick={() =>
-                  setFormulaire({
-                    ...formulaire,
-                    cases: jours.filter((d) => d >= aujourdhui).flatMap((d) => services.map((sv) => `${d}|${sv}`)),
-                  })
-                }
-                className="rounded-full bg-white border border-c2b-green/15 px-3 py-1.5 text-xs font-bold text-c2b-green"
-              >
-                {libelle}
-              </button>
-            ))}
-          </div>
-          {cases(
-            (d, s) => formulaire.cases.includes(`${d}|${s}`),
-            (d, s) => {
-              const k = `${d}|${s}`;
-              setFormulaire({ ...formulaire, cases: formulaire.cases.includes(k) ? formulaire.cases.filter((x) => x !== k) : [...formulaire.cases, k] });
-            }
-          )}
+          <p className="mb-1 text-xs font-bold text-c2b-muted">Ses repas</p>
+          {(() => {
+            const joursForm = Array.from({ length: 5 }, (_, k) => decalerDate(formulaire.semaine, k));
+            const dansSemaine = (c: string) => c.slice(0, 10) >= formulaire.semaine && c.slice(0, 10) <= joursForm[4];
+            const semaines = new Set(formulaire.cases.map((c) => lundiDe(c.slice(0, 10))));
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, -7) })}
+                    disabled={joursForm[4] < aujourdhui || formulaire.semaine <= lundiDe(aujourdhui)}
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06] disabled:opacity-25"
+                    aria-label="Semaine précédente"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <p className="text-center text-xs font-bold text-c2b-green">
+                    Semaine du {dateCourte(formulaire.semaine, { day: "numeric", month: "short" })} au{" "}
+                    {dateCourte(joursForm[4], { day: "numeric", month: "short" })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, 7) })}
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
+                    aria-label="Semaine suivante"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["☀️ Midi toute la semaine", ["dejeuner"]],
+                      ["🌙 Soir toute la semaine", ["diner"]],
+                      ["☀️🌙 Midi + soir", ["dejeuner", "diner"]],
+                    ] as const
+                  ).map(([libelle, services]) => (
+                    <button
+                      key={libelle}
+                      type="button"
+                      onClick={() =>
+                        setFormulaire({
+                          ...formulaire,
+                          // Remplace les cases de cette semaine seulement (les autres semaines restent).
+                          cases: [
+                            ...formulaire.cases.filter((c) => !dansSemaine(c)),
+                            ...joursForm.filter((d) => d >= aujourdhui).flatMap((d) => services.map((sv) => `${d}|${sv}`)),
+                          ],
+                        })
+                      }
+                      className="rounded-full bg-white border border-c2b-green/15 px-3 py-1.5 text-xs font-bold text-c2b-green"
+                    >
+                      {libelle}
+                    </button>
+                  ))}
+                </div>
+                {cases(
+                  joursForm,
+                  (d, s) => formulaire.cases.includes(`${d}|${s}`),
+                  (d, s) => {
+                    const k = `${d}|${s}`;
+                    setFormulaire({ ...formulaire, cases: formulaire.cases.includes(k) ? formulaire.cases.filter((x) => x !== k) : [...formulaire.cases, k] });
+                  }
+                )}
+                {formulaire.cases.length > 0 && (
+                  <p className="mt-1.5 text-[11px] font-semibold text-c2b-green">
+                    {formulaire.cases.length} repas coché{formulaire.cases.length > 1 ? "s" : ""}
+                    {semaines.size > 1 ? ` sur ${semaines.size} semaines` : ""} · changez de semaine avec ◀ ▶ pour en ajouter d&apos;autres
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
       <div className="flex gap-2">
