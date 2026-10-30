@@ -40,7 +40,7 @@
   "email": "hello@chef2box.com",
   "telephone": "+212660831640",
   "image": "https://chef2box.com/images/og-cover.jpg",
-  "priceRange": "790-1390 MAD",
+  "priceRange": "690-1290 MAD",
   "currenciesAccepted": "MAD",
   "servesCuisine": ["Healthy", "Méditerranéenne", "Fitness"],
   "address": {
@@ -67,14 +67,14 @@
         "@type": "Offer",
         "name": "Formule Déjeuner",
         "description": "5 repas par semaine, livrés du lundi au vendredi.",
-        "price": "790",
+        "price": "690",
         "priceCurrency": "MAD"
       },
       {
         "@type": "Offer",
         "name": "Formule Déjeuner + Dîner",
         "description": "10 repas par semaine, livrés du lundi au vendredi.",
-        "price": "1390",
+        "price": "1290",
         "priceCurrency": "MAD"
       }
     ]
@@ -341,6 +341,7 @@ h2.ttl.inv { color: var(--cream); }
 .f-name { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .formule.feat .f-name { color: var(--cream); }
 .f-price { font-family: 'DM Serif Display', serif; font-size: 56px; color: var(--gold); line-height: 1.05; }
+.f-old { font-size: 0.5em; color: currentColor; opacity: 0.45; text-decoration: line-through; text-decoration-thickness: 2px; margin-right: 6px; vertical-align: middle; }
 .f-period { font-size: 13px; color: #aaa; margin-bottom: 28px; }
 .formule.feat .f-period { color: rgba(245,240,232,0.4); }
 .f-features { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 36px; }
@@ -914,8 +915,8 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
   <div class="formules">
     <div class="formule">
       <div class="f-name">Déjeuner</div>
-      <div class="f-price">790</div>
-      <div class="f-period">MAD / semaine · 158 MAD / repas</div>
+      <div class="f-price"><s class="f-old">790</s> 690</div>
+      <div class="f-period">MAD / semaine · 138 MAD / repas</div>
       <ul class="f-features">
         <li>5 repas par semaine</li>
         <li>Livraison lundi au vendredi</li>
@@ -927,8 +928,8 @@ footer { background: #0e1710; padding: 56px 80px 40px; }
     <div class="formule feat">
       <span class="f-badge">Le plus populaire</span>
       <div class="f-name">Déjeuner + Dîner</div>
-      <div class="f-price">1 390</div>
-      <div class="f-period">MAD / semaine · 139 MAD / repas</div>
+      <div class="f-price"><s class="f-old">1 390</s> 1 290</div>
+      <div class="f-period">MAD / semaine · 129 MAD / repas</div>
       <ul class="f-features">
         <li>10 repas par semaine</li>
         <li>Livraison lundi au vendredi</li>
@@ -1251,7 +1252,7 @@ HA
   <span class="lbl">Commencer maintenant</span>
   <h2>Votre première semaine<br><em>commence ici.</em></h2>
   <p class="cta-sub">Nous préparons vos repas. Vous vous concentrez sur vos objectifs.</p>
-  <div class="cta-price">À partir de 790 MAD / semaine · Sans engagement · Livraison Marrakech</div>
+  <div class="cta-price">À partir de 690 MAD / semaine · Sans engagement · Livraison Marrakech</div>
   <div class="cta-btns">
     <a href="https://wa.me/212660831640" class="btn-cream-lg" target="_blank" data-stat="Commander (bas de page)">Commander sur WhatsApp</a>
     <a href="#questionnaire" onclick="ouvrirQuestionnaire(); return false;" class="btn-outline-lg">Refaire mon bilan</a>
