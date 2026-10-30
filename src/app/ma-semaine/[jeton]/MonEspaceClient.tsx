@@ -73,8 +73,13 @@ export function MonEspaceClient({
   const [enCours, setEnCours] = useState("");
   const [message, setMessage] = useState<{ texte: string; ok: boolean } | null>(null);
 
+  // Semaine déjà commandée : résumé « validée », la grille revient avec « Modifier ».
+  const [modifie, setModifie] = useState<Record<string, boolean>>({});
+
   const zone = form.quartier ? zoneDuQuartier(form.quartier) : null;
   const semaine = semainesOuvertes.find((s) => s.lundi === lundi);
+  const recap = !!semaine && (semaine.prevus.length > 0 || !!semaine.enAttente) && !modifie[lundi];
+  const peutModifier = !!semaine?.jours.some((j) => j.modifiable);
   const coches = choix[lundi] ?? [];
   const repasSemaine = coches.map(versRepas);
   const prix = prixDemande(repasSemaine, zone, tarifs, conditions);
@@ -128,6 +133,8 @@ export function MonEspaceClient({
       "commander"
     );
     if (!d) return;
+    setModifie((m) => ({ ...m, [lundi]: false }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setMessage({
       texte: d.aValider
         ? "Commande envoyée ✓ Chef2Box confirme votre première commande sur WhatsApp."
@@ -274,6 +281,39 @@ export function MonEspaceClient({
                 ))}
               </div>
             )}
+            {recap && (
+              <section
+                className={`rounded-2xl p-4 text-center ${semaine.enAttente ? "bg-c2b-gold/20 text-c2b-green" : "bg-emerald-600 text-white"}`}
+              >
+                <p className="text-3xl">{semaine.enAttente ? "⏳" : "✅"}</p>
+                <p className="mt-1 text-lg font-bold">{semaine.enAttente ? "Commande envoyée" : "Commande validée"}</p>
+                <p className={`mt-0.5 text-sm ${semaine.enAttente ? "text-c2b-green/80" : "text-white/90"}`}>
+                  {semaine.enAttente
+                    ? "Chef2Box la confirme sur WhatsApp."
+                    : "C'est en cuisine. Modifiable jusqu'à la veille 20 h de chaque repas."}
+                </p>
+              </section>
+            )}
+            {recap && (
+              <ul className="space-y-1.5">
+                {semaine.jours
+                  .filter((j) => SERVICES.some((s) => coches.includes(`${j.date}|${s.cle}`)))
+                  .map((j) => (
+                    <li key={j.date} className="carte flex items-center justify-between gap-2 px-3 py-2.5">
+                      <span className="text-sm font-bold text-c2b-green first-letter:uppercase">{jourLong(j.date)}</span>
+                      <span className="flex gap-1.5">
+                        {SERVICES.filter((s) => coches.includes(`${j.date}|${s.cle}`)).map((s) => (
+                          <span key={s.cle} className={`rounded-full px-2.5 py-1 text-xs font-bold ${s.allume}`}>
+                            {s.icone} {s.libelle}
+                          </span>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {!recap && (
+              <>
             <section className="rounded-2xl bg-c2b-green p-4 text-sm text-c2b-cream">
               <p className="font-bold">Comment commander ?</p>
               <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-[13px] text-c2b-cream/90">
@@ -347,6 +387,8 @@ export function MonEspaceClient({
               ))}
             </ul>
             {livraison}
+              </>
+            )}
             <section className="carte p-4 space-y-1.5 text-sm">
               <h2 className="font-bold text-c2b-green">Votre semaine du {jourCourt(lundi)}</h2>
               {prix.jours1 > 0 && (
@@ -424,9 +466,30 @@ export function MonEspaceClient({
                 </p>
               )}
             </section>
-            <button onClick={commander} disabled={enCours === "commander"} className="btn-primary w-full py-3.5 text-base">
-              {enCours === "commander" ? "Envoi…" : semaine.prevus.length ? "Mettre à jour ma commande" : "Valider ma commande"}
-            </button>
+            {recap ? (
+              peutModifier && (
+                <button onClick={() => setModifie((m) => ({ ...m, [lundi]: true }))} className="btn-secondary w-full py-3.5 text-base">
+                  ✏️ Modifier ma commande
+                </button>
+              )
+            ) : (
+              <>
+                <button onClick={commander} disabled={enCours === "commander"} className="btn-primary w-full py-3.5 text-base">
+                  {enCours === "commander" ? "Envoi…" : modifie[lundi] ? "Enregistrer les modifications" : "Valider ma commande"}
+                </button>
+                {modifie[lundi] && (
+                  <button
+                    onClick={() => {
+                      setChoix((c) => ({ ...c, [lundi]: (semaine.enAttente ?? semaine.prevus).map(cle) }));
+                      setModifie((m) => ({ ...m, [lundi]: false }));
+                    }}
+                    className="w-full py-2 text-sm font-semibold text-c2b-muted"
+                  >
+                    Annuler la modification
+                  </button>
+                )}
+              </>
+            )}
           </>
         ))}
 
