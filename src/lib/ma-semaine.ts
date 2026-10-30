@@ -2,7 +2,7 @@
 // Zones de livraison (carte Chef2Box Marrakech), prix et délais.
 
 import { FUSEAU, dateDuJour, decalerDate } from "@/lib/dates";
-import type { Tarifs } from "@/lib/paiements";
+import { prixParJour, type Tarifs } from "@/lib/paiements";
 
 export type Zone = "retrait" | "z10" | "z15" | "z20" | "devis";
 export type Service = "dejeuner" | "diner";
@@ -55,17 +55,18 @@ export const ZONES: { cle: Zone; libelle: string; prix: number | null; quartiers
 export const zoneDuQuartier = (quartier: string): Zone | null => ZONES.find((z) => z.quartiers.includes(quartier))?.cle ?? null;
 export const prixZone = (zone: Zone | null | undefined) => ZONES.find((z) => z.cle === zone)?.prix ?? null;
 
-// Prix de la semaine : formule (1 repas par jour, ou 2 si midi et soir un
-// même jour) + livraison par jour livré selon la zone.
+// Prix de la semaine : chaque jour au prix de sa formule (1 repas : 690 / 5,
+// midi + soir : 1 290 / 5) + livraison par jour livré selon la zone.
 export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tarifs) {
   const parJour = new Map<string, Set<Service>>();
   for (const r of repas) parJour.set(r.date, (parJour.get(r.date) ?? new Set()).add(r.service));
   const jours = parJour.size;
-  const deux = [...parJour.values()].some((s) => s.size >= 2);
-  const prixRepas = jours === 0 ? 0 : deux ? tarifs.deux_repas : tarifs.un_repas;
+  const jours2 = [...parJour.values()].filter((s) => s.size >= 2).length;
+  const deux = jours2 > 0;
+  const prixRepas = prixParJour(jours - jours2, jours2, tarifs);
   const parJourLivraison = prixZone(zone);
   const prixLivraison = parJourLivraison == null ? null : parJourLivraison * jours;
-  return { jours, formule: deux ? 2 : 1, prixRepas, prixLivraison, total: prixLivraison == null ? null : prixRepas + prixLivraison };
+  return { jours, jours1: jours - jours2, jours2, formule: deux ? 2 : 1, prixRepas, prixLivraison, total: prixLivraison == null ? null : prixRepas + prixLivraison };
 }
 
 // Un repas se commande jusqu'à la veille 20 h (heure du Maroc), du lundi au vendredi.

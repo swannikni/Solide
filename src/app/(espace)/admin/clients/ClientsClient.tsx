@@ -294,7 +294,7 @@ export function ClientsClient({
     }
     const lien = `${window.location.origin}/ma-semaine/${jeton}`;
     const prenom = fc.nom.trim().split(/\s+/)[0];
-    const message = `Bonjour ${prenom} 👋 Voici ton lien Chef2Box pour choisir tes repas de la semaine (midi, soir), tes allergies et ta livraison. Tu vois le menu et le prix directement : ${lien}`;
+    const message = `Bonjour ${prenom} 👋 Voici ton espace Chef2Box : tu y commandes tes repas (midi, soir) avec le menu et le prix, tu modifies jusqu'à la veille 20 h et tu suis tes paiements. Garde ce lien : ${lien}`;
     const numero = numeroWhatsApp(fc.telephone);
     window.open(numero.length >= 9 ? `https://wa.me/${numero}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   }

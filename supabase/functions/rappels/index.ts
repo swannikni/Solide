@@ -8,6 +8,8 @@
 //   avec le même en-tête x-cron-secret).
 // - type "demande" : un client a envoyé sa semaine (lien « Ma semaine ») ;
 //   prévient les admins abonnés (déclencheur de la base, même en-tête).
+// - type "commande" : un client connu a commandé depuis son espace (appelé
+//   par l'appli avec le même en-tête x-cron-secret).
 // - type "test"  : le client connecté s'envoie une notification d'essai.
 //
 // Les clés VAPID et le secret des tâches sont dans le coffre (Vault).
@@ -53,7 +55,7 @@ Deno.serve(async (req) => {
     const { data } = await admin.auth.getUser(jeton);
     if (!data.user) return reponse({ erreur: "non connecté" }, 401);
     clientTest = data.user.id;
-  } else if (type === "soir" || type === "bilan" || type === "inscription" || type === "demande") {
+  } else if (type === "soir" || type === "bilan" || type === "inscription" || type === "demande" || type === "commande") {
     const attendu = await secret("rappel_cron_secret");
     if (!attendu || !egal(req.headers.get("x-cron-secret") ?? "", attendu)) return reponse({ erreur: "refusé" }, 403);
   } else {
@@ -66,7 +68,7 @@ Deno.serve(async (req) => {
 
   let requete = admin.from("application_push_abonnements").select("id, client_id, endpoint, p256dh, auth");
   if (clientTest) requete = requete.eq("client_id", clientTest);
-  if (type === "inscription" || type === "demande") {
+  if (type === "inscription" || type === "demande" || type === "commande") {
     const { data: admins } = await admin.from("application_clients").select("id").eq("est_admin", true);
     requete = requete.in("client_id", (admins ?? []).map((a) => a.id));
   }
@@ -103,6 +105,11 @@ Deno.serve(async (req) => {
         url: "/dashboard",
       });
     }
+  } else if (type === "commande") {
+    const qui = typeof nom === "string" && nom.trim() ? nom.trim().slice(0, 80) : "Un client";
+    const n = typeof repas === "number" && repas > 0 ? ` (${repas} repas cette semaine)` : "";
+    for (const id of clients)
+      messages.set(id, { title: "🛒 Nouvelle commande", body: `${qui} a commandé${n}. C'est déjà au planning.`, url: "/admin/cuisine" });
   } else if (type === "demande") {
     const qui = typeof nom === "string" && nom.trim() ? nom.trim().slice(0, 80) : "Un client";
     const n = typeof repas === "number" && repas > 0 ? ` (${repas} repas)` : "";

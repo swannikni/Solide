@@ -19,6 +19,8 @@ export interface SemaineRepas {
   lundi: string; // AAAA-MM-JJ
   jours: number; // jours du lundi au vendredi avec au moins un repas
   formule: 1 | 2; // 2 si midi et soir au moins un jour
+  jours1?: number; // jours avec un seul repas
+  jours2?: number; // jours avec midi et soir
   supplement: number; // boîtes en plus d'une par repas (×2…)
   livraison?: number; // frais de livraison de la semaine (zone × jours livrés)
 }
@@ -61,9 +63,11 @@ export function semainesDe(repasParJour: Map<string, RepasDuJour>): SemaineRepas
     const j = jour(date).getUTCDay();
     if (j === 0 || j === 6 || r.services <= 0) continue; // pas de livraison le week-end
     const lundi = lundiDe(date);
-    const s = parSemaine.get(lundi) ?? { lundi, jours: 0, formule: 1 as const, supplement: 0 };
+    const s = parSemaine.get(lundi) ?? { lundi, jours: 0, formule: 1 as const, supplement: 0, jours1: 0, jours2: 0 };
     s.jours++;
     if (r.services >= 2) s.formule = 2;
+    if (r.services >= 2) s.jours2 = (s.jours2 ?? 0) + 1;
+    else s.jours1 = (s.jours1 ?? 0) + 1;
     s.supplement += Math.max(0, r.boites - r.services);
     parSemaine.set(lundi, s);
   }
@@ -74,9 +78,21 @@ export function semainesDe(repasParJour: Map<string, RepasDuJour>): SemaineRepas
 // tarif ; chaque boîte en plus au prix d'un repas de cette formule
 // (prix de la semaine ÷ nombre de repas de la semaine).
 export const prixSemaine = (s: SemaineRepas, tarifs: Tarifs, offre: number | null) => {
+  // Depuis le 2 novembre 2026 (sans offre perso) : prix par jour, 1/5 de la
+  // formule du jour (1 repas : 690 / 5 ; midi + soir : 1 290 / 5).
+  if (offre == null && s.lundi >= DEBUT_PRIX_PAR_JOUR && s.jours1 != null && s.jours2 != null) {
+    const repas = prixParJour(s.jours1, s.jours2, tarifs);
+    return repas + Math.round(((s.supplement ?? 0) * tarifs.un_repas) / 5) + (s.livraison ?? 0);
+  }
   const base = offre ?? (s.formule === 2 ? tarifs.deux_repas : tarifs.un_repas);
   return base + Math.round(((s.supplement ?? 0) * base) / (5 * s.formule)) + (s.livraison ?? 0);
 };
+
+// Prix par jour : un jour à 1 repas vaut 1/5 de la formule 1 repas, un jour
+// à 2 repas 1/5 de la formule 2 repas. 5 jours retombent sur la formule.
+export const DEBUT_PRIX_PAR_JOUR = "2026-11-02";
+export const prixParJour = (jours1: number, jours2: number, tarifs: Tarifs) =>
+  Math.round((jours1 * tarifs.un_repas + jours2 * tarifs.deux_repas) / 5);
 
 export const montantAuto = (semaines: SemaineRepas[], tarifs: Tarifs, offre: number | null) =>
   semaines.reduce((t, s) => t + prixSemaine(s, tarifs, offre), 0);
