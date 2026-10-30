@@ -17,6 +17,9 @@ export const dynamic = "force-dynamic";
 const texte = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
 const nombre = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? v : null);
 const motif = (nom: string) => nom.replace(/[%_\\]/g, "\\$&");
+// « lun. 2 nov. midi »
+const libelleRepas = (r: { date: string; service: Service }) =>
+  `${new Date(`${r.date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })} ${r.service === "dejeuner" ? "midi" : "soir"}`;
 
 interface Fiche {
   id: string;
@@ -35,15 +38,16 @@ interface Fiche {
   remise: number | null;
 }
 
-// Prévient l'admin (notification) d'une commande passée directement.
-async function prevenirAdmin(admin: SupabaseClient, nom: string, repas: number) {
+// Prévient l'admin (notification) : commande passée directement, ou
+// modification (texte qui dit quoi).
+async function prevenirAdmin(admin: SupabaseClient, nom: string, repas: number, texte?: string) {
   try {
     const { data: secret } = await admin.rpc("application_secret", { p_nom: "rappel_cron_secret" });
     if (!secret) return;
     await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/rappels`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-cron-secret": String(secret) },
-      body: JSON.stringify({ type: "commande", nom, repas }),
+      body: JSON.stringify(texte ? { type: "modif", nom, texte } : { type: "commande", nom, repas }),
     });
   } catch {}
 }
@@ -95,6 +99,14 @@ export async function POST(request: Request) {
     };
     const { error } = await admin.from("application_personnes").update(maj).eq("id", fiche.id);
     if (error) return repondre({ erreur: "Enregistrement impossible, réessayez." }, 500);
+    const changes = [
+      maj.allergies !== fiche.allergies && `allergies : ${maj.allergies ?? "aucune"}`,
+      maj.refus !== fiche.refus && `n'aime pas : ${maj.refus ?? "rien"}`,
+      maj.note !== fiche.note && `consigne : ${maj.note ?? "aucune"}`,
+      "quartier" in maj && maj.quartier !== fiche.quartier && `quartier : ${maj.quartier}`,
+      maj.adresse !== fiche.adresse && `adresse : ${maj.adresse ?? "—"}`,
+    ].filter(Boolean);
+    if (changes.length) await prevenirAdmin(admin, fiche.nom, 0, `a modifié sa fiche — ${changes.join(" · ")}`);
     // Ses repas à venir suivent (allergies, refus, adresse).
     await admin
       .from("application_cuisine_extras")
@@ -116,13 +128,15 @@ export async function POST(request: Request) {
     const date = typeof d.date === "string" && estDateValide(d.date) ? d.date : null;
     const service = d.service === "dejeuner" || d.service === "diner" ? (d.service as Service) : null;
     if (!date || !service || !encoreModifiable(date)) return repondre({ erreur: "Ce repas ne peut plus être annulé (après la veille 20 h)." }, 400);
-    const { error } = await admin
+    const { data: supprimes, error } = await admin
       .from("application_cuisine_extras")
       .delete()
       .ilike("nom", motif(fiche.nom))
       .eq("date", date)
-      .eq("repas_type", service);
+      .eq("repas_type", service)
+      .select("id");
     if (error) return repondre({ erreur: "Annulation impossible, réessayez." }, 500);
+    if (supprimes?.length) await prevenirAdmin(admin, fiche.nom, 0, `a annulé ${libelleRepas({ date, service })}.`);
     // Retiré aussi d'une demande en attente.
     const { data: attente } = await admin
       .from("application_demandes_semaine")
@@ -241,6 +255,18 @@ export async function POST(request: Request) {
     );
     if (error) return repondre({ erreur: "Commande impossible, réessayez." }, 500);
   }
-  if (aAjouter.length || aRetirer.length) await prevenirAdmin(admin, fiche.nom, restants);
+  if (aAjouter.length || aRetirer.length) {
+    const retires = (existants ?? []).filter((x) => aRetirer.includes(x.id)).map((x) => ({ date: x.date, service: x.repas_type }));
+    const tri = (a: RepasChoisi, b: RepasChoisi) => (a.date + a.service).localeCompare(b.date + b.service);
+    const texte = [
+      aAjouter.length && `➕ ${[...aAjouter].sort(tri).map(libelleRepas).join(", ")}`,
+      retires.length && `➖ ${retires.sort(tri).map(libelleRepas).join(", ")}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    // Première commande de la semaine → « Nouvelle commande », sinon « modification ».
+    if ((existants ?? []).length === 0) await prevenirAdmin(admin, fiche.nom, restants);
+    else await prevenirAdmin(admin, fiche.nom, restants, `a modifié sa semaine (${restants} repas) — ${texte}`);
+  }
   return repondre({ ok: true, aValider: false });
 }
