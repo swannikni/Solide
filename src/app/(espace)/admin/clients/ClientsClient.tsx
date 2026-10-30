@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
@@ -108,14 +108,55 @@ function messageProspect(q: Questionnaire) {
   return `Bonjour ${prenom}, c'est l'équipe Chef2Box 👋 Merci d'avoir fait votre bilan sur chef2box.com !${bilan} Nos repas sont calculés sur ces besoins et livrés chaque matin à Marrakech. Voulez-vous démarrer lundi ? Formule midi ou midi + soir ?`;
 }
 
+// Fiche client de la cuisine (table application_personnes), avec la date
+// de son dernier repas au planning.
+export interface FicheResume {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  adresse: string | null;
+  palier: Palier | null;
+  allergies: string | null;
+  refus: string | null;
+  note: string | null;
+  client_id: string | null;
+  dernier: string | null;
+}
+
+// Titre d'une liste repliable (Mes clients, Questionnaires, Comptes appli).
+function EnTeteSection({
+  icone,
+  titre,
+  nombre,
+  ouvert,
+  basculer,
+}: {
+  icone: React.ReactNode;
+  titre: string;
+  nombre: number;
+  ouvert: boolean;
+  basculer: () => void;
+}) {
+  return (
+    <button onClick={basculer} aria-expanded={ouvert} className="carte flex w-full items-center gap-3 px-4 py-3.5 text-left">
+      <span className="text-c2b-gold">{icone}</span>
+      <span className="flex-1 font-serif text-[20px] text-c2b-green">{titre}</span>
+      <span className="pastille py-0.5 px-2">{nombre}</span>
+      <ChevronDown size={18} className={`text-c2b-muted transition-transform ${ouvert ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
 export function ClientsClient({
   clientsInitiaux,
   questionnairesInitiaux = [],
+  fichesInitiales = [],
   emails,
   cleServicePresente,
 }: {
   clientsInitiaux: Client[];
   questionnairesInitiaux?: Questionnaire[];
+  fichesInitiales?: FicheResume[];
   emails: Record<string, string>;
   cleServicePresente: boolean;
 }) {
@@ -133,17 +174,30 @@ export function ClientsClient({
   const [recherche, setRecherche] = useState("");
   // Questionnaires : les 3 derniers, le reste en déroulant ou en cherchant.
   const [tousQuestionnaires, setTousQuestionnaires] = useState(false);
-  const [rechercheQ, setRechercheQ] = useState("");
+  // Listes repliées par défaut ; une recherche les ouvre sur les résultats.
+  const [ouvertes, setOuvertes] = useState<Set<string>>(new Set());
+  const basculerListe = (cle: string) =>
+    setOuvertes((s) => {
+      const n = new Set(s);
+      if (n.has(cle)) n.delete(cle);
+      else n.add(cle);
+      return n;
+    });
+  const [fiches, setFiches] = useState(fichesInitiales);
+  const [toutesFiches, setToutesFiches] = useState(false);
   const [filtreSuivi, setFiltreSuivi] = useState<SuiviProspect | "tous">("a_contacter");
   // Recherche sur le nom, l'e-mail ou le téléphone (sans tenir compte des accents).
   const normaliser = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   const saisie = normaliser(recherche);
-  const saisieQ = normaliser(rechercheQ);
+  const saisieQ = saisie;
   const suiviDe = (q: Questionnaire): SuiviProspect => q.suivi ?? "a_contacter";
   const questionnairesTrouves = questionnaires
     .filter((q) => filtreSuivi === "tous" || suiviDe(q) === filtreSuivi)
     .filter((q) => !saisieQ || normaliser([q.nom, q.email, q.telephone].filter(Boolean).join(" ")).includes(saisieQ));
   const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnairesTrouves.slice(0, 3);
+  const fichesTrouvees = fiches
+    .filter((fc) => !saisie || normaliser([fc.nom, fc.telephone, fc.adresse].filter(Boolean).join(" ")).includes(saisie))
+    .sort((x, y) => (y.dernier ?? "").localeCompare(x.dernier ?? "") || x.nom.localeCompare(y.nom, "fr"));
   const clientsAffiches = clients
     .filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true))
     .filter((c) => !saisie || normaliser([c.nom, emailsConnus[c.id], c.telephone].filter(Boolean).join(" ")).includes(saisie));
@@ -195,12 +249,12 @@ export function ClientsClient({
   // Questionnaire du site → fiche client de la cuisine (nom, téléphone,
   // palier, allergies, refus, goûts), puis la cuisine s'ouvre avec le
   // formulaire d'ajout prêt : il ne reste qu'à cocher midi / soir.
-  async function mettreEnCuisine(q: Questionnaire) {
+  async function creerFiche(q: Questionnaire): Promise<string | null> {
     const nom = q.nom.trim().replace(/\s+/g, " ").slice(0, 80);
-    if (!nom) return;
+    if (!nom) return null;
     const { data: existante } = await supabase.from("application_personnes").select("id").eq("cle", nom.toLowerCase()).maybeSingle();
-    if (existante && !confirm(`Une fiche « ${nom} » existe déjà en cuisine. La mettre à jour avec ce questionnaire ?`)) return;
-    const { error } = await supabase.from("application_personnes").upsert(
+    if (existante && !confirm(`Une fiche « ${nom} » existe déjà en cuisine. La mettre à jour avec ce questionnaire ?`)) return null;
+    const { data: creee, error } = await supabase.from("application_personnes").upsert(
       {
         nom,
         telephone: q.telephone ? q.telephone.slice(0, 30) : null,
@@ -214,10 +268,28 @@ export function ClientsClient({
         updated_at: new Date().toISOString(),
       },
       { onConflict: "cle" }
-    );
-    if (error) return alert("Fiche impossible à créer, réessayez.");
+    )
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id")
+      .single<Omit<FicheResume, "dernier">>();
+    if (error || !creee) {
+      alert("Fiche impossible à créer, réessayez.");
+      return null;
+    }
+    setFiches((prev) => [...prev.filter((f) => f.id !== creee.id), { ...creee, dernier: prev.find((f) => f.id === creee.id)?.dernier ?? null }]);
     await changerSuivi(q, "client");
-    window.location.href = `/admin/cuisine?ajouter=${encodeURIComponent(nom)}`;
+    return nom;
+  }
+
+  // Questionnaire → Mes clients, puis la cuisine pour choisir midi / soir.
+  async function mettreEnCuisine(q: Questionnaire) {
+    const nom = await creerFiche(q);
+    if (nom) window.location.href = `/admin/cuisine?ajouter=${encodeURIComponent(nom)}`;
+  }
+
+  // Questionnaire → Mes clients, sans passer par la cuisine.
+  async function passerEnClient(q: Questionnaire) {
+    const nom = await creerFiche(q);
+    if (nom) setOuvertes((o) => new Set(o).add("clients"));
   }
 
   async function ignorerQuestionnaire(q: Questionnaire) {
@@ -446,236 +518,321 @@ export function ClientsClient({
         </div>
       )}
 
-      {clients.length === 0 ? (
-        <div className="carte p-8 text-center text-sm text-c2b-muted">
-          Aucun client pour l&apos;instant. Touchez « Nouveau client » pour créer le premier compte.
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          <div className="grid grid-cols-3 gap-1.5">
-            {(
-              [
-                ["tous", `Tous (${clients.length})`],
-                ["premium", `Premium (${nbPremium})`],
-                ["gratuits", `Gratuits (${clients.length - nbPremium})`],
-              ] as const
-            ).map(([f, libelle]) => (
-              <button
-                key={f}
-                onClick={() => setFiltre(f)}
-                className={`rounded-full py-2 text-[13px] font-bold ${
-                  filtre === f ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
-                }`}
-              >
-                {libelle}
-              </button>
-            ))}
-          </div>
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
-            <input
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder="Rechercher un nom, un e-mail, un téléphone"
-              autoComplete="off"
-              className="champ py-2.5 pl-9 pr-9 text-sm"
-            />
-            {recherche && (
-              <button
-                onClick={() => setRecherche("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
-                aria-label="Effacer la recherche"
-              >
-                <X size={15} />
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
+        <input
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Rechercher un client, un questionnaire…"
+          autoComplete="off"
+          className="champ py-3 pl-9 pr-9 text-sm"
+        />
+        {recherche && (
+          <button
+            onClick={() => setRecherche("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
+            aria-label="Effacer la recherche"
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+
+      {/* 1. Mes clients : les fiches de la cuisine. */}
+      <section className="space-y-2.5">
+        <EnTeteSection
+          icone={<Users size={18} />}
+          titre="Mes clients"
+          nombre={fiches.length}
+          ouvert={ouvertes.has("clients") || !!saisie}
+          basculer={() => basculerListe("clients")}
+        />
+        {(ouvertes.has("clients") || !!saisie) && (
+          <>
+            <p className="px-1 text-xs text-c2b-muted">
+              Toute personne mise en cuisine arrive ici. Sa fiche se modifie en touchant son nom dans la Cuisine.
+            </p>
+            {fichesTrouvees.length === 0 && <p className="py-2 text-center text-sm text-c2b-muted">Aucun client trouvé.</p>}
+            <ul className="space-y-1.5">
+              {(saisie || toutesFiches ? fichesTrouvees : fichesTrouvees.slice(0, 15)).map((fc) => {
+                const compte = fc.client_id ? clients.find((c) => c.id === fc.client_id) : null;
+                const numero = numeroWhatsApp(fc.telephone);
+                return (
+                  <li key={fc.id} className="carte flex items-center gap-2 p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-c2b-green">
+                        {fc.nom}
+                        {fc.palier && <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{fc.palier}</span>}
+                        {compte && (
+                          <span className="ml-1.5 text-[10px] font-bold text-c2b-gold">{compte.premium ? "👑 appli" : "appli"}</span>
+                        )}
+                      </p>
+                      <p className="truncate text-[11px] text-c2b-muted">
+                        {fc.dernier ? `Dernier repas : ${new Date(`${fc.dernier}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" })}` : "Pas encore de repas"}
+                        {fc.allergies && <span className="font-bold text-red-700"> · ⚠️ {fc.allergies}</span>}
+                      </p>
+                    </div>
+                    {numero.length >= 9 && (
+                      <>
+                        <a
+                          href={`https://wa.me/${numero}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white"
+                          aria-label={`WhatsApp à ${fc.nom}`}
+                        >
+                          <MessageCircle size={16} />
+                        </a>
+                        <a
+                          href={`tel:+${numero}`}
+                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-c2b-green/20 text-c2b-green"
+                          aria-label={`Appeler ${fc.nom}`}
+                        >
+                          <Phone size={15} />
+                        </a>
+                      </>
+                    )}
+                    <a
+                      href={`/admin/cuisine?ajouter=${encodeURIComponent(fc.nom)}`}
+                      className="flex h-9 flex-shrink-0 items-center justify-center rounded-full bg-c2b-green px-3 text-xs font-bold text-c2b-cream"
+                      aria-label={`Mettre ${fc.nom} en cuisine`}
+                    >
+                      🍳
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+            {!saisie && fichesTrouvees.length > 15 && (
+              <button onClick={() => setToutesFiches((t) => !t)} className="btn-secondary w-full py-2.5 text-sm">
+                <ChevronDown size={16} className={toutesFiches ? "rotate-180" : ""} />
+                {toutesFiches ? "Réduire" : `Voir les ${fichesTrouvees.length - 15} autres`}
               </button>
             )}
-          </div>
-          {clientsAffiches.length === 0 && <p className="py-3 text-center text-sm text-c2b-muted">Aucun client trouvé.</p>}
-          {clientsAffiches.map((c) => (
-            <div key={c.id} className="carte p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-[15px] text-c2b-green">
-                    {c.nom}
-                    {c.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{c.palier}</span>}
-                  </p>
-                  <p className="text-xs text-c2b-muted truncate">
-                    {[emailsConnus[c.id], c.telephone].filter(Boolean).join(" · ") || "—"}
-                  </p>
-                  <button
-                    onClick={() => basculerPremium(c)}
-                    className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                      c.premium ? "bg-c2b-gold/15 text-c2b-gold" : "border border-c2b-green/15 bg-white text-c2b-muted"
-                    }`}
-                    aria-pressed={!!c.premium}
-                    title={c.premium ? "Retirer le Premium" : "Passer en Premium (client Chef2Box)"}
-                  >
-                    <Crown size={12} /> {c.premium ? "Premium" : "Gratuit · passer Premium"}
-                  </button>
-                </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => nouveauMotDePasse(c)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-muted hover:text-c2b-green hover:bg-c2b-green/[0.06]"
-                    aria-label="Mot de passe oublié : nouveau code provisoire"
-                    title="Mot de passe oublié : nouveau code provisoire"
-                  >
-                    <KeyRound size={17} />
-                  </button>
-                  <button
-                    onClick={() => ouvrirEdition(c)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-muted hover:text-c2b-green hover:bg-c2b-green/[0.06]"
-                    aria-label="Modifier"
-                  >
-                    <Pencil size={17} />
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-2 mt-3 text-center">
-                {[
-                  [c.objectif_calories, "kcal"],
-                  [c.objectif_proteines, "Prot. g"],
-                  [c.objectif_glucides, "Gluc. g"],
-                  [c.objectif_lipides, "Lip. g"],
-                ].map(([v, u]) => (
-                  <div key={u} className="rounded-xl bg-c2b-cream py-2">
-                    <p className="font-serif text-lg text-c2b-green leading-none">{v}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-c2b-muted mt-1">{u}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+          </>
+        )}
+      </section>
 
+      {/* 2. Questionnaires reçus du site (prospects). */}
+      <section className="space-y-2.5">
+        <EnTeteSection
+          icone={<Inbox size={18} />}
+          titre="Questionnaires reçus"
+          nombre={questionnaires.filter((q) => suiviDe(q) === "a_contacter").length}
+          ouvert={ouvertes.has("questionnaires") || !!saisie}
+          basculer={() => basculerListe("questionnaires")}
+        />
+        {(ouvertes.has("questionnaires") || !!saisie) && (
+          <>
       {questionnaires.length > 0 && (
-        <section className="space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Inbox size={18} className="text-c2b-gold" />
-            <h2 className="font-serif text-[22px] text-c2b-green">Questionnaires reçus</h2>
-            <span className="pastille py-0.5 px-2">{questionnaires.length}</span>
+          <section className="space-y-2.5">
+            <p className="text-xs text-c2b-muted">
+              Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {[...SUIVIS, { cle: "tous" as const, libelle: "Tous", couleur: "bg-c2b-green text-c2b-cream" }].map((f) => {
+                const n = f.cle === "tous" ? questionnaires.length : questionnaires.filter((q) => suiviDe(q) === f.cle).length;
+                return (
+                  <button
+                    key={f.cle}
+                    onClick={() => setFiltreSuivi(f.cle)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                      filtreSuivi === f.cle ? f.couleur : "bg-white border border-c2b-green/15 text-c2b-green"
+                    }`}
+                  >
+                    {f.libelle} ({n})
+                  </button>
+                );
+              })}
+            </div>
+            {questionnairesTrouves.length === 0 && (
+              <p className="py-2 text-center text-sm text-c2b-muted">{saisieQ ? "Aucun questionnaire à ce nom." : "Aucun questionnaire dans cette liste."}</p>
+            )}
+            {questionnairesAffiches.map((q) => (
+              <div key={q.id} className="carte p-4 border-c2b-gold/30">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-[15px] text-c2b-green">
+                      {q.nom}
+                      {q.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{q.palier}</span>}
+                    </p>
+                    <p className="text-xs text-c2b-muted truncate">
+                      {[q.email, q.telephone].filter(Boolean).join(" · ") || "Pas d'email"} ·{" "}
+                      {q.source === "site"
+                        ? new Date(q.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                        : "ancien outil, chiffres à vérifier"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => ignorerQuestionnaire(q)}
+                    className="text-c2b-muted/60 hover:text-c2b-green flex-shrink-0"
+                    aria-label="Retirer de la liste"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+                {q.calories != null && (
+                  <p className="text-sm text-c2b-green mt-2">
+                    <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {SUIVIS.map((sv) => (
+                    <button
+                      key={sv.cle}
+                      onClick={() => changerSuivi(q, sv.cle)}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        suiviDe(q) === sv.cle ? sv.couleur : "bg-white border border-c2b-green/15 text-c2b-muted"
+                      }`}
+                    >
+                      {sv.libelle}
+                    </button>
+                  ))}
+                </div>
+                {q.suivi_le && suiviDe(q) !== "a_contacter" && (
+                  <p className="mt-1 text-[11px] text-c2b-muted">
+                    Mis à jour le {new Date(q.suivi_le).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {numeroWhatsApp(q.telephone).length >= 9 ? (
+                    <a
+                      href={`https://wa.me/${numeroWhatsApp(q.telephone)}?text=${encodeURIComponent(messageProspect(q))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => suiviDe(q) === "a_contacter" && changerSuivi(q, "contacte")}
+                      className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
+                    >
+                      <MessageCircle size={15} /> WhatsApp
+                    </a>
+                  ) : (
+                    <span className="flex items-center justify-center rounded-full border border-c2b-green/15 px-3 py-2.5 text-xs text-c2b-muted">
+                      Pas de numéro
+                    </span>
+                  )}
+                  <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold py-2.5 text-sm">
+                    Créer son compte
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button onClick={() => passerEnClient(q)} className="btn-secondary py-2.5 text-sm">
+                    ✓ Passer en client
+                  </button>
+                  <button onClick={() => mettreEnCuisine(q)} className="btn-primary py-2.5 text-sm">
+                    🍳 Mettre en cuisine
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!saisieQ && questionnairesTrouves.length > 3 && (
+              <button onClick={() => setTousQuestionnaires((t) => !t)} className="btn-secondary w-full py-2.5 text-sm">
+                <ChevronDown size={16} className={tousQuestionnaires ? "rotate-180" : ""} />
+                {tousQuestionnaires ? "Ne montrer que les 3 derniers" : `Voir les ${questionnairesTrouves.length - 3} autres`}
+              </button>
+            )}
+          </section>
+        )}
+          </>
+        )}
+      </section>
+
+      {/* 3. Comptes de l'appli (macros, Premium). */}
+      <section className="space-y-2.5">
+        <EnTeteSection
+          icone={<Smartphone size={18} />}
+          titre="Comptes de l'appli"
+          nombre={clients.length}
+          ouvert={ouvertes.has("appli") || !!saisie}
+          basculer={() => basculerListe("appli")}
+        />
+        {(ouvertes.has("appli") || !!saisie) && (
+          <>
+      {clients.length === 0 ? (
+          <div className="carte p-8 text-center text-sm text-c2b-muted">
+            Aucun client pour l&apos;instant. Touchez « Nouveau client » pour créer le premier compte.
           </div>
-          <p className="text-xs text-c2b-muted">
-            Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {[...SUIVIS, { cle: "tous" as const, libelle: "Tous", couleur: "bg-c2b-green text-c2b-cream" }].map((f) => {
-              const n = f.cle === "tous" ? questionnaires.length : questionnaires.filter((q) => suiviDe(q) === f.cle).length;
-              return (
+        ) : (
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                [
+                  ["tous", `Tous (${clients.length})`],
+                  ["premium", `Premium (${nbPremium})`],
+                  ["gratuits", `Gratuits (${clients.length - nbPremium})`],
+                ] as const
+              ).map(([f, libelle]) => (
                 <button
-                  key={f.cle}
-                  onClick={() => setFiltreSuivi(f.cle)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                    filtreSuivi === f.cle ? f.couleur : "bg-white border border-c2b-green/15 text-c2b-green"
+                  key={f}
+                  onClick={() => setFiltre(f)}
+                  className={`rounded-full py-2 text-[13px] font-bold ${
+                    filtre === f ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
                   }`}
                 >
-                  {f.libelle} ({n})
+                  {libelle}
                 </button>
-              );
-            })}
-          </div>
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
-            <input
-              value={rechercheQ}
-              onChange={(e) => setRechercheQ(e.target.value)}
-              placeholder="Rechercher un questionnaire par nom"
-              autoComplete="off"
-              className="champ py-2.5 pl-9 pr-9 text-sm"
-            />
-            {rechercheQ && (
-              <button
-                onClick={() => setRechercheQ("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
-                aria-label="Effacer la recherche"
-              >
-                <X size={15} />
-              </button>
-            )}
-          </div>
-          {questionnairesTrouves.length === 0 && (
-            <p className="py-2 text-center text-sm text-c2b-muted">{saisieQ ? "Aucun questionnaire à ce nom." : "Aucun questionnaire dans cette liste."}</p>
-          )}
-          {questionnairesAffiches.map((q) => (
-            <div key={q.id} className="carte p-4 border-c2b-gold/30">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-[15px] text-c2b-green">
-                    {q.nom}
-                    {q.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{q.palier}</span>}
-                  </p>
-                  <p className="text-xs text-c2b-muted truncate">
-                    {[q.email, q.telephone].filter(Boolean).join(" · ") || "Pas d'email"} ·{" "}
-                    {q.source === "site"
-                      ? new Date(q.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                      : "ancien outil, chiffres à vérifier"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => ignorerQuestionnaire(q)}
-                  className="text-c2b-muted/60 hover:text-c2b-green flex-shrink-0"
-                  aria-label="Retirer de la liste"
-                >
-                  <X size={17} />
-                </button>
-              </div>
-              {q.calories != null && (
-                <p className="text-sm text-c2b-green mt-2">
-                  <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
-                </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {SUIVIS.map((sv) => (
-                  <button
-                    key={sv.cle}
-                    onClick={() => changerSuivi(q, sv.cle)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                      suiviDe(q) === sv.cle ? sv.couleur : "bg-white border border-c2b-green/15 text-c2b-muted"
-                    }`}
-                  >
-                    {sv.libelle}
-                  </button>
-                ))}
-              </div>
-              {q.suivi_le && suiviDe(q) !== "a_contacter" && (
-                <p className="mt-1 text-[11px] text-c2b-muted">
-                  Mis à jour le {new Date(q.suivi_le).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-                </p>
-              )}
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {numeroWhatsApp(q.telephone).length >= 9 ? (
-                  <a
-                    href={`https://wa.me/${numeroWhatsApp(q.telephone)}?text=${encodeURIComponent(messageProspect(q))}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => suiviDe(q) === "a_contacter" && changerSuivi(q, "contacte")}
-                    className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
-                  >
-                    <MessageCircle size={15} /> WhatsApp
-                  </a>
-                ) : (
-                  <span className="flex items-center justify-center rounded-full border border-c2b-green/15 px-3 py-2.5 text-xs text-c2b-muted">
-                    Pas de numéro
-                  </span>
-                )}
-                <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold py-2.5 text-sm">
-                  Créer son compte
-                </button>
-              </div>
-              <button onClick={() => mettreEnCuisine(q)} className="btn-primary mt-2 w-full py-2.5 text-sm">
-                🍳 Mettre en cuisine (midi / soir)
-              </button>
+              ))}
             </div>
-          ))}
-          {!saisieQ && questionnairesTrouves.length > 3 && (
-            <button onClick={() => setTousQuestionnaires((t) => !t)} className="btn-secondary w-full py-2.5 text-sm">
-              <ChevronDown size={16} className={tousQuestionnaires ? "rotate-180" : ""} />
-              {tousQuestionnaires ? "Ne montrer que les 3 derniers" : `Voir les ${questionnairesTrouves.length - 3} autres`}
-            </button>
-          )}
-        </section>
-      )}
+            {clientsAffiches.length === 0 && <p className="py-3 text-center text-sm text-c2b-muted">Aucun client trouvé.</p>}
+            {clientsAffiches.map((c) => (
+              <div key={c.id} className="carte p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-[15px] text-c2b-green">
+                      {c.nom}
+                      {c.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{c.palier}</span>}
+                    </p>
+                    <p className="text-xs text-c2b-muted truncate">
+                      {[emailsConnus[c.id], c.telephone].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                    <button
+                      onClick={() => basculerPremium(c)}
+                      className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        c.premium ? "bg-c2b-gold/15 text-c2b-gold" : "border border-c2b-green/15 bg-white text-c2b-muted"
+                      }`}
+                      aria-pressed={!!c.premium}
+                      title={c.premium ? "Retirer le Premium" : "Passer en Premium (client Chef2Box)"}
+                    >
+                      <Crown size={12} /> {c.premium ? "Premium" : "Gratuit · passer Premium"}
+                    </button>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => nouveauMotDePasse(c)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-muted hover:text-c2b-green hover:bg-c2b-green/[0.06]"
+                      aria-label="Mot de passe oublié : nouveau code provisoire"
+                      title="Mot de passe oublié : nouveau code provisoire"
+                    >
+                      <KeyRound size={17} />
+                    </button>
+                    <button
+                      onClick={() => ouvrirEdition(c)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-muted hover:text-c2b-green hover:bg-c2b-green/[0.06]"
+                      aria-label="Modifier"
+                    >
+                      <Pencil size={17} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2 mt-3 text-center">
+                  {[
+                    [c.objectif_calories, "kcal"],
+                    [c.objectif_proteines, "Prot. g"],
+                    [c.objectif_glucides, "Gluc. g"],
+                    [c.objectif_lipides, "Lip. g"],
+                  ].map(([v, u]) => (
+                    <div key={u} className="rounded-xl bg-c2b-cream py-2">
+                      <p className="font-serif text-lg text-c2b-green leading-none">{v}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-c2b-muted mt-1">{u}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+          </>
+        )}
+      </section>
 
       {fiche && (
         <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-stretch md:items-center justify-center">

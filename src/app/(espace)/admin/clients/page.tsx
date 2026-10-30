@@ -1,6 +1,6 @@
 import { exigerAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ClientsClient } from "@/app/(espace)/admin/clients/ClientsClient";
+import { ClientsClient, type FicheResume } from "@/app/(espace)/admin/clients/ClientsClient";
 import type { Client, Questionnaire } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,28 @@ export default async function ClientsPage() {
     .order("created_at", { ascending: false })
     .returns<Questionnaire[]>();
 
+  // Fiches clients de la cuisine, avec la date de leur dernier repas.
+  const [{ data: fiches }, { data: repas }] = await Promise.all([
+    supabase
+      .from("application_personnes")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id")
+      .order("nom")
+      .limit(2000)
+      .returns<Omit<FicheResume, "dernier">[]>(),
+    supabase
+      .from("application_cuisine_extras")
+      .select("nom, date")
+      .order("date", { ascending: false })
+      .limit(10000)
+      .returns<{ nom: string; date: string }[]>(),
+  ]);
+  const dernier = new Map<string, string>();
+  for (const r of repas ?? []) {
+    const cle = r.nom.trim().toLowerCase();
+    if (!dernier.has(cle)) dernier.set(cle, r.date);
+  }
+  const fichesResumees: FicheResume[] = (fiches ?? []).map((f) => ({ ...f, dernier: dernier.get(f.nom.trim().toLowerCase()) ?? null }));
+
   // Les emails sont dans Supabase Auth : lisibles seulement avec la clé service.
   const admin = createAdminClient();
   const emails: Record<string, string> = {};
@@ -34,6 +56,7 @@ export default async function ClientsPage() {
       <ClientsClient
         clientsInitiaux={clients ?? []}
         questionnairesInitiaux={questionnaires ?? []}
+        fichesInitiales={fichesResumees}
         emails={emails}
         cleServicePresente={!!admin}
       />
