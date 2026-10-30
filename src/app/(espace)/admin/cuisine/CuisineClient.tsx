@@ -225,6 +225,8 @@ export function CuisineClient({
   const [message, setMessage] = useState("");
   // Recherche dans la liste des clients du jour déroulé.
   const [rechercheJour, setRechercheJour] = useState("");
+  // Liste des clients du jour déroulé : repliée par défaut.
+  const [clientsOuverts, setClientsOuverts] = useState(false);
   // Jour déroulé : préparation des plats, ou mise en sacs.
   const [vue, setVue] = useState<"cuisine" | "sacs">("cuisine");
   const [masquerPrets, setMasquerPrets] = useState(false);
@@ -546,10 +548,12 @@ export function CuisineClient({
 
   function ouvrirAjout() {
     setHistorique(null);
+    setMessage("");
     setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), telephone: "", adresse: "", palier: "", allergies: "", refus: "", note: "", cases: [], semaine: lundi });
   }
 
   function ouvrirModification(p: Personne) {
+    setMessage("");
     const fc = p.clientId ? null : fiches.get(p.cle.slice(2));
     const client = p.clientId ? parClient.get(p.clientId) : null;
     const liv = p.clientId ? null : livraisonDe(p.cle.slice(2));
@@ -664,8 +668,9 @@ export function CuisineClient({
 
     // Ajout : la personne et les repas cochés dans le formulaire.
     const cle = f.clientId ? `c:${f.clientId}` : `m:${cleNom(nom)}`;
-    if (actifs.has(cle)) return setMessage(`${nom} est déjà dans le planning.`);
-    const repas = f.cases.map((c) => c.split("|") as [string, Service]);
+    // Déjà au planning : on peut quand même ajouter ses repas (autre semaine…).
+    if (actifs.has(cle) && f.cases.length === 0) return setMessage(`${nom} est déjà dans le planning : cochez ses repas.`);
+    let repas = f.cases.map((c) => c.split("|") as [string, Service]);
     debut("formulaire");
     if (f.clientId) {
       const client = parClient.get(f.clientId);
@@ -691,6 +696,20 @@ export function CuisineClient({
       setCommandes((prev) => [...prev.filter((c) => !ajoutees.some((a) => a.id === c.id)), ...ajoutees]);
       setNouvelles((prev) => [...prev.filter((x) => x.cle !== cle), { cle, clientId: f.clientId, nom: client?.nom ?? nom, ...champs }]);
     } else {
+      // Repas déjà enregistrés pour ces dates : pas de doublon.
+      if (repas.length) {
+        const { data: existants } = await supabase
+          .from("application_cuisine_extras")
+          .select("date, repas_type")
+          .ilike("nom", nom.replace(/[%_\\]/g, "\\$&"))
+          .in("date", [...new Set(repas.map(([d]) => d))])
+          .returns<{ date: string; repas_type: Service }[]>();
+        repas = repas.filter(([d, sv]) => !(existants ?? []).some((x) => x.date === d && x.repas_type === sv));
+        if (!repas.length) {
+          fin("formulaire");
+          return setMessage("Ces repas sont déjà au planning.");
+        }
+      }
       const { data, error } = repas.length
         ? await supabase
             .from("application_cuisine_extras")
@@ -1206,6 +1225,7 @@ export function CuisineClient({
           })()}
         </div>
       )}
+      {message && <p className="rounded-xl bg-c2b-gold/15 px-3 py-2 text-sm font-semibold text-c2b-green">{message}</p>}
       <div className="flex gap-2">
         <button onClick={enregistrerFormulaire} disabled={occupe("formulaire")} className="btn-primary flex-1 py-2.5 text-sm">
           {occupe("formulaire") ? "Enregistrement..." : formulaire.cle ? "Enregistrer" : "Ajouter"}
@@ -1392,8 +1412,18 @@ export function CuisineClient({
 
         {/* Clients : midi et soir de ce jour, d'un toucher. */}
         <div>
-          <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-c2b-muted">Clients</p>
-          {liste.length > 6 && (
+          <button
+            onClick={() => setClientsOuverts((o) => !o)}
+            aria-expanded={clientsOuverts}
+            className="mb-1.5 flex w-full items-center gap-2 rounded-xl bg-c2b-green/[0.05] px-3 py-2.5 text-left"
+          >
+            <span className="flex-1 text-sm font-bold text-c2b-green">
+              Clients du jour <span className="text-c2b-muted">({liste.filter(mange).length})</span>
+            </span>
+            <span className="text-xs font-semibold text-c2b-muted">{clientsOuverts ? "Replier" : "Afficher"}</span>
+            <ChevronDown size={16} className={`text-c2b-muted transition-transform ${clientsOuverts ? "rotate-180" : ""}`} />
+          </button>
+          {clientsOuverts && liste.length > 6 && (
             <div className="relative mb-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
               <input
@@ -1414,73 +1444,77 @@ export function CuisineClient({
               )}
             </div>
           )}
+          {clientsOuverts && (
+            <>
           {ordre.length === 0 && (
-            <p className="py-2 text-sm text-c2b-muted">
-              {filtre ? "Personne de ce nom dans le planning : ajoutez-la ci-dessous." : "Personne dans le planning cette semaine."}
-            </p>
-          )}
-          <div className="mb-2">
-            <Legende />
-          </div>
-          <ul className="space-y-1.5">
-            {ordre.map((p) =>
-              formulaire?.cle === p.cle ? (
-                <li key={p.cle} className="py-2">
-                  {champsFormulaire}
-                </li>
-              ) : (
-                <li
-                  key={p.cle}
-                  className={`relative flex items-center gap-2 overflow-hidden rounded-xl py-2 pl-4 pr-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.fond ?? "bg-white/60"}`}
-                >
-                  <span className={`absolute inset-y-0 left-0 w-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.barre ?? "bg-black/5"}`} />
-                  <button onClick={() => ouvrirModification(p)} className="min-w-0 flex-1 text-left" aria-label={`Modifier ${p.nom}`}>
-                    <p className={`truncate text-sm font-bold ${mange(p) ? "text-c2b-green" : "text-c2b-muted"}`}>
-                      {p.nom}
-                      <span className="ml-1.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
-                    </p>
-                    {(() => {
-                      const f = formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"));
-                      return f ? (
-                        <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-extrabold ${f.badge}`}>{f.libelle}</span>
-                      ) : (
-                        <span className="mt-0.5 inline-block text-[10px] font-semibold text-c2b-muted">Ne mange pas ce jour</span>
-                      );
-                    })()}
-                    {(p.allergies || p.refus || p.note) && (
-                      <p className="truncate text-[11px] text-c2b-muted">
-                        {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
-                        {p.refus && <span>· sans {p.refus} </span>}
-                        {p.note && <span className="italic">· {p.note}</span>}
-                      </p>
-                    )}
-                  </button>
-                  {SERVICES.map((s) => {
-                    const actif = coche(p, date, s.cle);
-                    const attente = occupe(`${p.cle}|${date}|${s.cle}`);
-                    return (
-                      <button
-                        key={s.cle}
-                        onClick={() => poser(p, date, s.cle, !actif)}
-                        disabled={attente}
-                        aria-pressed={actif}
-                        aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
-                        className={`flex h-10 min-w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl px-1 text-xs font-bold transition ${
-                          actif ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-c2b-muted"
-                        } ${attente ? "opacity-50" : ""}`}
-                      >
-                        {s.icone} {s.libelle}
-                        {actif && (() => {
-                          const q = (p.clientId ? commandeDe(p, date, s.cle) : extraDe(p, date, s.cle))?.quantite ?? 1;
-                          return q > 1 ? <span className="rounded-full bg-red-600 px-1 text-[10px] text-white">×{q}</span> : null;
-                        })()}
-                      </button>
-                    );
-                  })}
-                </li>
-              )
+              <p className="py-2 text-sm text-c2b-muted">
+                {filtre ? "Personne de ce nom dans le planning : ajoutez-la ci-dessous." : "Personne dans le planning cette semaine."}
+              </p>
             )}
-          </ul>
+            <div className="mb-2">
+              <Legende />
+            </div>
+            <ul className="space-y-1.5">
+              {ordre.map((p) =>
+                formulaire?.cle === p.cle ? (
+                  <li key={p.cle} className="py-2">
+                    {champsFormulaire}
+                  </li>
+                ) : (
+                  <li
+                    key={p.cle}
+                    className={`relative flex items-center gap-2 overflow-hidden rounded-xl py-2 pl-4 pr-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.fond ?? "bg-white/60"}`}
+                  >
+                    <span className={`absolute inset-y-0 left-0 w-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.barre ?? "bg-black/5"}`} />
+                    <button onClick={() => ouvrirModification(p)} className="min-w-0 flex-1 text-left" aria-label={`Modifier ${p.nom}`}>
+                      <p className={`truncate text-sm font-bold ${mange(p) ? "text-c2b-green" : "text-c2b-muted"}`}>
+                        {p.nom}
+                        <span className="ml-1.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
+                      </p>
+                      {(() => {
+                        const f = formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"));
+                        return f ? (
+                          <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-extrabold ${f.badge}`}>{f.libelle}</span>
+                        ) : (
+                          <span className="mt-0.5 inline-block text-[10px] font-semibold text-c2b-muted">Ne mange pas ce jour</span>
+                        );
+                      })()}
+                      {(p.allergies || p.refus || p.note) && (
+                        <p className="truncate text-[11px] text-c2b-muted">
+                          {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
+                          {p.refus && <span>· sans {p.refus} </span>}
+                          {p.note && <span className="italic">· {p.note}</span>}
+                        </p>
+                      )}
+                    </button>
+                    {SERVICES.map((s) => {
+                      const actif = coche(p, date, s.cle);
+                      const attente = occupe(`${p.cle}|${date}|${s.cle}`);
+                      return (
+                        <button
+                          key={s.cle}
+                          onClick={() => poser(p, date, s.cle, !actif)}
+                          disabled={attente}
+                          aria-pressed={actif}
+                          aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
+                          className={`flex h-10 min-w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl px-1 text-xs font-bold transition ${
+                            actif ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-c2b-muted"
+                          } ${attente ? "opacity-50" : ""}`}
+                        >
+                          {s.icone} {s.libelle}
+                          {actif && (() => {
+                            const q = (p.clientId ? commandeDe(p, date, s.cle) : extraDe(p, date, s.cle))?.quantite ?? 1;
+                            return q > 1 ? <span className="rounded-full bg-red-600 px-1 text-[10px] text-white">×{q}</span> : null;
+                          })()}
+                        </button>
+                      );
+                    })}
+                  </li>
+                )
+              )}
+            </ul>
+            </>
+          )}
           {formulaire && !formulaire.cle ? (
             <div id="formulaire-ajout" className="scroll-mt-24 pt-2">
               {champsFormulaire}
