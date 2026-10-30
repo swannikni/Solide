@@ -107,6 +107,7 @@ interface Formulaire {
   note: string;
   cases: string[]; // « date|service » à cocher (ajout seulement), toutes semaines
   semaine: string; // lundi de la semaine affichée dans le formulaire d'ajout
+  debut?: string; // premier jour pour les raccourcis (client qui arrive en cours de semaine)
 }
 
 const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[] = [
@@ -1110,12 +1111,17 @@ export function CuisineClient({
             const joursForm = Array.from({ length: 5 }, (_, k) => decalerDate(formulaire.semaine, k));
             const dansSemaine = (c: string) => c.slice(0, 10) >= formulaire.semaine && c.slice(0, 10) <= joursForm[4];
             const semaines = new Set(formulaire.cases.map((c) => lundiDe(c.slice(0, 10))));
+            // Premier jour possible : aujourd'hui au plus tôt, ou le jour « Commence le » choisi.
+            const premier = [aujourdhui, formulaire.debut && formulaire.debut >= formulaire.semaine && formulaire.debut <= joursForm[4] ? formulaire.debut : ""]
+              .filter(Boolean)
+              .sort()
+              .at(-1)!;
             return (
               <>
                 <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, -7) })}
+                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, -7), debut: undefined })}
                     disabled={joursForm[4] < aujourdhui || formulaire.semaine <= lundiDe(aujourdhui)}
                     className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06] disabled:opacity-25"
                     aria-label="Semaine précédente"
@@ -1128,18 +1134,37 @@ export function CuisineClient({
                   </p>
                   <button
                     type="button"
-                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, 7) })}
+                    onClick={() => setFormulaire({ ...formulaire, semaine: decalerDate(formulaire.semaine, 7), debut: undefined })}
                     className="w-9 h-9 rounded-full flex items-center justify-center text-c2b-green hover:bg-c2b-green/[0.06]"
                     aria-label="Semaine suivante"
                   >
                     <ChevronRight size={18} />
                   </button>
                 </div>
+                <div className="mt-1 flex items-center gap-1">
+                  <span className="mr-1 text-[11px] font-bold text-c2b-muted">Commence le</span>
+                  {joursForm.map((d) => {
+                    const choisi = d === (joursForm.find((x) => x >= premier) ?? "");
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        disabled={d < aujourdhui}
+                        onClick={() => setFormulaire({ ...formulaire, debut: d })}
+                        className={`flex-1 rounded-lg py-1 text-[11px] font-bold disabled:opacity-25 ${
+                          choisi ? "bg-c2b-gold text-c2b-green" : "bg-white border border-c2b-green/15 text-c2b-green"
+                        }`}
+                      >
+                        {jourCourt(d)}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {(
                     [
-                      ["☀️ Midi toute la semaine", ["dejeuner"]],
-                      ["🌙 Soir toute la semaine", ["diner"]],
+                      ["☀️ Midi", ["dejeuner"]],
+                      ["🌙 Soir", ["diner"]],
                       ["☀️🌙 Midi + soir", ["dejeuner", "diner"]],
                     ] as const
                   ).map(([libelle, services]) => (
@@ -1152,7 +1177,7 @@ export function CuisineClient({
                           // Remplace les cases de cette semaine seulement (les autres semaines restent).
                           cases: [
                             ...formulaire.cases.filter((c) => !dansSemaine(c)),
-                            ...joursForm.filter((d) => d >= aujourdhui).flatMap((d) => services.map((sv) => `${d}|${sv}`)),
+                            ...joursForm.filter((d) => d >= premier).flatMap((d) => services.map((sv) => `${d}|${sv}`)),
                           ],
                         })
                       }
