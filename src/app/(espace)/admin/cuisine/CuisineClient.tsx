@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Phone, Search, Send, UserPlus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Phone, Search, Send, Trash2, UserPlus, X } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
@@ -510,6 +510,12 @@ export function CuisineClient({
     if (error) return setMessage("Nombre de boîtes non enregistré, réessayez.");
     if (p.clientId) setCommandes((prev) => prev.map((c) => (c.id === ligne.id ? { ...c, quantite: q } : c)));
     else setExtras((prev) => prev.map((e) => (e.id === ligne.id ? { ...e, quantite: q } : e)));
+  }
+
+  // Retire ses repas (midi et soir) d'un seul jour.
+  async function retirerJour(p: Personne, date: string) {
+    if (!window.confirm(`Retirer ${p.nom} le ${new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", timeZone: "UTC" })} ?`)) return;
+    for (const s of SERVICES) if (coche(p, date, s.cle)) await poser(p, date, s.cle, false);
   }
 
   async function toutLaSemaine(p: Personne, service: Service) {
@@ -1683,6 +1689,9 @@ export function CuisineClient({
             )}
             <div className="mb-2">
               <Legende />
+              <p className="mt-1.5 text-[11px] text-c2b-muted">
+                ☀️ / 🌙 : ajouter ou enlever ce repas · 🗑️ : retirer du jour · nom : modifier sa fiche. Le client le voit dans son espace en rouvrant son lien.
+              </p>
             </div>
             <ul className="space-y-1.5">
               {ordre.map((p) =>
@@ -1739,6 +1748,16 @@ export function CuisineClient({
                         </button>
                       );
                     })}
+                    {mange(p) && (
+                      <button
+                        onClick={() => retirerJour(p, date)}
+                        className="flex h-10 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600"
+                        aria-label={`Retirer ${p.nom} ce jour`}
+                        title="Retirer ce jour"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </li>
                 )
               )}
