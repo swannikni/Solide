@@ -1744,7 +1744,10 @@ export function CuisineClient({
                       return (
                         <button
                           key={s.cle}
-                          onClick={() => poser(p, date, s.cle, !actif)}
+                          onClick={() => {
+                            if (actif && !window.confirm(`Enlever le repas du ${s.libelle.toLowerCase()} de ${p.nom} (${dateLongue(date)}) ?`)) return;
+                            poser(p, date, s.cle, !actif);
+                          }}
                           disabled={attente}
                           aria-pressed={actif}
                           aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
