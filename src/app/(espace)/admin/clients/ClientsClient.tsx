@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users, CalendarDays } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { nouveauJeton } from "@/lib/ma-semaine";
 import { decalerDate } from "@/lib/dates";
@@ -128,6 +128,16 @@ export interface FicheResume {
   dernier: string | null;
 }
 
+// Un repas de la semaine (planning de la cuisine), pour « Clients de la semaine ».
+export interface RepasSemaine {
+  nom: string;
+  date: string;
+  service: "dejeuner" | "diner";
+  quantite: number;
+}
+
+const JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
+
 // Titre d'une liste repliable (Mes clients, Questionnaires, Comptes appli).
 function EnTeteSection({
   icone,
@@ -157,6 +167,7 @@ export function ClientsClient({
   questionnairesInitiaux = [],
   fichesInitiales = [],
   relance = null,
+  semaines = null,
   emails,
   cleServicePresente,
 }: {
@@ -165,6 +176,8 @@ export function ClientsClient({
   fichesInitiales?: FicheResume[];
   // Relance de la semaine prochaine : son lundi, et les fiches (clé du nom) qui ont déjà commandé.
   relance?: { lundi: string; aujourdhui: string; dejaCommande: string[] } | null;
+  // Clients de la semaine : semaine en cours et suivante, et leurs repas.
+  semaines?: { lundis: string[]; defaut: string; repas: RepasSemaine[] } | null;
   emails: Record<string, string>;
   cleServicePresente: boolean;
 }) {
@@ -192,6 +205,7 @@ export function ClientsClient({
       return n;
     });
   const [fiches, setFiches] = useState(fichesInitiales);
+  const [lundiVu, setLundiVu] = useState(semaines?.defaut ?? "");
   const [toutesFiches, setToutesFiches] = useState(false);
   const [relanceOuverte, setRelanceOuverte] = useState(false);
   const [relances, setRelances] = useState<Set<string>>(new Set());
@@ -623,6 +637,119 @@ export function ClientsClient({
           </button>
         )}
       </div>
+
+      {/* 0. Clients de la semaine : qui mange quoi, d'un coup d'œil. */}
+      {semaines &&
+        (() => {
+          const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(lundiVu, i));
+          const repas = semaines.repas.filter((r) => r.date >= jours[0] && r.date <= jours[4]);
+          const parNom = new Map<string, { nom: string; repas: RepasSemaine[] }>();
+          for (const r of repas) {
+            const k = r.nom.trim().toLowerCase();
+            if (!parNom.has(k)) parNom.set(k, { nom: r.nom.trim(), repas: [] });
+            parNom.get(k)!.repas.push(r);
+          }
+          const tous = [...parNom.values()].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+          const liste = saisie ? tous.filter((p) => normaliser(p.nom).includes(saisie)) : tous;
+          const ouvert = ouvertes.has("semaine") || (!!saisie && liste.length > 0);
+          const total = (s?: "dejeuner" | "diner") => repas.filter((r) => !s || r.service === s).reduce((t, r) => t + r.quantite, 0);
+          const ficheDe = (nom: string) => fiches.find((f) => f.nom.trim().toLowerCase() === nom.toLowerCase());
+          return (
+            <section className="space-y-2.5">
+              <EnTeteSection
+                icone={<CalendarDays size={18} />}
+                titre="Clients de la semaine"
+                nombre={tous.length}
+                ouvert={ouvert}
+                basculer={() => basculerListe("semaine")}
+              />
+              {ouvert && (
+                <>
+                  <div className="flex gap-1.5">
+                    {semaines.lundis.map((l, i) => (
+                      <button
+                        key={l}
+                        onClick={() => setLundiVu(l)}
+                        className={`flex-1 rounded-full px-2 py-2 text-xs font-bold ${
+                          l === lundiVu ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"
+                        }`}
+                      >
+                        {i === 0 ? "Cette semaine" : "Semaine prochaine"} ·{" "}
+                        {new Date(`${l}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" })}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="px-1 text-sm font-semibold text-c2b-green">
+                    {tous.length} client{tous.length > 1 ? "s" : ""} · {total()} repas
+                    <span className="font-normal text-c2b-muted">
+                      {" "}
+                      (☀️ {total("dejeuner")} · 🌙 {total("diner")})
+                    </span>
+                  </p>
+                  {liste.length === 0 ? (
+                    <p className="carte p-4 text-center text-sm text-c2b-muted">
+                      {saisie ? "Personne de ce nom cette semaine." : "Personne au planning cette semaine."}
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {liste.map((p) => {
+                        const fc = ficheDe(p.nom);
+                        const n = p.repas.reduce((t, r) => t + r.quantite, 0);
+                        return (
+                          <li key={p.nom} className="carte px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <p className="min-w-0 flex-1 truncate text-sm font-bold text-c2b-green">
+                                {p.nom}
+                                {fc?.allergies && <span className="ml-1.5 text-[11px] font-bold text-red-700">⚠️ {fc.allergies}</span>}
+                              </p>
+                              <span className="pastille py-0.5 px-2 text-[11px]">{n} repas</span>
+                              {numeroWhatsApp(fc?.telephone ?? null).length >= 9 && (
+                                <a
+                                  href={`tel:+${numeroWhatsApp(fc?.telephone ?? null)}`}
+                                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-c2b-green/20 text-c2b-green"
+                                  aria-label={`Appeler ${p.nom}`}
+                                >
+                                  <Phone size={14} />
+                                </a>
+                              )}
+                            </div>
+                            <div className="mt-2 grid grid-cols-5 gap-1">
+                              {jours.map((d, i) => {
+                                const midi = p.repas.find((r) => r.date === d && r.service === "dejeuner");
+                                const soir = p.repas.find((r) => r.date === d && r.service === "diner");
+                                return (
+                                  <div
+                                    key={d}
+                                    className={`rounded-lg py-1 text-center ${
+                                      midi && soir
+                                        ? "bg-gradient-to-r from-amber-300 to-indigo-300"
+                                        : midi
+                                          ? "bg-amber-300"
+                                          : soir
+                                            ? "bg-indigo-400 text-white"
+                                            : "bg-c2b-green/[0.04] text-c2b-muted"
+                                    }`}
+                                  >
+                                    <p className="text-[10px] font-bold">{JOURS_COURTS[i]}</p>
+                                    <p className="text-[11px] leading-tight">
+                                      {midi ? `☀️${midi.quantite > 1 ? `×${midi.quantite}` : ""}` : ""}
+                                      {soir ? `🌙${soir.quantite > 1 ? `×${soir.quantite}` : ""}` : ""}
+                                      {!midi && !soir ? "—" : ""}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </>
+              )}
+            </section>
+          );
+        })()}
 
       {/* 1. Mes clients : les fiches de la cuisine. */}
       <section className="space-y-2.5">
