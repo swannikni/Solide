@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MapPin } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { ZONES, debutAVenir, prixZone, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
+import { REPAS_LIVRAISON_OFFERTE, ZONES, debutAVenir, prixZone, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
 import type { Tarifs } from "@/lib/paiements";
 
 export interface SemaineOuverte {
@@ -78,8 +78,8 @@ export function MonEspaceClient({
   const coches = choix[lundi] ?? [];
   const repasSemaine = coches.map(versRepas);
   const prix = prixDemande(repasSemaine, zone, tarifs, conditions);
-  const livraisonNormale = (prixZone(zone) ?? 0) * prix.jours1;
-  const economie = prix.brut - prix.prixRepas + (conditions.livraisonOfferte ? livraisonNormale : 0);
+  const livraisonNormale = (prixZone(zone) ?? 0) * prix.jours;
+  const economie = prix.brut - prix.prixRepas + (prix.prixLivraison === 0 ? livraisonNormale : 0);
   const lundiActuel = lundiDe(aujourdhui);
 
   async function appeler(corps: object, cleEnCours: string) {
@@ -381,13 +381,13 @@ export function MonEspaceClient({
                   </p>
                 </>
               )}
-              {conditions.livraisonOfferte ? (
+              {conditions.livraisonOfferte || (prix.livraisonGratuite && zone !== "devis") ? (
                 <p className="flex justify-between font-semibold text-emerald-700">
                   <span>
                     🚚 Livraison offerte 🎁
                     {livraisonNormale ? (
                       <span className="block text-[11px] font-normal">
-                        au lieu de {prix.jours1} × {prixZone(zone)} DH
+                        au lieu de {prix.jours} × {prixZone(zone)} DH
                       </span>
                     ) : null}
                   </span>
@@ -398,10 +398,10 @@ export function MonEspaceClient({
               ) : (
                 <p className="flex justify-between">
                   <span>
-                    Livraison{zone && prix.jours1 > 0 && prixZone(zone) ? ` (${prix.jours1} × ${prixZone(zone)} DH)` : ""}
-                    {zone && zone !== "devis" && prix.jours2 > 0 && (
-                      <span className="block text-[11px] font-semibold text-emerald-700">
-                        🎁 offerte les jours midi + soir ({prix.jours2} jour{prix.jours2 > 1 ? "s" : ""})
+                    Livraison{zone && prix.jours > 0 && prixZone(zone) ? ` (${prix.jours} × ${prixZone(zone)} DH)` : ""}
+                    {zone && zone !== "devis" && prix.jours > 0 && (
+                      <span className="block text-[11px] text-c2b-muted">
+                        🎁 Offerte dès {REPAS_LIVRAISON_OFFERTE} repas dans la semaine (encore {REPAS_LIVRAISON_OFFERTE - repasSemaine.length})
                       </span>
                     )}
                     {zone === "devis" && <span className="block text-[11px] text-c2b-muted">Hors zone : Chef2Box vous contacte pour le prix.</span>}

@@ -63,6 +63,10 @@ export interface Conditions {
   livraisonOfferte?: boolean;
 }
 
+// Livraison offerte à partir de 10 repas dans la semaine (5 jours midi + soir).
+export const REPAS_LIVRAISON_OFFERTE = 10;
+export const livraisonOfferteSemaine = (jours1: number, jours2: number) => jours1 + 2 * jours2 >= REPAS_LIVRAISON_OFFERTE;
+
 export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tarifs, conditions: Conditions = {}) {
   const parJour = new Map<string, Set<Service>>();
   for (const r of repas) parJour.set(r.date, (parJour.get(r.date) ?? new Set()).add(r.service));
@@ -72,11 +76,13 @@ export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tar
   const brut = prixParJour(jours - jours2, jours2, tarifs);
   const remise = Math.min(100, Math.max(0, conditions.remise ?? 0));
   const prixRepas = Math.round((brut * (100 - remise)) / 100);
-  // Livraison par jour livré selon la zone ; offerte les jours midi + soir
-  // (dans la zone de la carte ; au-delà, sur devis).
-  const parJourLivraison = conditions.livraisonOfferte ? 0 : prixZone(zone);
-  const prixLivraison = parJourLivraison == null ? null : parJourLivraison * (jours - jours2);
+  // Livraison par jour livré selon la zone ; offerte dès 10 repas dans la
+  // semaine (dans la zone de la carte ; au-delà, sur devis).
+  const livraisonGratuite = livraisonOfferteSemaine(jours - jours2, jours2);
+  const parJourLivraison = conditions.livraisonOfferte ? 0 : livraisonGratuite && zone !== "devis" ? 0 : prixZone(zone);
+  const prixLivraison = parJourLivraison == null ? null : parJourLivraison * jours;
   return {
+    livraisonGratuite,
     jours,
     jours1: jours - jours2,
     jours2,

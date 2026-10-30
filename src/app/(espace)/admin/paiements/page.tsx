@@ -2,7 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { PaiementsClient, type Paiement, type PersonneMois } from "@/app/(espace)/admin/paiements/PaiementsClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { completerTarifs, lundiDe, montantAuto, semainesDe, type RepasDuJour, type Tarifs } from "@/lib/paiements";
-import { prixZone, type Zone } from "@/lib/ma-semaine";
+import { livraisonOfferteSemaine, prixZone, type Zone } from "@/lib/ma-semaine";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +103,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
     .map(([cle, p]) => {
       const frais = fraisJour.get(cle) ?? 0;
       const remise = remiseDe.get(cle) ?? 0;
-      const semaines = semainesDe(p.jours).map((s) => ({ ...s, ...(frais ? { livraison: (s.jours - (s.jours2 ?? 0)) * frais } : {}), ...(remise ? { remise } : {}) }));
+      const semaines = semainesDe(p.jours).map((s) => ({ ...s, ...(frais ? { livraison: livraisonOfferteSemaine(s.jours1 ?? 0, s.jours2 ?? 0) ? 0 : s.jours * frais } : {}), ...(remise ? { remise } : {}) }));
       const offre = offreDe.get(cle) ?? null;
       return {
         cle,
