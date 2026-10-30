@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { nouveauJeton } from "@/lib/ma-semaine";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
 import {
@@ -120,6 +121,7 @@ export interface FicheResume {
   refus: string | null;
   note: string | null;
   client_id: string | null;
+  jeton?: string | null; // lien personnel « Ma semaine »
   dernier: string | null;
 }
 
@@ -278,6 +280,23 @@ export function ClientsClient({
     setFiches((prev) => [...prev.filter((f) => f.id !== creee.id), { ...creee, dernier: prev.find((f) => f.id === creee.id)?.dernier ?? null }]);
     await changerSuivi(q, "client");
     return nom;
+  }
+
+  // Lien personnel « Ma semaine » (créé la première fois), envoyé sur
+  // WhatsApp : le client choisit ses repas, voit le prix et envoie.
+  async function envoyerLien(fc: FicheResume) {
+    let jeton = fc.jeton;
+    if (!jeton) {
+      jeton = nouveauJeton();
+      const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
+      if (error) return alert("Lien impossible à créer, réessayez.");
+      setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, jeton } : f)));
+    }
+    const lien = `${window.location.origin}/ma-semaine/${jeton}`;
+    const prenom = fc.nom.trim().split(/\s+/)[0];
+    const message = `Bonjour ${prenom} 👋 Voici ton lien Chef2Box pour choisir tes repas de la semaine (midi, soir), tes allergies et ta livraison. Tu vois le menu et le prix directement : ${lien}`;
+    const numero = numeroWhatsApp(fc.telephone);
+    window.open(numero.length >= 9 ? `https://wa.me/${numero}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   }
 
   // Questionnaire → Mes clients, puis la cuisine pour choisir midi / soir.
@@ -575,15 +594,6 @@ export function ClientsClient({
                     {numero.length >= 9 && (
                       <>
                         <a
-                          href={`https://wa.me/${numero}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white"
-                          aria-label={`WhatsApp à ${fc.nom}`}
-                        >
-                          <MessageCircle size={16} />
-                        </a>
-                        <a
                           href={`tel:+${numero}`}
                           className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-c2b-green/20 text-c2b-green"
                           aria-label={`Appeler ${fc.nom}`}
@@ -592,6 +602,14 @@ export function ClientsClient({
                         </a>
                       </>
                     )}
+                    <button
+                      onClick={() => envoyerLien(fc)}
+                      className="flex h-9 flex-shrink-0 items-center justify-center rounded-full bg-[#25D366] px-3 text-xs font-bold text-white"
+                      aria-label={`Envoyer le lien Ma semaine à ${fc.nom}`}
+                      title="Envoyer le lien « Ma semaine »"
+                    >
+                      📲
+                    </button>
                     <a
                       href={`/admin/cuisine?ajouter=${encodeURIComponent(fc.nom)}`}
                       className="flex h-9 flex-shrink-0 items-center justify-center rounded-full bg-c2b-green px-3 text-xs font-bold text-c2b-cream"

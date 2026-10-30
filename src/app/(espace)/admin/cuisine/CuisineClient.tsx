@@ -983,8 +983,6 @@ export function CuisineClient({
       lignes.push(`🌙 ${m?.diner?.trim() || "—"}`);
       lignes.push("");
     }
-    // Lien commun : le client choisit ses repas, voit le prix et envoie.
-    lignes.push(`👉 *Choisis tes repas ici* (midi, soir, livraison, prix) : ${typeof window !== "undefined" ? window.location.origin : "https://chef2box-appli.netlify.app"}/ma-semaine`);
     return lignes.join("\n").trim();
   }
 
@@ -1835,7 +1833,7 @@ export function CuisineClient({
         {menuOuvert && (
           <div className="space-y-3 border-t border-c2b-green/10 p-3">
             <p className="text-xs text-c2b-muted">
-              Enregistré automatiquement. « Menu + lien » envoie le menu avec le lien où le client choisit ses repas et voit le prix. Pour la semaine suivante, changez de semaine avec ▶ en haut.
+              Enregistré automatiquement. Vos clients le voient sur leur lien « Ma semaine » (envoyé depuis leur fiche, bouton 📲). Pour la semaine suivante, changez de semaine avec ▶ en haut.
             </p>
             {jours.map((d) => (
               <div key={d}>
@@ -1862,7 +1860,7 @@ export function CuisineClient({
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
               >
-                <Send size={15} /> Menu + lien
+                <Send size={15} /> Partager
               </a>
               <button
                 onClick={() => navigator.clipboard.writeText(texteMenu()).then(() => setMessage("Menu copié.")).catch(() => {})}
