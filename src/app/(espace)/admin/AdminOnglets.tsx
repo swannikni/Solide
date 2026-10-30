@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { LIVRAISON_ACTIVE } from "@/lib/livraison";
 
 const ONGLETS = [
+  { href: "/admin/cuisine", label: "Cuisine" },
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/suivi", label: "Suivi" },
-  { href: "/admin/cuisine", label: "Cuisine" },
   ...(LIVRAISON_ACTIVE ? [{ href: "/admin/livraison", label: "Livraison" }] : []),
   { href: "/admin/paiements", label: "Paiements" },
   { href: "/admin/site", label: "Site" },

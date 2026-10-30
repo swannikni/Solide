@@ -58,7 +58,7 @@ export function Nav({
 
   const liensClient = LIENS_CLIENT.filter((l) => assistantActif || l.href !== "/assistant");
   const liens = estAdmin
-    ? [{ href: "/admin/clients", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...liensClient]
+    ? [{ href: "/admin/cuisine", racine: "/admin", label: "Admin", icon: ShieldCheck }, ...liensClient]
     : liensClient;
 
   // Planche d'étiquettes à imprimer : pas de barres.

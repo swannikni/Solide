@@ -1663,3 +1663,18 @@ drop trigger if exists application_clients_notif_inscription on public.applicati
 create trigger application_clients_notif_inscription
   after insert on public.application_clients
   for each row execute function public.application_notifier_inscription();
+
+-- ============ LOT 1 : BOÎTES ×N, SUIVI DES PROSPECTS ============
+-- Nombre de boîtes pour un repas (ex. 2 portions le midi) : évite les
+-- doublons « Houda (2) » sur la fiche cuisine.
+alter table public.application_cuisine_extras add column if not exists quantite smallint not null default 1
+  check (quantite between 1 and 10);
+alter table public.application_commandes add column if not exists quantite smallint not null default 1
+  check (quantite between 1 and 10);
+
+-- Suivi commercial des questionnaires du site (Admin → Clients).
+alter table public.application_questionnaires add column if not exists suivi text not null default 'a_contacter'
+  check (suivi in ('a_contacter', 'contacte', 'client', 'pas_interesse'));
+alter table public.application_questionnaires add column if not exists suivi_note text
+  check (suivi_note is null or char_length(suivi_note) <= 200);
+alter table public.application_questionnaires add column if not exists suivi_le timestamptz;
