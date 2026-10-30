@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, Search, Send, UserPlus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Phone, Search, Send, UserPlus, X } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
@@ -18,6 +18,8 @@ export interface ClientCuisine {
   palier: Palier | null;
   cuisine_allergies: string | null;
   cuisine_refus: string | null;
+  telephone: string | null;
+  livraison_adresse: string | null;
 }
 
 export interface CommandeSemaine {
@@ -63,11 +65,41 @@ interface Personne {
   note: string | null;
 }
 
-// Formulaire « ajouter » ou « modifier » une personne.
+// Fiche client d'une personne du planning (une par nom, table
+// application_personnes) : coordonnées et préférences de cuisine.
+export interface FicheClient {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  adresse: string | null;
+  palier: Palier | null;
+  allergies: string | null;
+  refus: string | null;
+  note: string | null;
+}
+
+// Sac du jour d'une personne : prêt, puis livré (partagé entre téléphones).
+export interface SacJour {
+  date: string;
+  cle: string; // « m:<nom> » ou « c:<id> »
+  pret: boolean;
+  livre: boolean;
+}
+
+// Une semaine de paiement, pour l'historique de la fiche.
+interface SemainePayee {
+  semaine: string;
+  montant: number;
+  recu: number;
+}
+
+// Formulaire « ajouter » ou « modifier » une personne (sa fiche client).
 interface Formulaire {
   cle: string | null; // personne modifiée (null : nouvelle)
   clientId: string | null;
   nom: string;
+  telephone: string;
+  adresse: string;
   palier: Palier | "";
   allergies: string;
   refus: string;
@@ -82,7 +114,6 @@ const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[
 const PALIERS: Palier[] = ["P1", "P2", "P3", "P4", "P5", "P6"];
 const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note, quantite, adresse, lat, lng, telephone, complement";
 const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier, quantite";
-const CLE_SACS = "c2b_sacs_prets";
 
 // Code couleur de la formule du jour, le même partout : midi orange, soir
 // bleu, midi + soir vert (barre moitié orange, moitié bleu).
@@ -109,6 +140,16 @@ function Legende() {
 }
 
 const cleNom = (nom: string) => nom.trim().toLowerCase();
+// Numéro pour wa.me : chiffres et indicatif (06… → 2126…), sinon null.
+function numeroWa(telephone: string | null | undefined) {
+  const t = (telephone ?? "").trim();
+  let n = t.replace(/\D/g, "");
+  if (!t.startsWith("+")) {
+    if (n.startsWith("00")) n = n.slice(2);
+    else if (/^0[5-7]\d{8}$/.test(n)) n = `212${n.slice(1)}`;
+  }
+  return n.length >= 9 ? n : null;
+}
 const sansAccents = (t: string) =>
   t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const texte = (t: string, max: number) => t.trim().slice(0, max) || null;
@@ -134,6 +175,8 @@ export function CuisineClient({
   extrasInitiaux,
   personnesConnues,
   platsInitiaux,
+  fichesInitiales,
+  sacsInitiaux,
 }: {
   lundi: string;
   aujourdhui: string;
@@ -143,6 +186,8 @@ export function CuisineClient({
   extrasInitiaux: ExtraSemaine[];
   personnesConnues: PersonneHistorique[];
   platsInitiaux: Record<string, { dejeuner: string; diner: string }>;
+  fichesInitiales: FicheClient[];
+  sacsInitiaux: SacJour[];
 }) {
   const supabase = createClient();
   // Du lundi au vendredi (pas de livraison le week-end : le repas du samedi
@@ -178,27 +223,45 @@ export function CuisineClient({
   // Jour déroulé : préparation des plats, ou mise en sacs.
   const [vue, setVue] = useState<"cuisine" | "sacs">("cuisine");
   const [masquerPrets, setMasquerPrets] = useState(false);
-  // Sacs prêts (« date|personne »), gardés sur ce téléphone.
-  const [sacsPrets, setSacsPrets] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    try {
-      const garde = JSON.parse(localStorage.getItem(CLE_SACS) ?? "[]") as string[];
-      // On ne garde que les deux dernières semaines.
-      const limite = decalerDate(aujourdhui, -14);
-      setSacsPrets(new Set(garde.filter((k) => k.slice(0, 10) >= limite)));
-    } catch {}
-  }, [aujourdhui]);
-  function basculerSac(cle: string) {
-    setSacsPrets((prev) => {
-      const n = new Set(prev);
-      if (n.has(cle)) n.delete(cle);
-      else n.add(cle);
-      try {
-        localStorage.setItem(CLE_SACS, JSON.stringify([...n]));
-      } catch {}
-      return n;
-    });
+  // Sacs prêts / livrés (« date|personne »), partagés entre les téléphones.
+  const [sacs, setSacs] = useState<Map<string, SacJour>>(() => new Map(sacsInitiaux.map((x) => [`${x.date}|${x.cle}`, x])));
+  const etatSac = (date: string, cle: string) => sacs.get(`${date}|${cle}`) ?? { date, cle, pret: false, livre: false };
+  async function basculerSac(date: string, cle: string, champ: "pret" | "livre") {
+    const avant = etatSac(date, cle);
+    const apres = { ...avant, [champ]: !avant[champ] };
+    // Livré implique prêt ; un sac défait n'est plus livré.
+    if (champ === "livre" && apres.livre) apres.pret = true;
+    if (champ === "pret" && !apres.pret) apres.livre = false;
+    setSacs((m) => new Map(m).set(`${date}|${cle}`, apres));
+    const { error } = await supabase
+      .from("application_cuisine_sacs")
+      .upsert({ date, cle, pret: apres.pret, livre: apres.livre, maj_le: new Date().toISOString() }, { onConflict: "date,cle" });
+    if (error) {
+      setSacs((m) => new Map(m).set(`${date}|${cle}`, avant));
+      setMessage("Sac non enregistré, vérifiez la connexion.");
+    }
   }
+  // Onglet Sacs ouvert : on relit les coches des autres téléphones toutes les 15 s.
+  useEffect(() => {
+    if (vue !== "sacs" || !jourOuvert) return;
+    const date = jourOuvert;
+    const relire = async () => {
+      const { data } = await supabase.from("application_cuisine_sacs").select("date, cle, pret, livre").eq("date", date).returns<SacJour[]>();
+      if (!data) return;
+      setSacs((m) => {
+        const n = new Map(m);
+        for (const x of data) n.set(`${x.date}|${x.cle}`, x);
+        return n;
+      });
+    };
+    relire();
+    const t = setInterval(relire, 15_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vue, jourOuvert]);
+  // Fiches clients (une par nom) et historique de paiement de la fiche ouverte.
+  const [fiches, setFiches] = useState<Map<string, FicheClient>>(() => new Map(fichesInitiales.map((x) => [cleNom(x.nom), x])));
+  const [historique, setHistorique] = useState<SemainePayee[] | null>(null);
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
@@ -257,7 +320,14 @@ export function CuisineClient({
   for (const e of [...extras].sort((a, b) => b.date.localeCompare(a.date))) {
     const cle = `m:${cleNom(e.nom)}`;
     if (personnes.has(cle)) continue;
-    personnes.set(cle, { cle, clientId: null, nom: e.nom, palier: e.palier, allergies: e.allergies, refus: e.refus, note: cetteSemaine(e.date) ? e.note : null });
+    // La fiche client fait foi ; sinon, la dernière ligne du planning.
+    const fc = fiches.get(cleNom(e.nom));
+    personnes.set(
+      cle,
+      fc
+        ? { cle, clientId: null, nom: fc.nom, palier: fc.palier, allergies: fc.allergies, refus: fc.refus, note: fc.note ?? (cetteSemaine(e.date) ? e.note : null) }
+        : { cle, clientId: null, nom: e.nom, palier: e.palier, allergies: e.allergies, refus: e.refus, note: cetteSemaine(e.date) ? e.note : null }
+    );
   }
   const parNom = (a: Personne, b: Personne) => a.nom.localeCompare(b.nom, "fr");
   const liste = Array.from(personnes.values()).filter((p) => actifs.has(p.cle)).sort(parNom);
@@ -277,11 +347,12 @@ export function CuisineClient({
   // Adresse de livraison la plus récente d'une personne ajoutée à la main.
   function livraisonDe(cle: string) {
     const l = [...extras].sort((a, b) => b.date.localeCompare(a.date)).find((e) => cleNom(e.nom) === cle) ?? connues.get(cle);
+    const fc = fiches.get(cle);
     return {
-      adresse: l?.adresse ?? null,
+      adresse: fc?.adresse ?? l?.adresse ?? null,
       lat: l?.lat ?? null,
       lng: l?.lng ?? null,
-      telephone: l?.telephone ?? null,
+      telephone: fc?.telephone ?? l?.telephone ?? null,
       complement: l?.complement ?? null,
     };
   }
@@ -443,20 +514,37 @@ export function CuisineClient({
   // ---- Ajouter / modifier une personne ----
 
   function ouvrirAjout() {
-    setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), palier: "", allergies: "", refus: "", note: "", cases: [] });
+    setHistorique(null);
+    setFormulaire({ cle: null, clientId: null, nom: rechercheJour.trim(), telephone: "", adresse: "", palier: "", allergies: "", refus: "", note: "", cases: [] });
   }
 
   function ouvrirModification(p: Personne) {
+    const fc = p.clientId ? null : fiches.get(p.cle.slice(2));
+    const client = p.clientId ? parClient.get(p.clientId) : null;
+    const liv = p.clientId ? null : livraisonDe(p.cle.slice(2));
     setFormulaire({
       cle: p.cle,
       clientId: p.clientId,
       nom: p.nom,
+      telephone: (client?.telephone ?? fc?.telephone ?? liv?.telephone) || "",
+      adresse: (client?.livraison_adresse ?? fc?.adresse ?? liv?.adresse) || "",
       palier: p.palier ?? "",
       allergies: p.allergies ?? "",
       refus: p.refus ?? "",
       note: p.note ?? "",
       cases: [],
     });
+    // Historique de paiement (8 dernières semaines), chargé à l'ouverture.
+    setHistorique(null);
+    const clePaiement = p.clientId ? `c:${p.clientId}` : `n:${p.cle.slice(2)}`;
+    supabase
+      .from("application_paiements")
+      .select("semaine, montant, recu")
+      .eq("cle", clePaiement)
+      .order("semaine", { ascending: false })
+      .limit(8)
+      .returns<SemainePayee[]>()
+      .then(({ data }) => setHistorique((data ?? []).map((x) => ({ ...x, montant: Number(x.montant), recu: Number(x.recu) }))));
   }
 
   async function enregistrerFormulaire() {
@@ -479,7 +567,12 @@ export function CuisineClient({
       debut("formulaire");
       if (p.clientId) {
         const client = parClient.get(p.clientId);
-        const prefs = { cuisine_allergies: champs.allergies, cuisine_refus: champs.refus };
+        const prefs = {
+          cuisine_allergies: champs.allergies,
+          cuisine_refus: champs.refus,
+          telephone: texte(f.telephone, 30),
+          livraison_adresse: texte(f.adresse, 200),
+        };
         const maj = { palier: champs.palier && champs.palier !== client?.palier ? champs.palier : null, note: champs.note };
         const [r1, r2] = await Promise.all([
           supabase.from("application_clients").update(prefs).eq("id", p.clientId),
@@ -496,12 +589,37 @@ export function CuisineClient({
           fin("formulaire");
           return setMessage("Ce nom est déjà dans la liste.");
         }
-        const maj = { nom, ...champs };
-        const { error } = ids.length ? await supabase.from("application_cuisine_extras").update(maj).in("id", ids) : { error: null };
+        // 1. Nouveau nom : partout (planning, paiements, tarifs, sacs).
+        if (nouvelleCle !== p.cle) {
+          const { error } = await supabase.rpc("application_renommer_personne", { p_ancien: p.nom, p_nouveau: nom });
+          if (error) {
+            fin("formulaire");
+            return setMessage(/existe/.test(error.message) ? "Ce nom existe déjà." : "Changement de nom impossible, réessayez.");
+          }
+        }
+        // 2. Fiche client, puis ses repas de cette semaine et des suivantes.
+        const coord = { telephone: texte(f.telephone, 30), adresse: texte(f.adresse, 200) };
+        const { data: fiche, error: e1 } = await supabase
+          .from("application_personnes")
+          .upsert({ nom, ...coord, ...champs, updated_at: new Date().toISOString() }, { onConflict: "cle" })
+          .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+          .single<FicheClient>();
+        const maj = { nom, ...champs, ...coord };
+        const [{ error: e2 }, { error: e3 }] = await Promise.all([
+          ids.length ? supabase.from("application_cuisine_extras").update(maj).in("id", ids) : Promise.resolve({ error: null }),
+          supabase.from("application_cuisine_extras").update(maj).eq("nom", nom).gt("date", vendredi),
+        ]);
         fin("formulaire");
-        if (error) return setMessage("Enregistrement impossible, réessayez.");
-        setExtras((prev) => prev.map((e) => (ids.includes(e.id) ? { ...e, ...maj } : e)));
-        setNouvelles((prev) => [...prev.filter((x) => x.cle !== p.cle), { ...p, cle: nouvelleCle, ...maj }]);
+        if (e1 || e2 || e3) return setMessage("Enregistrement incomplet, réessayez.");
+        if (fiche) setFiches((m) => new Map(m).set(cleNom(nom), fiche));
+        setExtras((prev) => prev.map((e) => (ids.includes(e.id) || cleNom(e.nom) === p.cle.slice(2) ? { ...e, ...(ids.includes(e.id) ? maj : { nom }) } : e)));
+        setSacs((m) => {
+          if (nouvelleCle === p.cle) return m;
+          const n = new Map<string, SacJour>();
+          for (const [k, v] of m) n.set(v.cle === p.cle ? `${v.date}|${nouvelleCle}` : k, v.cle === p.cle ? { ...v, cle: nouvelleCle } : v);
+          return n;
+        });
+        setNouvelles((prev) => [...prev.filter((x) => x.cle !== p.cle), { ...p, cle: nouvelleCle, nom, ...champs }]);
         if (nouvelleCle !== p.cle) {
           retirerActif(p.cle);
           setActifs((s) => new Set(s).add(nouvelleCle));
@@ -548,8 +666,18 @@ export function CuisineClient({
             .select(CHAMPS_EXTRA)
             .returns<ExtraSemaine[]>()
         : { data: [] as ExtraSemaine[], error: null };
+      // Fiche client (coordonnées) : créée ou mise à jour.
+      const { data: fiche } = await supabase
+        .from("application_personnes")
+        .upsert(
+          { nom, telephone: texte(f.telephone, 30), adresse: texte(f.adresse, 200), ...champs, updated_at: new Date().toISOString() },
+          { onConflict: "cle" }
+        )
+        .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+        .single<FicheClient>();
       fin("formulaire");
       if (error) return setMessage("Ajout impossible, réessayez.");
+      if (fiche) setFiches((m) => new Map(m).set(cleNom(nom), fiche));
       setExtras((prev) => [...prev, ...(data ?? [])]);
       setNouvelles((prev) => [...prev.filter((x) => x.cle !== cle), { cle, clientId: null, nom, ...champs }]);
     }
@@ -574,10 +702,14 @@ export function CuisineClient({
     : [];
 
   function choisirSuggestion(s: (typeof suggestions)[number]) {
+    const client = s.clientId ? parClient.get(s.clientId) : null;
+    const liv = s.clientId ? null : livraisonDe(cleNom(s.nom));
     setFormulaire((f) => ({
       cle: null,
       clientId: s.clientId,
       nom: s.nom,
+      telephone: (client?.telephone ?? liv?.telephone) || "",
+      adresse: (client?.livraison_adresse ?? liv?.adresse) || "",
       palier: s.palier ?? "",
       allergies: s.allergies ?? "",
       refus: s.refus ?? "",
@@ -714,7 +846,7 @@ export function CuisineClient({
   const champsFormulaire = formulaire && (
     <section className="carte p-4 space-y-3 border-c2b-gold/50">
       <p className="flex items-center gap-2 font-bold text-c2b-green">
-        <UserPlus size={17} /> {formulaire.cle ? `Modifier ${formulaire.nom}` : "Ajouter une personne"}
+        <UserPlus size={17} /> {formulaire.cle ? `Fiche de ${formulaire.nom}` : "Ajouter une personne"}
       </p>
       {formulaire.clientId ? (
         <p className="text-sm font-bold text-c2b-green">
@@ -749,6 +881,47 @@ export function CuisineClient({
           ))}
         </ul>
       )}
+      <p className="-mb-2 text-[11px] font-bold text-c2b-muted">Téléphone</p>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <input
+          value={formulaire.telephone}
+          onChange={(e) => setFormulaire({ ...formulaire, telephone: e.target.value })}
+          placeholder="Téléphone (ex : 06 12 34 56 78)"
+          inputMode="tel"
+          maxLength={30}
+          className="champ mt-1 py-2.5 text-sm font-normal"
+        />
+        {numeroWa(formulaire.telephone) && (
+          <span className="flex gap-1.5">
+            <a
+              href={`https://wa.me/${numeroWa(formulaire.telephone)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] text-white"
+              aria-label={`WhatsApp à ${formulaire.nom}`}
+            >
+              <MessageCircle size={18} />
+            </a>
+            <a
+              href={`tel:+${numeroWa(formulaire.telephone)}`}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-c2b-green/20 text-c2b-green"
+              aria-label={`Appeler ${formulaire.nom}`}
+            >
+              <Phone size={17} />
+            </a>
+          </span>
+        )}
+      </div>
+      <label className="block text-[11px] font-bold text-c2b-muted">
+        Adresse
+        <input
+          value={formulaire.adresse}
+          onChange={(e) => setFormulaire({ ...formulaire, adresse: e.target.value })}
+          placeholder="Adresse de livraison (repère pour le livreur)"
+          maxLength={200}
+          className="champ mt-1 py-2.5 text-sm font-normal"
+        />
+      </label>
       <div className="flex flex-wrap gap-1.5">
         {PALIERS.map((pl) => (
           <button
@@ -763,30 +936,66 @@ export function CuisineClient({
           </button>
         ))}
       </div>
-      <input
-        value={formulaire.allergies}
-        onChange={(e) => setFormulaire({ ...formulaire, allergies: e.target.value })}
-        placeholder="Allergies (ex : arachides, lactose)"
-        maxLength={300}
-        className="champ py-2.5 text-sm"
-      />
-      <input
-        value={formulaire.refus}
-        onChange={(e) => setFormulaire({ ...formulaire, refus: e.target.value })}
-        placeholder="Ne mange pas (ex : parmesan, oignon)"
-        maxLength={300}
-        className="champ py-2.5 text-sm"
-      />
-      <input
-        value={formulaire.note}
-        onChange={(e) => setFormulaire({ ...formulaire, note: e.target.value })}
-        placeholder="Consigne pour la cuisine (facultatif)"
-        maxLength={200}
-        className="champ py-2.5 text-sm"
-      />
+      <label className="block text-[11px] font-bold text-c2b-muted">
+        ⚠️ Allergies
+        <input
+          value={formulaire.allergies}
+          onChange={(e) => setFormulaire({ ...formulaire, allergies: e.target.value })}
+          placeholder="Allergies (ex : arachides, lactose)"
+          maxLength={300}
+          className="champ mt-1 py-2.5 text-sm font-normal"
+        />
+      </label>
+      <label className="block text-[11px] font-bold text-c2b-muted">
+        Ne mange pas
+        <input
+          value={formulaire.refus}
+          onChange={(e) => setFormulaire({ ...formulaire, refus: e.target.value })}
+          placeholder="Ne mange pas (ex : parmesan, oignon)"
+          maxLength={300}
+          className="champ mt-1 py-2.5 text-sm font-normal"
+        />
+      </label>
+      <label className="block text-[11px] font-bold text-c2b-muted">
+        Consigne cuisine
+        <input
+          value={formulaire.note}
+          onChange={(e) => setFormulaire({ ...formulaire, note: e.target.value })}
+          placeholder="Consigne pour la cuisine (facultatif)"
+          maxLength={200}
+          className="champ mt-1 py-2.5 text-sm font-normal"
+        />
+      </label>
       {personneModifiee ? (
         <>
-          <p className="text-[11px] text-c2b-muted">S&apos;applique à tous ses repas de la semaine.</p>
+          <p className="text-[11px] text-c2b-muted">S&apos;applique à sa fiche et à tous ses repas, cette semaine et les suivantes.</p>
+          <div className="rounded-xl bg-white p-3">
+            <p className="text-xs font-bold text-c2b-muted">Paiements des dernières semaines</p>
+            {historique === null ? (
+              <p className="mt-1 text-xs text-c2b-muted">Chargement…</p>
+            ) : historique.length === 0 ? (
+              <p className="mt-1 text-xs text-c2b-muted">Aucun paiement enregistré.</p>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {historique.map((h) => {
+                  const reste = Math.max(0, h.montant - h.recu);
+                  return (
+                    <li key={h.semaine} className="flex items-baseline justify-between text-sm">
+                      <span className="text-c2b-text">Sem. du {dateCourte(h.semaine, { day: "numeric", month: "short" })}</span>
+                      <span className="tabular-nums">
+                        {h.montant} DH ·{" "}
+                        {reste === 0 && h.montant > 0 ? (
+                          <strong className="text-emerald-700">payé ✓</strong>
+                        ) : (
+                          <strong className="text-red-700">reste {reste} DH</strong>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
           {jourOuvert && SERVICES.some((s) => coche(personneModifiee, jourOuvert, s.cle)) && (
             <div className="rounded-xl bg-white p-3">
               <p className="text-xs font-bold text-c2b-muted">Nombre de boîtes le {dateLongue(jourOuvert)}</p>
@@ -894,7 +1103,10 @@ export function CuisineClient({
       })
       .filter((x) => x.midi || x.soir)
       .sort((a, b) => parNom(a.p, b.p));
-    const prets = sacs.filter((x) => sacsPrets.has(x.cle)).length;
+    const pretDe = (x: { p: Personne }) => etatSac(date, x.p.cle).pret;
+    const livreDe = (x: { p: Personne }) => etatSac(date, x.p.cle).livre;
+    const prets = sacs.filter(pretDe).length;
+    const livres = sacs.filter(livreDe).length;
     const groupes = [
       { titre: "☀️🌙 Midi + soir", aide: "2 boîtes dans le sac", sacs: sacs.filter((x) => x.midi && x.soir), fond: FORMULES.deux.badge },
       { titre: "☀️ Midi seulement", aide: "1 boîte", sacs: sacs.filter((x) => x.midi && !x.soir), fond: FORMULES.midi.badge },
@@ -914,6 +1126,7 @@ export function CuisineClient({
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-bold text-c2b-green">
               {prets} / {sacs.length} sacs prêts
+              <span className="ml-2 text-xs font-semibold text-c2b-muted">· 🚚 {livres} livré{livres > 1 ? "s" : ""}</span>
             </span>
             <button onClick={() => setMasquerPrets((m) => !m)} className="text-xs font-semibold text-c2b-gold">
               {masquerPrets ? "Afficher les sacs prêts" : "Masquer les sacs prêts"}
@@ -926,7 +1139,7 @@ export function CuisineClient({
         {groupes
           .filter((g) => g.sacs.length > 0)
           .map((g) => {
-            const visibles = g.sacs.filter((x) => !masquerPrets || !sacsPrets.has(x.cle));
+            const visibles = g.sacs.filter((x) => !masquerPrets || !pretDe(x));
             return (
               <section key={g.titre}>
                 <h3 className={`flex items-baseline justify-between rounded-lg px-3 py-2 ${g.fond}`}>
@@ -938,13 +1151,14 @@ export function CuisineClient({
                 {visibles.length === 0 && <p className="px-1 py-2 text-xs text-c2b-muted">Tous prêts ✓</p>}
                 <ul className="mt-1.5 space-y-1.5">
                   {visibles.map(({ p, midi, soir, cle }) => {
-                    const pret = sacsPrets.has(cle);
+                    const pret = pretDe({ p });
+                    const livre = livreDe({ p });
                     const f = formuleDe(!!midi, !!soir)!;
                     const notes = [midi?.note && `midi : ${midi.note}`, soir?.note && `soir : ${soir.note}`].filter(Boolean);
                     return (
                       <li key={cle} className={`relative overflow-hidden rounded-xl ${f.fond}`}>
                         <span className={`absolute inset-y-0 left-0 w-2 ${f.barre}`} />
-                        <button onClick={() => basculerSac(cle)} aria-pressed={pret} className="flex w-full items-start gap-3 py-2.5 pl-4 pr-3 text-left">
+                        <button onClick={() => basculerSac(date, p.cle, "pret")} aria-pressed={pret} className="flex w-full items-start gap-3 py-2.5 pl-4 pr-3 text-left">
                           <span
                             className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
                               pret ? "border-c2b-green bg-c2b-green text-c2b-cream" : "border-c2b-green/30 text-transparent"
@@ -970,6 +1184,17 @@ export function CuisineClient({
                             )}
                           </span>
                         </button>
+                        {pret && (
+                          <button
+                            onClick={() => basculerSac(date, p.cle, "livre")}
+                            aria-pressed={livre}
+                            className={`absolute bottom-2 right-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                              livre ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/20 text-c2b-green"
+                            }`}
+                          >
+                            🚚 {livre ? "Livré ✓" : "Livré ?"}
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -977,7 +1202,9 @@ export function CuisineClient({
               </section>
             );
           })}
-        <p className="text-[11px] text-c2b-muted">Touchez un nom quand son sac est fermé. Les coches restent sur ce téléphone.</p>
+        <p className="text-[11px] text-c2b-muted">
+          Touchez un nom quand son sac est fermé, puis « Livré » une fois remis. Les coches sont partagées entre tous les téléphones.
+        </p>
       </div>
     );
   }

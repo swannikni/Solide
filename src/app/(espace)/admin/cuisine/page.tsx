@@ -4,6 +4,8 @@ import {
   type ClientCuisine,
   type CommandeSemaine,
   type ExtraSemaine,
+  type FicheClient,
+  type SacJour,
   type PersonneHistorique,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
@@ -31,10 +33,10 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const vendredi = decalerDate(lundi, 4);
   const lundiAvant = decalerDate(lundi, -7);
 
-  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }, { data: fiches }, { data: sacs }] = await Promise.all([
     supabase
       .from("application_clients")
-      .select("id, nom, palier, cuisine_allergies, cuisine_refus")
+      .select("id, nom, palier, cuisine_allergies, cuisine_refus, telephone, livraison_adresse")
       .eq("est_admin", false)
       .order("nom")
       .returns<ClientCuisine[]>(),
@@ -68,6 +70,19 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
       .gte("date", lundi)
       .lte("date", vendredi)
       .returns<{ date: string; repas_type: "dejeuner" | "diner"; plat: string | null }[]>(),
+    // Fiches clients (une par personne) et sacs prêts / livrés de la semaine.
+    supabase
+      .from("application_personnes")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+      .order("nom")
+      .limit(2000)
+      .returns<FicheClient[]>(),
+    supabase
+      .from("application_cuisine_sacs")
+      .select("date, cle, pret, livre")
+      .gte("date", lundi)
+      .lte("date", vendredi)
+      .returns<SacJour[]>(),
   ]);
 
   const connues = new Map<string, PersonneHistorique>();
@@ -98,6 +113,8 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         extrasInitiaux={extras ?? []}
         personnesConnues={Array.from(connues.values())}
         platsInitiaux={plats}
+        fichesInitiales={fiches ?? []}
+        sacsInitiaux={sacs ?? []}
       />
     </div>
   );
