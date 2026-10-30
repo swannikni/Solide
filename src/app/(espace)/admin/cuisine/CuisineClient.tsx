@@ -82,6 +82,30 @@ const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note,
 const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier";
 const CLE_SACS = "c2b_sacs_prets";
 
+// Code couleur de la formule du jour, le même partout : midi orange, soir
+// bleu, midi + soir vert (barre moitié orange, moitié bleu).
+const FORMULES = {
+  midi: { libelle: "MIDI", barre: "bg-amber-400", fond: "bg-amber-50", badge: "bg-amber-400 text-amber-950" },
+  soir: { libelle: "SOIR", barre: "bg-indigo-500", fond: "bg-indigo-50", badge: "bg-indigo-500 text-white" },
+  deux: { libelle: "MIDI + SOIR", barre: "bg-gradient-to-b from-amber-400 from-50% to-indigo-500 to-50%", fond: "bg-emerald-50", badge: "bg-c2b-green text-c2b-cream" },
+} as const;
+const formuleDe = (midi: boolean, soir: boolean) => (midi && soir ? FORMULES.deux : midi ? FORMULES.midi : soir ? FORMULES.soir : null);
+// Bouton Midi / Soir allumé : à la couleur du service.
+const ALLUME: Record<Service, string> = { dejeuner: "bg-amber-400 text-amber-950", diner: "bg-indigo-500 text-white" };
+
+// Légende du code couleur.
+function Legende() {
+  return (
+    <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+      {Object.values(FORMULES).map((f) => (
+        <span key={f.libelle} className={`rounded-full px-2.5 py-1 ${f.badge}`}>
+          {f.libelle}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const cleNom = (nom: string) => nom.trim().toLowerCase();
 const sansAccents = (t: string) =>
   t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -806,9 +830,9 @@ export function CuisineClient({
       .sort((a, b) => parNom(a.p, b.p));
     const prets = sacs.filter((x) => sacsPrets.has(x.cle)).length;
     const groupes = [
-      { titre: "☀️🌙 Midi + soir", aide: "2 boîtes dans le sac", sacs: sacs.filter((x) => x.midi && x.soir), fond: "bg-c2b-gold/20" },
-      { titre: "☀️ Midi seulement", aide: "1 boîte", sacs: sacs.filter((x) => x.midi && !x.soir), fond: "bg-amber-50" },
-      { titre: "🌙 Soir seulement", aide: "1 boîte", sacs: sacs.filter((x) => !x.midi && x.soir), fond: "bg-indigo-50" },
+      { titre: "☀️🌙 Midi + soir", aide: "2 boîtes dans le sac", sacs: sacs.filter((x) => x.midi && x.soir), fond: FORMULES.deux.badge },
+      { titre: "☀️ Midi seulement", aide: "1 boîte", sacs: sacs.filter((x) => x.midi && !x.soir), fond: FORMULES.midi.badge },
+      { titre: "🌙 Soir seulement", aide: "1 boîte", sacs: sacs.filter((x) => !x.midi && x.soir), fond: FORMULES.soir.badge },
     ];
     const etiquette = (icone: string, libelle: string, b: Boite) => (
       <span className="rounded-full bg-white border border-c2b-green/15 px-2 py-0.5 text-[11px] font-bold text-c2b-green">
@@ -818,6 +842,7 @@ export function CuisineClient({
     if (sacs.length === 0) return <p className="py-2 text-sm text-c2b-muted">Aucun repas ce jour-là.</p>;
     return (
       <div className="space-y-4">
+        <Legende />
         <div>
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-bold text-c2b-green">
@@ -838,19 +863,21 @@ export function CuisineClient({
             return (
               <section key={g.titre}>
                 <h3 className={`flex items-baseline justify-between rounded-lg px-3 py-2 ${g.fond}`}>
-                  <span className="font-bold text-c2b-green">{g.titre}</span>
-                  <span className="text-xs font-semibold text-c2b-muted">
-                    {g.aide} · <strong className="text-c2b-green">{g.sacs.length}</strong> sac{g.sacs.length > 1 ? "s" : ""}
+                  <span className="font-bold">{g.titre}</span>
+                  <span className="text-xs font-semibold opacity-90">
+                    {g.aide} · <strong>{g.sacs.length}</strong> sac{g.sacs.length > 1 ? "s" : ""}
                   </span>
                 </h3>
                 {visibles.length === 0 && <p className="px-1 py-2 text-xs text-c2b-muted">Tous prêts ✓</p>}
-                <ul className="mt-1 divide-y divide-c2b-green/10">
+                <ul className="mt-1.5 space-y-1.5">
                   {visibles.map(({ p, midi, soir, cle }) => {
                     const pret = sacsPrets.has(cle);
+                    const f = formuleDe(!!midi, !!soir)!;
                     const notes = [midi?.note && `midi : ${midi.note}`, soir?.note && `soir : ${soir.note}`].filter(Boolean);
                     return (
-                      <li key={cle}>
-                        <button onClick={() => basculerSac(cle)} aria-pressed={pret} className="flex w-full items-start gap-3 py-2.5 text-left">
+                      <li key={cle} className={`relative overflow-hidden rounded-xl ${f.fond}`}>
+                        <span className={`absolute inset-y-0 left-0 w-2 ${f.barre}`} />
+                        <button onClick={() => basculerSac(cle)} aria-pressed={pret} className="flex w-full items-start gap-3 py-2.5 pl-4 pr-3 text-left">
                           <span
                             className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
                               pret ? "border-c2b-green bg-c2b-green text-c2b-cream" : "border-c2b-green/30 text-transparent"
@@ -859,7 +886,10 @@ export function CuisineClient({
                             ✓
                           </span>
                           <span className={`min-w-0 flex-1 ${pret ? "opacity-45" : ""}`}>
-                            <span className={`block text-[15px] font-bold text-c2b-green ${pret ? "line-through" : ""}`}>{p.nom}</span>
+                            <span className="flex items-center justify-between gap-2">
+                              <span className={`text-[15px] font-bold text-c2b-green ${pret ? "line-through" : ""}`}>{p.nom}</span>
+                              <span className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold ${f.badge}`}>{f.libelle}</span>
+                            </span>
                             <span className="mt-1 flex flex-wrap gap-1">
                               {midi && etiquette("☀️", "Midi", midi)}
                               {soir && etiquette("🌙", "Soir", soir)}
@@ -963,19 +993,34 @@ export function CuisineClient({
               {filtre ? "Personne de ce nom dans le planning : ajoutez-la ci-dessous." : "Personne dans le planning cette semaine."}
             </p>
           )}
-          <ul className="divide-y divide-c2b-green/10">
+          <div className="mb-2">
+            <Legende />
+          </div>
+          <ul className="space-y-1.5">
             {ordre.map((p) =>
               formulaire?.cle === p.cle ? (
                 <li key={p.cle} className="py-2">
                   {champsFormulaire}
                 </li>
               ) : (
-                <li key={p.cle} className="flex items-center gap-2 py-2">
+                <li
+                  key={p.cle}
+                  className={`relative flex items-center gap-2 overflow-hidden rounded-xl py-2 pl-4 pr-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.fond ?? "bg-white/60"}`}
+                >
+                  <span className={`absolute inset-y-0 left-0 w-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.barre ?? "bg-black/5"}`} />
                   <button onClick={() => ouvrirModification(p)} className="min-w-0 flex-1 text-left" aria-label={`Modifier ${p.nom}`}>
                     <p className={`truncate text-sm font-bold ${mange(p) ? "text-c2b-green" : "text-c2b-muted"}`}>
                       {p.nom}
-                      <span className="ml-1.5 rounded-full bg-c2b-gold/[0.15] px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
+                      <span className="ml-1.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
                     </p>
+                    {(() => {
+                      const f = formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"));
+                      return f ? (
+                        <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-extrabold ${f.badge}`}>{f.libelle}</span>
+                      ) : (
+                        <span className="mt-0.5 inline-block text-[10px] font-semibold text-c2b-muted">Ne mange pas ce jour</span>
+                      );
+                    })()}
                     {(p.allergies || p.refus || p.note) && (
                       <p className="truncate text-[11px] text-c2b-muted">
                         {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
@@ -995,7 +1040,7 @@ export function CuisineClient({
                         aria-pressed={actif}
                         aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
                         className={`flex h-10 w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-bold transition ${
-                          actif ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-muted"
+                          actif ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-c2b-muted"
                         } ${attente ? "opacity-50" : ""}`}
                       >
                         {s.icone} {s.libelle}
