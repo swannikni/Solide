@@ -687,7 +687,7 @@ export function ClientsClient({
                 return (
                   <li key={fc.id} className="carte p-3">
                     <div className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
+                    <button onClick={() => ouvrirMenuLien(fc)} className="min-w-0 flex-1 text-left">
                       <p className="truncate text-sm font-bold text-c2b-green">
                         {fc.nom}
                         {fc.palier && <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{fc.palier}</span>}
@@ -704,7 +704,7 @@ export function ClientsClient({
                         {fc.dernier ? `Dernier repas : ${new Date(`${fc.dernier}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" })}` : "Pas encore de repas"}
                         {fc.allergies && <span className="font-bold text-red-700"> · ⚠️ {fc.allergies}</span>}
                       </p>
-                    </div>
+                    </button>
                     {numero.length >= 9 && (
                       <>
                         <a
@@ -736,7 +736,7 @@ export function ClientsClient({
                     {lienOuvert === fc.id && (
                       <div className="mt-2 space-y-2 rounded-xl bg-c2b-cream p-3">
                         <div className="space-y-2 rounded-lg bg-white p-2.5">
-                          <p className="text-xs font-bold text-c2b-muted">💰 Son prix (avant d&apos;envoyer le lien)</p>
+                          <p className="text-xs font-bold text-c2b-muted">💰 Son prix — à régler une fois, puis envoyez le lien</p>
                           <label className="flex items-center gap-2 text-sm font-semibold text-c2b-green">
                             <input
                               type="checkbox"
