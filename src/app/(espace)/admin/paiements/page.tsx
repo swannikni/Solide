@@ -1,7 +1,7 @@
 import { exigerAdmin } from "@/lib/admin";
 import { PaiementsClient, type Paiement, type PersonneMois } from "@/app/(espace)/admin/paiements/PaiementsClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
-import { completerTarifs, lundiDe, montantAuto, semainesDe, type Tarifs } from "@/lib/paiements";
+import { completerTarifs, lundiDe, montantAuto, semainesDe, type RepasDuJour, type Tarifs } from "@/lib/paiements";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   const jour = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
   const semaineParDefaut = jour === 0 || jour === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
   const semaine = estDateValide(semaineDemandee) ? lundiDe(semaineDemandee) : semaineParDefaut;
-  const periode = { debut: semaine, fin: decalerDate(semaine, 4) };
+  const periode = { debut: semaine, fin: decalerDate(semaine, 5) }; // samedi compris
   // Récapitulatif du mois : semaines dont le lundi tombe dans ce mois.
   const mois = semaine.slice(0, 7);
   const [an, m] = mois.split("-").map(Number);
@@ -42,19 +42,19 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         .returns<{ id: string; nom: string; telephone: string | null }[]>(),
       supabase
         .from("application_commandes")
-        .select("client_id, date_livraison")
+        .select("client_id, date_livraison, quantite")
         .gte("date_livraison", periode.debut)
         .lte("date_livraison", periode.fin)
         .neq("statut", "annulee")
         .limit(10000)
-        .returns<{ client_id: string; date_livraison: string }[]>(),
+        .returns<{ client_id: string; date_livraison: string; quantite: number | null }[]>(),
       supabase
         .from("application_cuisine_extras")
-        .select("nom, telephone, date")
+        .select("nom, telephone, date, quantite")
         .gte("date", periode.debut)
         .lte("date", periode.fin)
         .limit(10000)
-        .returns<{ nom: string; telephone: string | null; date: string }[]>(),
+        .returns<{ nom: string; telephone: string | null; date: string; quantite: number | null }[]>(),
       supabase.from("application_parametres").select("valeur").eq("cle", "tarifs").maybeSingle<{ valeur: Partial<Tarifs> }>(),
       supabase
         .from("application_tarifs_perso")
@@ -72,19 +72,21 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   const offreDe = new Map((offres ?? []).map((o) => [o.cle, { prix: Number(o.prix_semaine), note: o.note }]));
 
   // Repas de la fiche cuisine par personne et par jour (clé : client ou nom).
-  const repas = new Map<string, { nom: string; clientId: string | null; telephone: string | null; jours: Map<string, number> }>();
-  const noter = (cle: string, nom: string, clientId: string | null, telephone: string | null, date: string) => {
-    const p = repas.get(cle) ?? { nom, clientId, telephone, jours: new Map<string, number>() };
-    p.jours.set(date, (p.jours.get(date) ?? 0) + 1);
+  const repas = new Map<string, { nom: string; clientId: string | null; telephone: string | null; jours: Map<string, RepasDuJour> }>();
+  const noter = (cle: string, nom: string, clientId: string | null, telephone: string | null, date: string, quantite: number | null) => {
+    const p = repas.get(cle) ?? { nom, clientId, telephone, jours: new Map<string, RepasDuJour>() };
+    const q = quantite && quantite > 0 ? quantite : 1;
+    const j = p.jours.get(date) ?? { services: 0, boites: 0, max: 0 };
+    p.jours.set(date, { services: j.services + 1, boites: j.boites + q, max: Math.max(j.max, q) });
     if (!p.telephone && telephone) p.telephone = telephone;
     repas.set(cle, p);
   };
   const parClient = new Map((clients ?? []).map((c) => [c.id, c]));
   for (const c of commandes ?? []) {
     const client = parClient.get(c.client_id);
-    if (client) noter(`c:${client.id}`, client.nom, client.id, client.telephone, c.date_livraison);
+    if (client) noter(`c:${client.id}`, client.nom, client.id, client.telephone, c.date_livraison, c.quantite);
   }
-  for (const e of extras ?? []) noter(`n:${e.nom.trim().toLowerCase()}`, e.nom.trim(), null, e.telephone, e.date);
+  for (const e of extras ?? []) noter(`n:${e.nom.trim().toLowerCase()}`, e.nom.trim(), null, e.telephone, e.date, e.quantite);
 
   const personnes: PersonneMois[] = [...repas.entries()]
     .map(([cle, p]) => {
@@ -95,7 +97,7 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         nom: p.nom,
         clientId: p.clientId,
         telephone: p.telephone,
-        repas: [...p.jours.values()].reduce((t, n) => t + n, 0),
+        repas: [...p.jours.values()].reduce((t, j) => t + j.boites, 0),
         semaines,
         offre,
         montantAuto: montantAuto(semaines, tarifs, offre?.prix ?? null),

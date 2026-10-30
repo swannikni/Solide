@@ -11,7 +11,7 @@ import {
   profilComplet,
   type Profil,
 } from "@/lib/objectifs";
-import type { Client, Palier, Questionnaire } from "@/lib/types";
+import type { Client, Palier, Questionnaire, SuiviProspect } from "@/lib/types";
 
 type Fiche = {
   id?: string;
@@ -82,6 +82,24 @@ function numeroWhatsApp(telephone: string | null) {
   return chiffres;
 }
 
+// Suivi commercial des questionnaires du site.
+const SUIVIS: { cle: SuiviProspect; libelle: string; couleur: string }[] = [
+  { cle: "a_contacter", libelle: "À contacter", couleur: "bg-c2b-gold text-c2b-green" },
+  { cle: "contacte", libelle: "Contacté", couleur: "bg-indigo-500 text-white" },
+  { cle: "client", libelle: "Client ✓", couleur: "bg-c2b-green text-c2b-cream" },
+  { cle: "pas_interesse", libelle: "Pas intéressé", couleur: "bg-black/10 text-c2b-muted" },
+];
+
+// Premier message à un prospect, avec son bilan du questionnaire.
+function messageProspect(q: Questionnaire) {
+  const prenom = q.nom.trim().split(/\s+/)[0];
+  const bilan =
+    q.calories != null
+      ? ` Votre bilan : ${q.calories} kcal par jour, dont ${q.proteines} g de protéines${q.palier ? ` (palier ${q.palier.slice(1)})` : ""}.`
+      : "";
+  return `Bonjour ${prenom}, c'est l'équipe Chef2Box 👋 Merci d'avoir fait votre bilan sur chef2box.com !${bilan} Nos repas sont calculés sur ces besoins et livrés chaque matin à Marrakech. Voulez-vous démarrer lundi ? Formule midi ou midi + soir ?`;
+}
+
 export function ClientsClient({
   clientsInitiaux,
   questionnairesInitiaux = [],
@@ -108,14 +126,16 @@ export function ClientsClient({
   // Questionnaires : les 3 derniers, le reste en déroulant ou en cherchant.
   const [tousQuestionnaires, setTousQuestionnaires] = useState(false);
   const [rechercheQ, setRechercheQ] = useState("");
+  const [filtreSuivi, setFiltreSuivi] = useState<SuiviProspect | "tous">("a_contacter");
   // Recherche sur le nom, l'e-mail ou le téléphone (sans tenir compte des accents).
   const normaliser = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   const saisie = normaliser(recherche);
   const saisieQ = normaliser(rechercheQ);
-  const questionnairesTrouves = saisieQ
-    ? questionnaires.filter((q) => normaliser([q.nom, q.email, q.telephone].filter(Boolean).join(" ")).includes(saisieQ))
-    : questionnaires;
-  const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnaires.slice(0, 3);
+  const suiviDe = (q: Questionnaire): SuiviProspect => q.suivi ?? "a_contacter";
+  const questionnairesTrouves = questionnaires
+    .filter((q) => filtreSuivi === "tous" || suiviDe(q) === filtreSuivi)
+    .filter((q) => !saisieQ || normaliser([q.nom, q.email, q.telephone].filter(Boolean).join(" ")).includes(saisieQ));
+  const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnairesTrouves.slice(0, 3);
   const clientsAffiches = clients
     .filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true))
     .filter((c) => !saisie || normaliser([c.nom, emailsConnus[c.id], c.telephone].filter(Boolean).join(" ")).includes(saisie));
@@ -154,6 +174,14 @@ export function ClientsClient({
       lipides: q.lipides != null ? String(q.lipides) : "",
       profil: depuisProfil(q.profil),
     });
+  }
+
+  // Suivi commercial d'un questionnaire (à contacter, contacté, client…).
+  async function changerSuivi(q: Questionnaire, suivi: SuiviProspect) {
+    const maj = { suivi, suivi_le: new Date().toISOString() };
+    setQuestionnaires((prev) => prev.map((x) => (x.id === q.id ? { ...x, ...maj } : x)));
+    const { error } = await supabase.from("application_questionnaires").update(maj).eq("id", q.id);
+    if (error) setQuestionnaires((prev) => prev.map((x) => (x.id === q.id ? q : x)));
   }
 
   async function ignorerQuestionnaire(q: Questionnaire) {
@@ -495,6 +523,22 @@ export function ClientsClient({
           <p className="text-xs text-c2b-muted">
             Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
           </p>
+          <div className="flex flex-wrap gap-1.5">
+            {[...SUIVIS, { cle: "tous" as const, libelle: "Tous", couleur: "bg-c2b-green text-c2b-cream" }].map((f) => {
+              const n = f.cle === "tous" ? questionnaires.length : questionnaires.filter((q) => suiviDe(q) === f.cle).length;
+              return (
+                <button
+                  key={f.cle}
+                  onClick={() => setFiltreSuivi(f.cle)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                    filtreSuivi === f.cle ? f.couleur : "bg-white border border-c2b-green/15 text-c2b-green"
+                  }`}
+                >
+                  {f.libelle} ({n})
+                </button>
+              );
+            })}
+          </div>
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
             <input
@@ -514,7 +558,9 @@ export function ClientsClient({
               </button>
             )}
           </div>
-          {saisieQ && questionnairesTrouves.length === 0 && <p className="py-2 text-center text-sm text-c2b-muted">Aucun questionnaire à ce nom.</p>}
+          {questionnairesTrouves.length === 0 && (
+            <p className="py-2 text-center text-sm text-c2b-muted">{saisieQ ? "Aucun questionnaire à ce nom." : "Aucun questionnaire dans cette liste."}</p>
+          )}
           {questionnairesAffiches.map((q) => (
             <div key={q.id} className="carte p-4 border-c2b-gold/30">
               <div className="flex items-start justify-between gap-3">
@@ -543,15 +589,50 @@ export function ClientsClient({
                   <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
                 </p>
               )}
-              <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold w-full mt-3 py-2.5 text-sm">
-                Créer son compte
-              </button>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {SUIVIS.map((sv) => (
+                  <button
+                    key={sv.cle}
+                    onClick={() => changerSuivi(q, sv.cle)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                      suiviDe(q) === sv.cle ? sv.couleur : "bg-white border border-c2b-green/15 text-c2b-muted"
+                    }`}
+                  >
+                    {sv.libelle}
+                  </button>
+                ))}
+              </div>
+              {q.suivi_le && suiviDe(q) !== "a_contacter" && (
+                <p className="mt-1 text-[11px] text-c2b-muted">
+                  Mis à jour le {new Date(q.suivi_le).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                </p>
+              )}
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {numeroWhatsApp(q.telephone).length >= 9 ? (
+                  <a
+                    href={`https://wa.me/${numeroWhatsApp(q.telephone)}?text=${encodeURIComponent(messageProspect(q))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => suiviDe(q) === "a_contacter" && changerSuivi(q, "contacte")}
+                    className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
+                  >
+                    <MessageCircle size={15} /> WhatsApp
+                  </a>
+                ) : (
+                  <span className="flex items-center justify-center rounded-full border border-c2b-green/15 px-3 py-2.5 text-xs text-c2b-muted">
+                    Pas de numéro
+                  </span>
+                )}
+                <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold py-2.5 text-sm">
+                  Créer son compte
+                </button>
+              </div>
             </div>
           ))}
-          {!saisieQ && questionnaires.length > 3 && (
+          {!saisieQ && questionnairesTrouves.length > 3 && (
             <button onClick={() => setTousQuestionnaires((t) => !t)} className="btn-secondary w-full py-2.5 text-sm">
               <ChevronDown size={16} className={tousQuestionnaires ? "rotate-180" : ""} />
-              {tousQuestionnaires ? "Ne montrer que les 3 derniers" : `Voir les ${questionnaires.length - 3} autres questionnaires`}
+              {tousQuestionnaires ? "Ne montrer que les 3 derniers" : `Voir les ${questionnairesTrouves.length - 3} autres`}
             </button>
           )}
         </section>

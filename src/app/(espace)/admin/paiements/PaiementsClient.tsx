@@ -383,7 +383,10 @@ export function PaiementsClient({
                         {personne.semaines.map((s) => (
                           <li key={s.lundi} className="flex justify-between gap-2">
                             <span className={s.jours < 5 ? "text-amber-700" : "text-c2b-text"}>
-                              Sem. du {dateCourte(s.lundi)} · {s.jours} j · {s.formule} repas/j{s.jours < 5 ? " ⚠️ incomplète" : ""}
+                              Sem. du {dateCourte(s.lundi)} · {s.jours} j · {s.formule} repas/j
+                              {(s.boites ?? 1) > 1 ? ` · ×${s.boites} boîtes` : ""}
+                              {s.samedi ? ` · +${s.samedi} samedi` : ""}
+                              {s.jours > 0 && s.jours < 5 ? " ⚠️ incomplète" : ""}
                             </span>
                             <span className="whitespace-nowrap tabular-nums font-semibold">{dh(prixSemaine(s, tarifs, offres.get(personne.cle)?.prix ?? null))}</span>
                           </li>

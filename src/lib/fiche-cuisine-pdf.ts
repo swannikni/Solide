@@ -16,7 +16,13 @@ export interface LigneFiche {
   refus: string | null;
   note: string | null;
   ajout?: boolean; // ajouté à la main sur la fiche (retirable à l'écran)
+  quantite?: number; // boîtes pour ce repas (×2 : deux portions)
 }
+
+// Boîtes d'une liste de lignes (une ligne ×2 compte deux boîtes).
+export const boitesDe = (lignes: LigneFiche[]) => lignes.reduce((t, l) => t + (l.quantite ?? 1), 0);
+// Nom affiché sur la fiche, avec le nombre de boîtes s'il y en a plusieurs.
+export const nomAvecBoites = (l: LigneFiche) => ((l.quantite ?? 1) > 1 ? `${l.nom} ×${l.quantite}` : l.nom);
 
 export interface ServiceFiche {
   court: string; // « MIDI », « SOIR »
@@ -80,7 +86,7 @@ export function genererFichePdf(
     police(11.5, "bold", VERT);
     doc.text(`${libellePalier(g.palier).toUpperCase()}${suite ? " (suite)" : ""}`, marge + 6, y + 6.1);
     police(10, "bold", couleurs.trait);
-    doc.text(`Total : ${g.lignes.length} repas`, marge + largeur - 4, y + 6.1, { align: "right" });
+    doc.text(`Total : ${boitesDe(g.lignes)} repas`, marge + largeur - 4, y + 6.1, { align: "right" });
     y += 9;
   };
 
@@ -202,7 +208,7 @@ export function genererFichePdf(
         const hl = hauteurLigne(taille);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
-        const lignesNom = doc.splitTextToSize(l.nom, colDetails - colNom - 3) as string[];
+        const lignesNom = doc.splitTextToSize(nomAvecBoites(l), colDetails - colNom - 3) as string[];
         const blocs = details.map((d) => {
           doc.setFont("helvetica", d.style);
           doc.setFontSize(taille);

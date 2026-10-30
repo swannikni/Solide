@@ -146,7 +146,13 @@ export interface Questionnaire {
   reponses: Record<string, string | number | null>;
   statut: "nouveau" | "compte_cree" | "ignore";
   client_id: string | null;
+  // Suivi commercial (Admin → Clients).
+  suivi?: SuiviProspect;
+  suivi_note?: string | null;
+  suivi_le?: string | null;
 }
+
+export type SuiviProspect = "a_contacter" | "contacte" | "client" | "pas_interesse";
 
 export interface Points {
   jours: number;

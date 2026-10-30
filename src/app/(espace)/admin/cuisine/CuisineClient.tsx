@@ -7,7 +7,7 @@ import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
-import { genererFichePdf, libellePalier, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
+import { boitesDe, genererFichePdf, libellePalier, nomAvecBoites, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
 import type { Palier } from "@/lib/types";
 
 type Service = "dejeuner" | "diner";
@@ -27,6 +27,7 @@ export interface CommandeSemaine {
   repas_type: Service;
   note: string | null;
   palier: Palier | null; // palier du jour, sinon celui du client
+  quantite: number; // boîtes pour ce repas (×2 : deux portions)
 }
 
 // Fiche d'une personne ajoutée à la main (sans compte), reprise quand on la
@@ -48,6 +49,7 @@ export interface ExtraSemaine extends PersonneHistorique {
   date: string;
   repas_type: Service;
   note: string | null;
+  quantite: number; // boîtes pour ce repas
 }
 
 // Une ligne du planning : client de l'appli ou personne ajoutée à la main.
@@ -78,8 +80,8 @@ const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[
   { cle: "diner", libelle: "Soir", court: "SOIR", icone: "🌙" },
 ];
 const PALIERS: Palier[] = ["P1", "P2", "P3", "P4", "P5", "P6"];
-const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note, adresse, lat, lng, telephone, complement";
-const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier";
+const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note, quantite, adresse, lat, lng, telephone, complement";
+const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier, quantite";
 const CLE_SACS = "c2b_sacs_prets";
 
 // Code couleur de la formule du jour, le même partout : midi orange, soir
@@ -143,10 +145,11 @@ export function CuisineClient({
   platsInitiaux: Record<string, { dejeuner: string; diner: string }>;
 }) {
   const supabase = createClient();
-  const jours = Array.from({ length: 5 }, (_, i) => decalerDate(lundi, i));
-  const vendredi = jours[4];
+  // Du lundi au samedi (le samedi seulement pour les livraisons ponctuelles).
+  const jours = Array.from({ length: 6 }, (_, i) => decalerDate(lundi, i));
+  const samedi = jours[5];
   const lundiAvant = decalerDate(lundi, -7);
-  const cetteSemaine = (d: string) => d >= lundi && d <= vendredi;
+  const cetteSemaine = (d: string) => d >= lundi && d <= samedi;
 
   const [clients, setClients] = useState(clientsInitiaux);
   const [commandes, setCommandes] = useState(commandesInitiales);
@@ -282,9 +285,12 @@ export function CuisineClient({
     };
   }
 
+  // Boîtes à préparer pour un service (un repas ×2 compte deux boîtes).
   const totalJour = (date: string, service: Service) =>
-    commandes.filter((c) => c.date_livraison === date && c.repas_type === service && parClient.has(c.client_id)).length +
-    extras.filter((e) => e.date === date && e.repas_type === service).length;
+    commandes
+      .filter((c) => c.date_livraison === date && c.repas_type === service && parClient.has(c.client_id))
+      .reduce((t, c) => t + (c.quantite ?? 1), 0) +
+    extras.filter((e) => e.date === date && e.repas_type === service).reduce((t, e) => t + (e.quantite ?? 1), 0);
   const totalSemaine = jours.reduce((t, d) => t + totalJour(d, "dejeuner") + totalJour(d, "diner"), 0);
 
   // Ajoute ou retire un repas (une case du planning).
@@ -350,6 +356,21 @@ export function CuisineClient({
     } finally {
       fin(id);
     }
+  }
+
+  // Nombre de boîtes d'un repas (1 à 10), enregistré tout de suite.
+  async function changerQuantite(p: Personne, date: string, service: Service, quantite: number) {
+    const q = Math.min(10, Math.max(1, quantite));
+    const ligne = p.clientId ? commandeDe(p, date, service) : extraDe(p, date, service);
+    if (!ligne || (ligne.quantite ?? 1) === q) return;
+    const id = `${p.cle}|${date}|${service}`;
+    debut(id);
+    const table = p.clientId ? "application_commandes" : "application_cuisine_extras";
+    const { error } = await supabase.from(table).update({ quantite: q }).eq("id", ligne.id);
+    fin(id);
+    if (error) return setMessage("Nombre de boîtes non enregistré, réessayez.");
+    if (p.clientId) setCommandes((prev) => prev.map((c) => (c.id === ligne.id ? { ...c, quantite: q } : c)));
+    else setExtras((prev) => prev.map((e) => (e.id === ligne.id ? { ...e, quantite: q } : e)));
   }
 
   async function toutLaSemaine(p: Personne, service: Service) {
@@ -580,16 +601,17 @@ export function CuisineClient({
               allergies: client.cuisine_allergies,
               refus: client.cuisine_refus,
               note: c.note,
+              quantite: c.quantite ?? 1,
             };
           }),
         ...extras
           .filter((e) => e.date === date && e.repas_type === s.cle)
-          .map((e) => ({ cle: e.id, nom: e.nom, palier: e.palier, allergies: e.allergies, refus: e.refus, note: e.note })),
+          .map((e) => ({ cle: e.id, nom: e.nom, palier: e.palier, allergies: e.allergies, refus: e.refus, note: e.note, quantite: e.quantite ?? 1 })),
       ].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
       const paliers = [...PALIERS, null]
         .map((p) => ({ palier: p, lignes: lignes.filter((l) => l.palier === p) }))
         .filter((g) => g.lignes.length > 0);
-      return { ...s, plat: (plats[date]?.[s.cle] ?? "").trim(), total: lignes.length, paliers };
+      return { ...s, plat: (plats[date]?.[s.cle] ?? "").trim(), total: lignes.reduce((t, l) => t + (l.quantite ?? 1), 0), paliers };
     });
   }
 
@@ -604,9 +626,9 @@ export function CuisineClient({
         lignes.push(`*${libellePalier(g.palier)}*`);
         for (const l of g.lignes) {
           const details = [l.allergies && `⚠️ ALLERGIE : ${l.allergies}`, l.refus && `sans : ${l.refus}`, l.note && `→ ${l.note}`].filter(Boolean);
-          lignes.push(`• ${l.nom}${details.length ? ` — ${details.join(" — ")}` : ""}`);
+          lignes.push(`• ${nomAvecBoites(l)}${details.length ? ` — ${details.join(" — ")}` : ""}`);
         }
-        lignes.push(`_Total ${libellePalier(g.palier).toLowerCase()} : ${g.lignes.length}_`);
+        lignes.push(`_Total ${libellePalier(g.palier).toLowerCase()} : ${boitesDe(g.lignes)}_`);
       }
     }
     return lignes.join("\n");
@@ -648,12 +670,12 @@ export function CuisineClient({
     if (error) setMessage("Plat non enregistré, réessayez.");
   }
 
-  const titreSemaine = `${dateCourte(lundi, { day: "numeric", month: "short" })} – ${dateCourte(vendredi, { day: "numeric", month: "short" })}`;
+  const titreSemaine = `${dateCourte(lundi, { day: "numeric", month: "short" })} – ${dateCourte(samedi, { day: "numeric", month: "short" })}`;
   const nbAllergies = (f: ReturnType<typeof fiche>) => f.reduce((t, s) => t + s.paliers.reduce((u, g) => u + g.lignes.filter((l) => l.allergies).length, 0), 0);
 
   // Cases midi/soir × jours du formulaire d'ajout.
   const cases = (estCoche: (d: string, s: Service) => boolean, basculer: (d: string, s: Service) => void) => (
-    <div className="mt-2 grid grid-cols-[30px_repeat(5,minmax(0,1fr))] gap-1">
+    <div className="mt-2 grid grid-cols-[30px_repeat(6,minmax(0,1fr))] gap-1">
       <span />
       {jours.map((d) => (
         <span key={d} className="text-center text-[10px] font-bold uppercase text-c2b-muted">
@@ -764,6 +786,47 @@ export function CuisineClient({
       {personneModifiee ? (
         <>
           <p className="text-[11px] text-c2b-muted">S&apos;applique à tous ses repas de la semaine.</p>
+          {jourOuvert && SERVICES.some((s) => coche(personneModifiee, jourOuvert, s.cle)) && (
+            <div className="rounded-xl bg-white p-3">
+              <p className="text-xs font-bold text-c2b-muted">Nombre de boîtes le {dateLongue(jourOuvert)}</p>
+              <div className="mt-2 space-y-2">
+                {SERVICES.filter((s) => coche(personneModifiee, jourOuvert, s.cle)).map((s) => {
+                  const ligne = personneModifiee.clientId ? commandeDe(personneModifiee, jourOuvert, s.cle) : extraDe(personneModifiee, jourOuvert, s.cle);
+                  const q = ligne?.quantite ?? 1;
+                  const attente = occupe(`${personneModifiee.cle}|${jourOuvert}|${s.cle}`);
+                  return (
+                    <div key={s.cle} className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-c2b-green">
+                        {s.icone} {s.libelle}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => changerQuantite(personneModifiee, jourOuvert, s.cle, q - 1)}
+                          disabled={attente || q <= 1}
+                          className="w-9 h-9 rounded-full border border-c2b-green/20 text-lg font-bold text-c2b-green disabled:opacity-30"
+                          aria-label={`Une boîte de moins, ${s.libelle.toLowerCase()}`}
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-lg font-extrabold tabular-nums text-c2b-green">{q}</span>
+                        <button
+                          type="button"
+                          onClick={() => changerQuantite(personneModifiee, jourOuvert, s.cle, q + 1)}
+                          disabled={attente || q >= 10}
+                          className="w-9 h-9 rounded-full border border-c2b-green/20 text-lg font-bold text-c2b-green disabled:opacity-30"
+                          aria-label={`Une boîte de plus, ${s.libelle.toLowerCase()}`}
+                        >
+                          +
+                        </button>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-c2b-muted">Ex. 2 portions pour la même personne. Compté ×2 en cuisine, dans le sac et au paiement.</p>
+            </div>
+          )}
           <div className="flex flex-wrap gap-1.5">
             {SERVICES.map((s) => (
               <button
@@ -813,16 +876,16 @@ export function CuisineClient({
   // Contenu d'un jour déroulé : plats, clients (midi / soir), fiche à l'écran.
   // Mise en sacs : un sac par personne, avec ses boîtes du jour (midi, soir).
   function sacsJour(date: string) {
-    type Boite = { palier: Palier | null; note: string | null };
+    type Boite = { palier: Palier | null; note: string | null; quantite: number };
     const sacs = Array.from(personnes.values())
       .map((p) => {
         const boite = (s: Service): Boite | null => {
           if (p.clientId) {
             const c = commandeDe(p, date, s);
-            return c ? { palier: c.palier ?? parClient.get(p.clientId)?.palier ?? null, note: c.note } : null;
+            return c ? { palier: c.palier ?? parClient.get(p.clientId)?.palier ?? null, note: c.note, quantite: c.quantite ?? 1 } : null;
           }
           const e = extraDe(p, date, s);
-          return e ? { palier: e.palier, note: e.note } : null;
+          return e ? { palier: e.palier, note: e.note, quantite: e.quantite ?? 1 } : null;
         };
         return { p, midi: boite("dejeuner"), soir: boite("diner"), cle: `${date}|${p.cle}` };
       })
@@ -836,7 +899,8 @@ export function CuisineClient({
     ];
     const etiquette = (icone: string, libelle: string, b: Boite) => (
       <span className="rounded-full bg-white border border-c2b-green/15 px-2 py-0.5 text-[11px] font-bold text-c2b-green">
-        {icone} {libelle} · {b.palier ?? "—"}
+        {icone} {libelle}
+        {b.quantite > 1 && <strong className="text-red-700"> ×{b.quantite}</strong>} · {b.palier ?? "—"}
       </span>
     );
     if (sacs.length === 0) return <p className="py-2 text-sm text-c2b-muted">Aucun repas ce jour-là.</p>;
@@ -1039,11 +1103,15 @@ export function CuisineClient({
                         disabled={attente}
                         aria-pressed={actif}
                         aria-label={`${p.nom}, ${s.libelle.toLowerCase()}`}
-                        className={`flex h-10 w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-bold transition ${
+                        className={`flex h-10 min-w-[60px] flex-shrink-0 items-center justify-center gap-1 rounded-xl px-1 text-xs font-bold transition ${
                           actif ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-c2b-muted"
                         } ${attente ? "opacity-50" : ""}`}
                       >
                         {s.icone} {s.libelle}
+                        {actif && (() => {
+                          const q = (p.clientId ? commandeDe(p, date, s.cle) : extraDe(p, date, s.cle))?.quantite ?? 1;
+                          return q > 1 ? <span className="rounded-full bg-red-600 px-1 text-[10px] text-white">×{q}</span> : null;
+                        })()}
                       </button>
                     );
                   })}
@@ -1084,12 +1152,13 @@ export function CuisineClient({
                   <div key={g.palier ?? "aucun"} className="mt-2">
                     <p className="flex justify-between border-b border-c2b-green/20 pb-1 text-sm font-bold text-c2b-green">
                       <span>{libellePalier(g.palier)}</span>
-                      <span className="text-c2b-muted">{g.lignes.length}</span>
+                      <span className="text-c2b-muted">{boitesDe(g.lignes)}</span>
                     </p>
                     <ul className="mt-1 space-y-0.5">
                       {g.lignes.map((l) => (
                         <li key={l.cle} className="text-sm leading-snug">
                           <span className="font-bold text-c2b-green">{l.nom}</span>
+                          {(l.quantite ?? 1) > 1 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs font-extrabold text-white">×{l.quantite}</span>}
                           {l.allergies && <span className="ml-1.5 font-bold text-red-700">⚠️ {l.allergies}</span>}
                           {l.refus && <span className="text-c2b-text"> · sans {l.refus}</span>}
                           {l.note && <span className="italic text-c2b-text"> · {l.note}</span>}
