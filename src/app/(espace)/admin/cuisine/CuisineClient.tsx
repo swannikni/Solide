@@ -80,6 +80,7 @@ const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[
 const PALIERS: Palier[] = ["P1", "P2", "P3", "P4", "P5", "P6"];
 const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note, adresse, lat, lng, telephone, complement";
 const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier";
+const CLE_SACS = "c2b_sacs_prets";
 
 const cleNom = (nom: string) => nom.trim().toLowerCase();
 const sansAccents = (t: string) =>
@@ -146,6 +147,30 @@ export function CuisineClient({
   const [message, setMessage] = useState("");
   // Recherche dans la liste des clients du jour déroulé.
   const [rechercheJour, setRechercheJour] = useState("");
+  // Jour déroulé : préparation des plats, ou mise en sacs.
+  const [vue, setVue] = useState<"cuisine" | "sacs">("cuisine");
+  const [masquerPrets, setMasquerPrets] = useState(false);
+  // Sacs prêts (« date|personne »), gardés sur ce téléphone.
+  const [sacsPrets, setSacsPrets] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const garde = JSON.parse(localStorage.getItem(CLE_SACS) ?? "[]") as string[];
+      // On ne garde que les deux dernières semaines.
+      const limite = decalerDate(aujourdhui, -14);
+      setSacsPrets(new Set(garde.filter((k) => k.slice(0, 10) >= limite)));
+    } catch {}
+  }, [aujourdhui]);
+  function basculerSac(cle: string) {
+    setSacsPrets((prev) => {
+      const n = new Set(prev);
+      if (n.has(cle)) n.delete(cle);
+      else n.add(cle);
+      try {
+        localStorage.setItem(CLE_SACS, JSON.stringify([...n]));
+      } catch {}
+      return n;
+    });
+  }
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
@@ -762,6 +787,104 @@ export function CuisineClient({
   );
 
   // Contenu d'un jour déroulé : plats, clients (midi / soir), fiche à l'écran.
+  // Mise en sacs : un sac par personne, avec ses boîtes du jour (midi, soir).
+  function sacsJour(date: string) {
+    type Boite = { palier: Palier | null; note: string | null };
+    const sacs = Array.from(personnes.values())
+      .map((p) => {
+        const boite = (s: Service): Boite | null => {
+          if (p.clientId) {
+            const c = commandeDe(p, date, s);
+            return c ? { palier: c.palier ?? parClient.get(p.clientId)?.palier ?? null, note: c.note } : null;
+          }
+          const e = extraDe(p, date, s);
+          return e ? { palier: e.palier, note: e.note } : null;
+        };
+        return { p, midi: boite("dejeuner"), soir: boite("diner"), cle: `${date}|${p.cle}` };
+      })
+      .filter((x) => x.midi || x.soir)
+      .sort((a, b) => parNom(a.p, b.p));
+    const prets = sacs.filter((x) => sacsPrets.has(x.cle)).length;
+    const groupes = [
+      { titre: "☀️🌙 Midi + soir", aide: "2 boîtes dans le sac", sacs: sacs.filter((x) => x.midi && x.soir), fond: "bg-c2b-gold/20" },
+      { titre: "☀️ Midi seulement", aide: "1 boîte", sacs: sacs.filter((x) => x.midi && !x.soir), fond: "bg-amber-50" },
+      { titre: "🌙 Soir seulement", aide: "1 boîte", sacs: sacs.filter((x) => !x.midi && x.soir), fond: "bg-indigo-50" },
+    ];
+    const etiquette = (icone: string, libelle: string, b: Boite) => (
+      <span className="rounded-full bg-white border border-c2b-green/15 px-2 py-0.5 text-[11px] font-bold text-c2b-green">
+        {icone} {libelle} · {b.palier ?? "—"}
+      </span>
+    );
+    if (sacs.length === 0) return <p className="py-2 text-sm text-c2b-muted">Aucun repas ce jour-là.</p>;
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="font-bold text-c2b-green">
+              {prets} / {sacs.length} sacs prêts
+            </span>
+            <button onClick={() => setMasquerPrets((m) => !m)} className="text-xs font-semibold text-c2b-gold">
+              {masquerPrets ? "Afficher les sacs prêts" : "Masquer les sacs prêts"}
+            </button>
+          </div>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-black/5">
+            <div className="h-full rounded-full bg-c2b-green transition-all" style={{ width: `${(prets / sacs.length) * 100}%` }} />
+          </div>
+        </div>
+        {groupes
+          .filter((g) => g.sacs.length > 0)
+          .map((g) => {
+            const visibles = g.sacs.filter((x) => !masquerPrets || !sacsPrets.has(x.cle));
+            return (
+              <section key={g.titre}>
+                <h3 className={`flex items-baseline justify-between rounded-lg px-3 py-2 ${g.fond}`}>
+                  <span className="font-bold text-c2b-green">{g.titre}</span>
+                  <span className="text-xs font-semibold text-c2b-muted">
+                    {g.aide} · <strong className="text-c2b-green">{g.sacs.length}</strong> sac{g.sacs.length > 1 ? "s" : ""}
+                  </span>
+                </h3>
+                {visibles.length === 0 && <p className="px-1 py-2 text-xs text-c2b-muted">Tous prêts ✓</p>}
+                <ul className="mt-1 divide-y divide-c2b-green/10">
+                  {visibles.map(({ p, midi, soir, cle }) => {
+                    const pret = sacsPrets.has(cle);
+                    const notes = [midi?.note && `midi : ${midi.note}`, soir?.note && `soir : ${soir.note}`].filter(Boolean);
+                    return (
+                      <li key={cle}>
+                        <button onClick={() => basculerSac(cle)} aria-pressed={pret} className="flex w-full items-start gap-3 py-2.5 text-left">
+                          <span
+                            className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                              pret ? "border-c2b-green bg-c2b-green text-c2b-cream" : "border-c2b-green/30 text-transparent"
+                            }`}
+                          >
+                            ✓
+                          </span>
+                          <span className={`min-w-0 flex-1 ${pret ? "opacity-45" : ""}`}>
+                            <span className={`block text-[15px] font-bold text-c2b-green ${pret ? "line-through" : ""}`}>{p.nom}</span>
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {midi && etiquette("☀️", "Midi", midi)}
+                              {soir && etiquette("🌙", "Soir", soir)}
+                            </span>
+                            {(p.allergies || p.refus || notes.length > 0) && (
+                              <span className="mt-1 block text-xs">
+                                {p.allergies && <span className="font-bold text-red-700">⚠️ {p.allergies} </span>}
+                                {p.refus && <span className="text-c2b-muted">· sans {p.refus} </span>}
+                                {notes.length > 0 && <span className="italic text-c2b-muted">· {notes.join(" · ")}</span>}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
+        <p className="text-[11px] text-c2b-muted">Touchez un nom quand son sac est fermé. Les coches restent sur ce téléphone.</p>
+      </div>
+    );
+  }
+
   function contenuJour(date: string) {
     const f = fiche(date);
     const total = f.reduce((t, s) => t + s.total, 0);
@@ -769,8 +892,34 @@ export function CuisineClient({
     const mange = (p: Personne) => SERVICES.some((s) => coche(p, date, s.cle));
     const filtre = sansAccents(rechercheJour);
     const ordre = [...liste.filter(mange), ...liste.filter((p) => !mange(p))].filter((p) => !filtre || sansAccents(p.nom).includes(filtre));
+    const onglets = (
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-c2b-green/[0.06] p-1">
+        {(
+          [
+            ["cuisine", "🍳 Cuisine"],
+            ["sacs", "🛍️ Sacs"],
+          ] as const
+        ).map(([v, libelle]) => (
+          <button
+            key={v}
+            onClick={() => setVue(v)}
+            className={`rounded-full py-2 text-sm font-bold ${vue === v ? "bg-c2b-green text-c2b-cream" : "text-c2b-green"}`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+    );
+    if (vue === "sacs")
+      return (
+        <div className="space-y-4 border-t border-c2b-green/10 px-3 pb-4 pt-3">
+          {onglets}
+          {sacsJour(date)}
+        </div>
+      );
     return (
       <div className="space-y-4 border-t border-c2b-green/10 px-3 pb-4 pt-3">
+        {onglets}
         <div className="grid grid-cols-2 gap-2">
           {SERVICES.map((s) => (
             <input
