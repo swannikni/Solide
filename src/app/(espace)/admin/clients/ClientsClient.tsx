@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
@@ -105,9 +105,17 @@ export function ClientsClient({
   const [filtre, setFiltre] = useState<"tous" | "premium" | "gratuits">("tous");
   const nbPremium = clients.filter((c) => c.premium).length;
   const [recherche, setRecherche] = useState("");
+  // Questionnaires : les 3 derniers, le reste en déroulant ou en cherchant.
+  const [tousQuestionnaires, setTousQuestionnaires] = useState(false);
+  const [rechercheQ, setRechercheQ] = useState("");
   // Recherche sur le nom, l'e-mail ou le téléphone (sans tenir compte des accents).
   const normaliser = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   const saisie = normaliser(recherche);
+  const saisieQ = normaliser(rechercheQ);
+  const questionnairesTrouves = saisieQ
+    ? questionnaires.filter((q) => normaliser([q.nom, q.email, q.telephone].filter(Boolean).join(" ")).includes(saisieQ))
+    : questionnaires;
+  const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnaires.slice(0, 3);
   const clientsAffiches = clients
     .filter((c) => (filtre === "premium" ? c.premium : filtre === "gratuits" ? !c.premium : true))
     .filter((c) => !saisie || normaliser([c.nom, emailsConnus[c.id], c.telephone].filter(Boolean).join(" ")).includes(saisie));
@@ -374,52 +382,6 @@ export function ClientsClient({
         </div>
       )}
 
-      {questionnaires.length > 0 && (
-        <section className="space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Inbox size={18} className="text-c2b-gold" />
-            <h2 className="font-serif text-[22px] text-c2b-green">Questionnaires reçus</h2>
-            <span className="pastille py-0.5 px-2">{questionnaires.length}</span>
-          </div>
-          <p className="text-xs text-c2b-muted">
-            Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
-          </p>
-          {questionnaires.map((q) => (
-            <div key={q.id} className="carte p-4 border-c2b-gold/30">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-[15px] text-c2b-green">
-                    {q.nom}
-                    {q.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{q.palier}</span>}
-                  </p>
-                  <p className="text-xs text-c2b-muted truncate">
-                    {[q.email, q.telephone].filter(Boolean).join(" · ") || "Pas d'email"} ·{" "}
-                    {q.source === "site"
-                      ? new Date(q.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                      : "ancien outil, chiffres à vérifier"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => ignorerQuestionnaire(q)}
-                  className="text-c2b-muted/60 hover:text-c2b-green flex-shrink-0"
-                  aria-label="Retirer de la liste"
-                >
-                  <X size={17} />
-                </button>
-              </div>
-              {q.calories != null && (
-                <p className="text-sm text-c2b-green mt-2">
-                  <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
-                </p>
-              )}
-              <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold w-full mt-3 py-2.5 text-sm">
-                Créer son compte
-              </button>
-            </div>
-          ))}
-        </section>
-      )}
-
       {clients.length === 0 ? (
         <div className="carte p-8 text-center text-sm text-c2b-muted">
           Aucun client pour l&apos;instant. Touchez « Nouveau client » pour créer le premier compte.
@@ -521,6 +483,78 @@ export function ClientsClient({
             </div>
           ))}
         </div>
+      )}
+
+      {questionnaires.length > 0 && (
+        <section className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Inbox size={18} className="text-c2b-gold" />
+            <h2 className="font-serif text-[22px] text-c2b-green">Questionnaires reçus</h2>
+            <span className="pastille py-0.5 px-2">{questionnaires.length}</span>
+          </div>
+          <p className="text-xs text-c2b-muted">
+            Remplis sur chef2box.com. Touchez « Créer son compte » : nom, email et objectifs sont déjà remplis.
+          </p>
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
+            <input
+              value={rechercheQ}
+              onChange={(e) => setRechercheQ(e.target.value)}
+              placeholder="Rechercher un questionnaire par nom"
+              autoComplete="off"
+              className="champ py-2.5 pl-9 pr-9 text-sm"
+            />
+            {rechercheQ && (
+              <button
+                onClick={() => setRechercheQ("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-c2b-muted"
+                aria-label="Effacer la recherche"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          {saisieQ && questionnairesTrouves.length === 0 && <p className="py-2 text-center text-sm text-c2b-muted">Aucun questionnaire à ce nom.</p>}
+          {questionnairesAffiches.map((q) => (
+            <div key={q.id} className="carte p-4 border-c2b-gold/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-[15px] text-c2b-green">
+                    {q.nom}
+                    {q.palier && <span className="ml-2 pastille py-0.5 px-2 text-[10px]">{q.palier}</span>}
+                  </p>
+                  <p className="text-xs text-c2b-muted truncate">
+                    {[q.email, q.telephone].filter(Boolean).join(" · ") || "Pas d'email"} ·{" "}
+                    {q.source === "site"
+                      ? new Date(q.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                      : "ancien outil, chiffres à vérifier"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => ignorerQuestionnaire(q)}
+                  className="text-c2b-muted/60 hover:text-c2b-green flex-shrink-0"
+                  aria-label="Retirer de la liste"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+              {q.calories != null && (
+                <p className="text-sm text-c2b-green mt-2">
+                  <span className="font-bold">{q.calories} kcal</span> · {q.proteines}g P · {q.glucides}g G · {q.lipides}g L
+                </p>
+              )}
+              <button onClick={() => ouvrirDepuisQuestionnaire(q)} className="btn-gold w-full mt-3 py-2.5 text-sm">
+                Créer son compte
+              </button>
+            </div>
+          ))}
+          {!saisieQ && questionnaires.length > 3 && (
+            <button onClick={() => setTousQuestionnaires((t) => !t)} className="btn-secondary w-full py-2.5 text-sm">
+              <ChevronDown size={16} className={tousQuestionnaires ? "rotate-180" : ""} />
+              {tousQuestionnaires ? "Ne montrer que les 3 derniers" : `Voir les ${questionnaires.length - 3} autres questionnaires`}
+            </button>
+          )}
+        </section>
       )}
 
       {fiche && (
