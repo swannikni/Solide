@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users, CalendarDays, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { nouveauJeton } from "@/lib/ma-semaine";
+import { ZONES, nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
+import type { Tarifs } from "@/lib/paiements";
 import { decalerDate } from "@/lib/dates";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
@@ -125,11 +126,13 @@ export interface FicheResume {
   jeton?: string | null; // lien personnel « Ma semaine »
   livraison_offerte?: boolean; // prix du client
   remise?: number; // % sur les repas
+  zone?: Zone | null; // zone de livraison
   dernier: string | null;
 }
 
 // Un repas de la semaine (planning de la cuisine), pour « Clients de la semaine ».
 export interface RepasSemaine {
+  id: string;
   nom: string;
   clientId?: string; // repas commandé depuis l'appli
   date: string;
@@ -183,7 +186,7 @@ export function ClientsClient({
   // Relance de la semaine prochaine : son lundi, et les fiches (clé du nom) qui ont déjà commandé.
   relance?: { lundi: string; aujourdhui: string; dejaCommande: string[] } | null;
   // Clients de la semaine : semaine en cours et suivante, et leurs repas.
-  semaines?: { lundis: string[]; defaut: string; repas: RepasSemaine[] } | null;
+  semaines?: { lundis: string[]; defaut: string; repas: RepasSemaine[]; tarifs: Tarifs } | null;
   emails: Record<string, string>;
   cleServicePresente: boolean;
 }) {
@@ -212,6 +215,9 @@ export function ClientsClient({
     });
   const [fiches, setFiches] = useState(fichesInitiales);
   const [lundiVu, setLundiVu] = useState(semaines?.defaut ?? "");
+  const [repasSem, setRepasSem] = useState<RepasSemaine[]>(semaines?.repas ?? []);
+  const [semaineOuverte, setSemaineOuverte] = useState<string | null>(null);
+  const [enCoursSem, setEnCoursSem] = useState<string | null>(null);
   // Retirés à l'instant (« nom » partout, ou « lundi|nom » pour une semaine).
   const [retiresSemaine, setRetiresSemaine] = useState<Set<string>>(new Set());
   const [toutesFiches, setToutesFiches] = useState(false);
@@ -557,6 +563,66 @@ export function ClientsClient({
     setRetiresSemaine((r) => new Set(r).add(fc.nom.trim().toLowerCase()));
   }
 
+  // Ajouter / enlever un repas d'un client (Clients de la semaine), sans
+  // limite d'heure : l'admin reste libre.
+  async function basculerRepasSemaine(nom: string, clientId: string | null, date: string, service: "dejeuner" | "diner") {
+    const cle = `${date}|${service}`;
+    if (enCoursSem) return;
+    const existant = repasSem.find((r) => r.nom.trim().toLowerCase() === nom.toLowerCase() && r.date === date && r.service === service);
+    const jour = new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", timeZone: "UTC" });
+    setEnCoursSem(cle);
+    try {
+      if (existant) {
+        if (!confirm(`Enlever le repas du ${service === "dejeuner" ? "midi" : "soir"} de ${nom} (${jour}) ?`)) return;
+        const { error } = await supabase
+          .from(existant.clientId ? "application_commandes" : "application_cuisine_extras")
+          .delete()
+          .eq("id", existant.id);
+        if (error) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => prev.filter((r) => r.id !== existant.id));
+      } else if (clientId) {
+        const { data, error } = await supabase
+          .from("application_commandes")
+          .upsert({ client_id: clientId, date_livraison: date, repas_type: service, statut: "confirmee" }, { onConflict: "client_id,date_livraison,repas_type" })
+          .select("id")
+          .single<{ id: string }>();
+        if (error || !data) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => [...prev, { id: data.id, nom, clientId, date, service, quantite: 1 }]);
+      } else {
+        const fc = fiches.find((f) => f.nom.trim().toLowerCase() === nom.toLowerCase());
+        const { data, error } = await supabase
+          .from("application_cuisine_extras")
+          .insert({
+            date,
+            repas_type: service,
+            nom,
+            palier: fc?.palier ?? null,
+            allergies: fc?.allergies ?? null,
+            refus: fc?.refus ?? null,
+            note: fc?.note ?? null,
+            telephone: fc?.telephone ?? null,
+            adresse: fc?.adresse ?? null,
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (error || !data) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => [...prev, { id: data.id, nom, date, service, quantite: 1 }]);
+      }
+    } finally {
+      setEnCoursSem(null);
+    }
+  }
+
+  // Zone de livraison d'un client (prix de la livraison), enregistrée tout de suite.
+  async function changerZone(fc: FicheResume, zone: Zone | null) {
+    setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, zone } : f)));
+    const { error } = await supabase.from("application_personnes").update({ zone }).eq("id", fc.id);
+    if (error) {
+      setFiches((prev) => prev.map((f) => (f.id === fc.id ? fc : f)));
+      alert("Zone non enregistrée, réessayez.");
+    }
+  }
+
   // Retirer un client d'une semaine seulement (ses repas de cette semaine).
   async function retirerDeLaSemaine(nom: string, repas: RepasSemaine[], lundi: string) {
     if (!confirm(`Retirer ${nom} de la semaine du ${new Date(`${lundi}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })} ?\n\nSes ${repas.length} repas de cette semaine seront supprimés. Sa fiche et le reste restent.`)) return;
@@ -569,7 +635,7 @@ export function ClientsClient({
         : Promise.resolve({ error: null }),
     ]);
     if (extras.error || commandes.error) return alert("Suppression impossible, réessayez.");
-    setRetiresSemaine((r) => new Set(r).add(`${lundi}|${nom.toLowerCase()}`));
+    setRepasSem((prev) => prev.filter((r) => !(r.nom.trim().toLowerCase() === nom.toLowerCase() && r.date >= lundi && r.date <= vendredi)));
   }
 
   async function nouveauMotDePasse(c: Client) {
@@ -701,7 +767,7 @@ export function ClientsClient({
       {semaines &&
         (() => {
           const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(lundiVu, i));
-          const repas = semaines.repas.filter(
+          const repas = repasSem.filter(
             (r) =>
               r.date >= jours[0] &&
               r.date <= jours[4] &&
@@ -764,10 +830,15 @@ export function ClientsClient({
                         return (
                           <li key={p.nom} className="carte px-3 py-2.5">
                             <div className="flex items-center gap-2">
-                              <p className="min-w-0 flex-1 truncate text-sm font-bold text-c2b-green">
+                              <button
+                                onClick={() => setSemaineOuverte(semaineOuverte === p.nom ? null : p.nom)}
+                                aria-expanded={semaineOuverte === p.nom}
+                                className="min-w-0 flex-1 truncate text-left text-sm font-bold text-c2b-green"
+                              >
                                 {p.nom}
                                 {fc?.allergies && <span className="ml-1.5 text-[11px] font-bold text-red-700">⚠️ {fc.allergies}</span>}
-                              </p>
+                                <span className="ml-1.5 text-[11px] font-semibold text-c2b-gold">{semaineOuverte === p.nom ? "Fermer" : "Modifier"}</span>
+                              </button>
                               <span className="pastille py-0.5 px-2 text-[11px]">{n} repas</span>
                               <button
                                 onClick={() => retirerDeLaSemaine(p.nom, p.repas, lundiVu)}
@@ -813,6 +884,111 @@ export function ClientsClient({
                                 );
                               })}
                             </div>
+                            {semaineOuverte === p.nom &&
+                              (() => {
+                                const clientId = p.repas.find((r) => r.clientId)?.clientId ?? null;
+                                const conditions = { remise: fc?.remise ?? 0, livraisonOfferte: !!fc?.livraison_offerte };
+                                const prix = prixDemande(
+                                  p.repas.map((r) => ({ date: r.date, service: r.service })),
+                                  fc?.zone ?? null,
+                                  semaines.tarifs,
+                                  conditions
+                                );
+                                return (
+                                  <div className="mt-3 space-y-3 rounded-xl bg-c2b-cream p-3">
+                                    <p className="text-xs font-bold text-c2b-muted">Ses repas — touchez pour ajouter ou enlever</p>
+                                    <div className="space-y-1.5">
+                                      {jours.map((d, i) => (
+                                        <div key={d} className="flex items-center gap-2">
+                                          <span className="w-10 text-xs font-bold text-c2b-green">{JOURS_COURTS[i]}</span>
+                                          {(["dejeuner", "diner"] as const).map((sv) => {
+                                            const actif = p.repas.some((r) => r.date === d && r.service === sv);
+                                            return (
+                                              <button
+                                                key={sv}
+                                                disabled={enCoursSem === `${d}|${sv}`}
+                                                onClick={() => basculerRepasSemaine(p.nom, clientId, d, sv)}
+                                                className={`flex-1 rounded-lg border py-2 text-xs font-bold disabled:opacity-50 ${
+                                                  actif
+                                                    ? sv === "dejeuner"
+                                                      ? "border-amber-400 bg-amber-400 text-amber-950"
+                                                      : "border-indigo-500 bg-indigo-500 text-white"
+                                                    : "border-c2b-green/15 bg-white text-c2b-muted"
+                                                }`}
+                                              >
+                                                {sv === "dejeuner" ? "☀️ Midi" : "🌙 Soir"} {actif ? "✓" : ""}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {fc ? (
+                                      <div className="space-y-2 rounded-lg bg-white p-2.5">
+                                        <p className="text-xs font-bold text-c2b-muted">💰 Son prix</p>
+                                        <label className="block text-xs font-semibold text-c2b-green">
+                                          Livraison
+                                          <select
+                                            value={fc.zone ?? ""}
+                                            onChange={(e) => changerZone(fc, (e.target.value || null) as Zone | null)}
+                                            className="champ mt-1 py-2 text-sm"
+                                          >
+                                            <option value="">Zone non choisie</option>
+                                            {ZONES.map((z) => (
+                                              <option key={z.cle} value={z.cle}>
+                                                {z.libelle}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-c2b-green">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!fc.livraison_offerte}
+                                            onChange={(e) => changerPrix(fc, { livraison_offerte: e.target.checked })}
+                                            className="h-5 w-5 accent-[#1c2e1e]"
+                                          />
+                                          🚚 Livraison offerte
+                                        </label>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className="text-sm font-semibold text-c2b-green">Remise</span>
+                                          {[0, 5, 10, 15, 20, 30, 50, 100].map((r) => (
+                                            <button
+                                              key={r}
+                                              onClick={() => changerPrix(fc, { remise: r })}
+                                              className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                                                (fc.remise ?? 0) === r ? "bg-c2b-gold text-c2b-green" : "bg-c2b-cream border border-c2b-green/15 text-c2b-green"
+                                              }`}
+                                            >
+                                              {r === 0 ? "Aucune" : r === 100 ? "🎁 Offert" : `${r} %`}
+                                            </button>
+                                          ))}
+                                        </div>
+                                        <div className="space-y-0.5 border-t border-c2b-green/10 pt-2 text-sm">
+                                          <p className="flex justify-between">
+                                            <span>Repas{prix.remise > 0 ? ` (−${prix.remise} %)` : ""}</span>
+                                            <span>
+                                              {prix.remise > 0 && <s className="mr-1.5 text-c2b-muted">{prix.brut} DH</s>}
+                                              {prix.prixRepas} DH
+                                            </span>
+                                          </p>
+                                          <p className="flex justify-between">
+                                            <span>Livraison</span>
+                                            <span>{!fc.zone ? "—" : prix.prixLivraison == null ? "sur devis" : prix.prixLivraison === 0 ? "offerte" : `${prix.prixLivraison} DH`}</span>
+                                          </p>
+                                          <p className="flex justify-between font-bold text-c2b-green">
+                                            <span>Total de la semaine</span>
+                                            <span>{prix.total != null ? `${prix.total} DH` : `${prix.prixRepas} DH + livraison`}</span>
+                                          </p>
+                                        </div>
+                                        <p className="text-[11px] text-c2b-muted">Tout est enregistré tout de suite : la Cuisine, son espace et les Paiements suivent.</p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-c2b-muted">Compte appli sans fiche client : le prix se règle dans Paiements.</p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                           </li>
                         );
                       })}
