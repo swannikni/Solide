@@ -123,6 +123,8 @@ export interface FicheResume {
   note: string | null;
   client_id: string | null;
   jeton?: string | null; // lien personnel « Ma semaine »
+  livraison_offerte?: boolean; // prix du client
+  remise?: number; // % sur les repas
   dernier: string | null;
 }
 
@@ -337,6 +339,16 @@ export function ClientsClient({
       setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, jeton } : f)));
     }
   }
+  // Prix du client (livraison offerte, remise), enregistré tout de suite.
+  async function changerPrix(fc: FicheResume, maj: { livraison_offerte?: boolean; remise?: number }) {
+    setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, ...maj } : f)));
+    const { error } = await supabase.from("application_personnes").update(maj).eq("id", fc.id);
+    if (error) {
+      setFiches((prev) => prev.map((f) => (f.id === fc.id ? fc : f)));
+      alert("Prix non enregistré, réessayez.");
+    }
+  }
+
   function copierLien(fc: FicheResume) {
     const lien = lienDe(fc);
     if (!lien) return;
@@ -679,6 +691,11 @@ export function ClientsClient({
                       <p className="truncate text-sm font-bold text-c2b-green">
                         {fc.nom}
                         {fc.palier && <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{fc.palier}</span>}
+                        {(fc.livraison_offerte || (fc.remise ?? 0) > 0) && (
+                          <span className="ml-1.5 text-[10px] font-bold text-emerald-700">
+                            🎁 {[(fc.remise ?? 0) > 0 && `−${fc.remise} %`, fc.livraison_offerte && "livraison"].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
                         {compte && (
                           <span className="ml-1.5 text-[10px] font-bold text-c2b-gold">{compte.premium ? "👑 appli" : "appli"}</span>
                         )}
@@ -718,6 +735,33 @@ export function ClientsClient({
                     </div>
                     {lienOuvert === fc.id && (
                       <div className="mt-2 space-y-2 rounded-xl bg-c2b-cream p-3">
+                        <div className="space-y-2 rounded-lg bg-white p-2.5">
+                          <p className="text-xs font-bold text-c2b-muted">💰 Son prix (avant d&apos;envoyer le lien)</p>
+                          <label className="flex items-center gap-2 text-sm font-semibold text-c2b-green">
+                            <input
+                              type="checkbox"
+                              checked={!!fc.livraison_offerte}
+                              onChange={(e) => changerPrix(fc, { livraison_offerte: e.target.checked })}
+                              className="h-5 w-5 accent-[#1c2e1e]"
+                            />
+                            🚚 Livraison offerte
+                          </label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-semibold text-c2b-green">Remise</span>
+                            {[0, 5, 10, 15, 20, 30, 50].map((r) => (
+                              <button
+                                key={r}
+                                onClick={() => changerPrix(fc, { remise: r })}
+                                className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                                  (fc.remise ?? 0) === r ? "bg-c2b-gold text-c2b-green" : "bg-c2b-cream border border-c2b-green/15 text-c2b-green"
+                                }`}
+                              >
+                                {r === 0 ? "Aucune" : `${r} %`}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-c2b-muted">Enregistré tout de suite : il le verra dans son espace, et dans Paiements.</p>
+                        </div>
                         <p className="text-xs font-bold text-c2b-muted">Lien « Mon espace » de {fc.nom}</p>
                         {lienDe(fc) ? (
                           <>

@@ -26,7 +26,7 @@ export default async function ClientsPage() {
   const [{ data: fiches }, { data: repas }] = await Promise.all([
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id, jeton")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id, jeton, livraison_offerte, remise")
       .order("nom")
       .limit(2000)
       .returns<Omit<FicheResume, "dernier">[]>(),
