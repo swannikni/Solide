@@ -29,7 +29,7 @@ export function MaSemaineClient({
   semaines,
   tarifs,
 }: {
-  jeton: string;
+  jeton: string | null; // null : lien commun (prénom + téléphone demandés)
   prenom: string;
   fiche: { allergies: string; refus: string; note: string; quartier: string; adresse: string };
   semaines: SemaineProposee[];
@@ -41,6 +41,8 @@ export function MaSemaineClient({
     Object.fromEntries(semaines.map((s) => [s.lundi, s.choisis.map((r) => `${r.date}|${r.service}`)]))
   );
   const [form, setForm] = useState(fiche);
+  // Lien commun : qui est-ce ? (retrouvé par le téléphone côté serveur)
+  const [identite, setIdentite] = useState({ nom: "", telephone: "" });
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [etatPosition, setEtatPosition] = useState("");
   const [envoi, setEnvoi] = useState<"" | "en_cours" | "envoye">("");
@@ -86,6 +88,8 @@ export function MaSemaineClient({
   }
 
   async function envoyer() {
+    if (!jeton && identite.nom.trim().length < 2) return setErreur("Indiquez votre prénom.");
+    if (!jeton && identite.telephone.replace(/\D/g, "").length < 9) return setErreur("Indiquez votre numéro WhatsApp.");
     if (repas.length === 0) return setErreur("Choisissez au moins un repas.");
     if (!form.quartier) return setErreur("Choisissez votre quartier de livraison.");
     setEnvoi("en_cours");
@@ -94,7 +98,7 @@ export function MaSemaineClient({
       const r = await fetch("/api/ma-semaine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jeton, semaine: lundi, repas, ...form, ...(position ?? {}) }),
+        body: JSON.stringify({ jeton, semaine: lundi, repas, ...form, ...(position ?? {}), ...(jeton ? {} : identite) }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -117,7 +121,7 @@ export function MaSemaineClient({
           <Check size={32} />
         </div>
         <h1 className="titre text-3xl">
-          C&apos;est envoyé, <em>{prenom}</em> !
+          C&apos;est envoyé{prenom || identite.nom ? <>, <em>{prenom || identite.nom.trim().split(/\s+/)[0]}</em></> : null} !
         </h1>
         <p className="text-sm text-c2b-muted">
           Chef2Box confirme votre semaine du {jourCourt(lundi)} très vite sur WhatsApp. Vous pouvez la modifier jusqu&apos;à la veille de chaque
@@ -147,10 +151,47 @@ export function MaSemaineClient({
       <header className="space-y-3">
         <Logo className="h-12 w-auto" />
         <h1 className="titre text-[32px] leading-tight">
-          Bonjour <em>{prenom}</em> 👋
+          {prenom ? (
+            <>
+              Bonjour <em>{prenom}</em> 👋
+            </>
+          ) : (
+            <>
+              Ma semaine <em>Chef2Box</em>
+            </>
+          )}
         </h1>
         <p className="text-sm text-c2b-muted">Choisissez vos repas de la semaine : midi, soir, ou les deux. Modifiable jusqu&apos;à la veille 20 h.</p>
       </header>
+
+      {!jeton && (
+        <section className="carte p-4 space-y-3">
+          <h2 className="font-bold text-c2b-green">Vous</h2>
+          <label className="block text-xs font-bold text-c2b-muted">
+            Prénom et nom
+            <input
+              value={identite.nom}
+              onChange={(e) => setIdentite({ ...identite, nom: e.target.value })}
+              placeholder="Ex : Sara El Amrani"
+              maxLength={60}
+              autoComplete="name"
+              className="champ mt-1 py-2.5 text-sm font-normal"
+            />
+          </label>
+          <label className="block text-xs font-bold text-c2b-muted">
+            Numéro WhatsApp
+            <input
+              value={identite.telephone}
+              onChange={(e) => setIdentite({ ...identite, telephone: e.target.value })}
+              placeholder="Ex : 06 12 34 56 78"
+              inputMode="tel"
+              maxLength={30}
+              autoComplete="tel"
+              className="champ mt-1 py-2.5 text-sm font-normal"
+            />
+          </label>
+        </section>
+      )}
 
       {semaines.length > 1 && (
         <div className="flex gap-1.5">
