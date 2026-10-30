@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users, CalendarDays } from "lucide-react";
+import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users, CalendarDays, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { nouveauJeton } from "@/lib/ma-semaine";
 import { decalerDate } from "@/lib/dates";
@@ -518,6 +518,38 @@ export function ClientsClient({
     setAcces({ nom: fiche.nom.trim(), email: resultat.email, motDePasse: resultat.motDePasse, telephone: numeroInternational(fiche.indicatif, fiche.telephone) });
   }
 
+  // Supprimer un compte de l'appli (connexion + journal, messages…).
+  async function supprimerCompte(c: Client) {
+    if (!confirm(`Supprimer le compte appli de ${c.nom} ?\n\nSon accès, son journal de repas, ses messages et ses commandes de l'appli seront effacés. C'est définitif.`)) return;
+    const reponse = await fetch("/api/admin/clients", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: c.id }),
+    });
+    const resultat = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) {
+      alert(resultat.erreur === "CLE_SERVICE_MANQUANTE" ? "La clé secrète Supabase n'est pas encore installée sur Netlify." : resultat.erreur ?? "Impossible, réessayez.");
+      return;
+    }
+    setClients((prev) => prev.filter((x) => x.id !== c.id));
+  }
+
+  // Supprimer une fiche client (Tous nos clients) et ses repas à venir ;
+  // l'historique passé reste pour les paiements.
+  async function supprimerFiche(fc: FicheResume) {
+    if (!confirm(`Supprimer ${fc.nom} de vos clients ?\n\nSa fiche, son prix, son lien et ses repas à venir seront effacés. Les repas passés restent dans l'historique et les paiements.`)) return;
+    const demain = decalerDate(relance?.aujourdhui ?? new Date().toISOString().slice(0, 10), 1);
+    const { error } = await supabase.from("application_personnes").delete().eq("id", fc.id);
+    if (error) return alert("Suppression impossible, réessayez.");
+    await supabase
+      .from("application_cuisine_extras")
+      .delete()
+      .ilike("nom", fc.nom.replace(/[%_\\]/g, "\\$&"))
+      .gte("date", demain);
+    setLienOuvert(null);
+    setFiches((prev) => prev.filter((f) => f.id !== fc.id));
+  }
+
   async function nouveauMotDePasse(c: Client) {
     if (!confirm(`Envoyer un nouveau code provisoire à ${c.nom} ? Son mot de passe actuel ne fonctionnera plus et il en choisira un nouveau.`)) return;
     const reponse = await fetch("/api/admin/clients", {
@@ -915,6 +947,12 @@ export function ClientsClient({
                         ) : (
                           <p className="text-xs text-c2b-muted">Création du lien…</p>
                         )}
+                        <button
+                          onClick={() => supprimerFiche(fc)}
+                          className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 bg-white py-2 text-xs font-bold text-red-600"
+                        >
+                          <Trash2 size={14} /> Supprimer ce client
+                        </button>
                       </div>
                     )}
                   </li>
@@ -1130,6 +1168,13 @@ export function ClientsClient({
                       aria-label="Modifier"
                     >
                       <Pencil size={17} />
+                    </button>
+                    <button
+                      onClick={() => supprimerCompte(c)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50"
+                      aria-label={`Supprimer le compte de ${c.nom}`}
+                    >
+                      <Trash2 size={17} />
                     </button>
                   </div>
                 </div>

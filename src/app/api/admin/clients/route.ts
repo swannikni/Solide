@@ -124,3 +124,21 @@ export async function PATCH(request: Request) {
   if (error || !data.user) return erreur("Changement de mot de passe impossible.", 500);
   return NextResponse.json({ id, email: data.user.email, motDePasse: mdp });
 }
+
+// Supprimer un compte client de l'appli (DELETE) : le compte de connexion et
+// ses données (journal, messages, commandes de l'appli). Jamais un admin.
+export async function DELETE(request: Request) {
+  if (!(await verifierAdmin())) return erreur("Réservé à l'admin.", 403);
+  const admin = createAdminClient();
+  if (!admin) return erreur("CLE_SERVICE_MANQUANTE", 503);
+
+  const corps = await request.json().catch(() => null);
+  const id = typeof corps?.id === "string" && /^[0-9a-f-]{36}$/i.test(corps.id) ? corps.id : null;
+  if (!id) return erreur("Client inconnu.", 400);
+  const { data: fiche } = await admin.from("application_clients").select("est_admin").eq("id", id).maybeSingle();
+  if (!fiche || fiche.est_admin) return erreur("Client inconnu.", 404);
+
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) return erreur("Suppression impossible, réessayez.", 500);
+  return NextResponse.json({ ok: true });
+}
