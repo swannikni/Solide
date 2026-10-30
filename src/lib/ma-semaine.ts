@@ -57,16 +57,34 @@ export const prixZone = (zone: Zone | null | undefined) => ZONES.find((z) => z.c
 
 // Prix de la semaine : chaque jour au prix de sa formule (1 repas : 690 / 5,
 // midi + soir : 1 290 / 5) + livraison par jour livré selon la zone.
-export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tarifs) {
+// Conditions du client (fiche) : remise en % sur les repas, livraison offerte.
+export interface Conditions {
+  remise?: number;
+  livraisonOfferte?: boolean;
+}
+
+export function prixDemande(repas: RepasChoisi[], zone: Zone | null, tarifs: Tarifs, conditions: Conditions = {}) {
   const parJour = new Map<string, Set<Service>>();
   for (const r of repas) parJour.set(r.date, (parJour.get(r.date) ?? new Set()).add(r.service));
   const jours = parJour.size;
   const jours2 = [...parJour.values()].filter((s) => s.size >= 2).length;
   const deux = jours2 > 0;
-  const prixRepas = prixParJour(jours - jours2, jours2, tarifs);
-  const parJourLivraison = prixZone(zone);
+  const brut = prixParJour(jours - jours2, jours2, tarifs);
+  const remise = Math.min(100, Math.max(0, conditions.remise ?? 0));
+  const prixRepas = Math.round((brut * (100 - remise)) / 100);
+  const parJourLivraison = conditions.livraisonOfferte ? 0 : prixZone(zone);
   const prixLivraison = parJourLivraison == null ? null : parJourLivraison * jours;
-  return { jours, jours1: jours - jours2, jours2, formule: deux ? 2 : 1, prixRepas, prixLivraison, total: prixLivraison == null ? null : prixRepas + prixLivraison };
+  return {
+    jours,
+    jours1: jours - jours2,
+    jours2,
+    formule: deux ? 2 : 1,
+    brut,
+    remise,
+    prixRepas,
+    prixLivraison,
+    total: prixLivraison == null ? null : prixRepas + prixLivraison,
+  };
 }
 
 // Un repas se commande jusqu'à la veille 20 h (heure du Maroc), du lundi au vendredi.

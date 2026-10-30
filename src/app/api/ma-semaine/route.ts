@@ -31,6 +31,8 @@ interface Fiche {
   note: string | null;
   zone: string | null;
   quartier: string | null;
+  livraison_offerte: boolean | null;
+  remise: number | null;
 }
 
 // Prévient l'admin (notification) d'une commande passée directement.
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
   if (!admin) return repondre({ erreur: "Service indisponible, réessayez plus tard." }, 503);
   const { data: fiche } = await admin
     .from("application_personnes")
-    .select("id, nom, telephone, adresse, lat, lng, palier, allergies, refus, note, zone, quartier")
+    .select("id, nom, telephone, adresse, lat, lng, palier, allergies, refus, note, zone, quartier, livraison_offerte, remise")
     .eq("jeton", jeton)
     .maybeSingle<Fiche>();
   if (!fiche) return repondre({ erreur: "Lien invalide ou expiré : demandez un nouveau lien à Chef2Box." }, 404);
@@ -173,7 +175,7 @@ export async function POST(request: Request) {
   if (!connu) {
     // Nouveau client : sa première commande attend la validation de l'admin.
     if (repas.length === 0) return repondre({ erreur: "Choisissez au moins un repas (jusqu'à la veille 20 h)." }, 400);
-    const prix = prixDemande(repas, zone, tarifs);
+    const prix = prixDemande(repas, zone, tarifs, { remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte });
     const ligne = {
       personne_id: fiche.id,
       semaine,

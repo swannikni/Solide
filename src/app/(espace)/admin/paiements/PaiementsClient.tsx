@@ -386,6 +386,7 @@ export function PaiementsClient({
                               Sem. du {dateCourte(s.lundi)} · {s.jours} j · {s.formule} repas/j
                               {s.supplement ? ` · +${s.supplement} boîte${s.supplement > 1 ? "s" : ""} en plus` : ""}
                               {s.livraison ? ` · livraison ${s.livraison} DH` : ""}
+                              {s.remise ? ` · remise ${s.remise} %` : ""}
                               {s.jours < 5 ? " ⚠️ incomplète" : ""}
                             </span>
                             <span className="whitespace-nowrap tabular-nums font-semibold">{dh(prixSemaine(s, tarifs, offres.get(personne.cle)?.prix ?? null))}</span>

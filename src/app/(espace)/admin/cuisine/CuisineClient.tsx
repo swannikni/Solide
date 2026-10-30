@@ -81,6 +81,8 @@ export interface FicheClient {
   jeton?: string | null; // lien personnel « Ma semaine »
   zone?: Zone | null;
   quartier?: string | null;
+  livraison_offerte?: boolean;
+  remise?: number; // % sur les repas
 }
 
 // Semaine envoyée par un client depuis son lien « Ma semaine », à valider.
@@ -133,6 +135,8 @@ interface Formulaire {
   cases: string[]; // « date|service » à cocher (ajout seulement), toutes semaines
   semaine: string; // lundi de la semaine affichée dans le formulaire d'ajout
   debut?: string; // premier jour pour les raccourcis (client qui arrive en cours de semaine)
+  livraisonOfferte?: boolean; // prix du client (fiche)
+  remise?: number;
 }
 
 const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[] = [
@@ -599,6 +603,8 @@ export function CuisineClient({
       note: p.note ?? "",
       cases: [],
       semaine: lundi,
+      livraisonOfferte: !!fc?.livraison_offerte,
+      remise: fc?.remise ?? 0,
     });
     // Historique de paiement (8 dernières semaines), chargé à l'ouverture.
     setHistorique(null);
@@ -667,8 +673,11 @@ export function CuisineClient({
         const coord = { telephone: texte(f.telephone, 30), adresse: texte(f.adresse, 200) };
         const { data: fiche, error: e1 } = await supabase
           .from("application_personnes")
-          .upsert({ nom, ...coord, ...champs, updated_at: new Date().toISOString() }, { onConflict: "cle" })
-          .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier")
+          .upsert(
+            { nom, ...coord, ...champs, livraison_offerte: !!f.livraisonOfferte, remise: f.remise ?? 0, updated_at: new Date().toISOString() },
+            { onConflict: "cle" }
+          )
+          .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier, livraison_offerte, remise")
           .single<FicheClient>();
         const maj = { nom, ...champs, ...coord };
         const [{ error: e2 }, { error: e3 }] = await Promise.all([
@@ -754,7 +763,7 @@ export function CuisineClient({
           { nom, telephone: texte(f.telephone, 30), adresse: texte(f.adresse, 200), ...champs, updated_at: new Date().toISOString() },
           { onConflict: "cle" }
         )
-        .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier")
+        .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier, livraison_offerte, remise")
         .single<FicheClient>();
       fin("formulaire");
       if (error) return setMessage("Ajout impossible, réessayez.");
@@ -1218,6 +1227,36 @@ export function CuisineClient({
                   Ouvrir
                 </a>
               </div>
+            </div>
+          )}
+          {!personneModifiee.clientId && (
+            <div className="space-y-2 rounded-xl bg-white p-3">
+              <p className="text-xs font-bold text-c2b-muted">💰 Son prix</p>
+              <label className="flex items-center gap-2 text-sm font-semibold text-c2b-green">
+                <input
+                  type="checkbox"
+                  checked={!!formulaire.livraisonOfferte}
+                  onChange={(e) => setFormulaire({ ...formulaire, livraisonOfferte: e.target.checked })}
+                  className="h-5 w-5 accent-[#1c2e1e]"
+                />
+                🚚 Livraison offerte
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-sm font-semibold text-c2b-green">Remise</span>
+                {[0, 5, 10, 15, 20, 30, 50].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setFormulaire({ ...formulaire, remise: r })}
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                      (formulaire.remise ?? 0) === r ? "bg-c2b-gold text-c2b-green" : "bg-c2b-cream border border-c2b-green/15 text-c2b-green"
+                    }`}
+                  >
+                    {r === 0 ? "Aucune" : `${r} %`}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-c2b-muted">Appliqué à son espace de commande et dans Paiements. Touchez Enregistrer.</p>
             </div>
           )}
           <p className="text-[11px] text-c2b-muted">S&apos;applique à sa fiche et à tous ses repas, cette semaine et les suivantes.</p>

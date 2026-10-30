@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MapPin } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { ZONES, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type RepasChoisi, type Service } from "@/lib/ma-semaine";
+import { ZONES, encoreModifiable, lundiDe, prixDemande, zoneDuQuartier, type Conditions, type RepasChoisi, type Service } from "@/lib/ma-semaine";
 import type { Tarifs } from "@/lib/paiements";
 
 export interface SemaineOuverte {
@@ -48,6 +48,7 @@ export function MonEspaceClient({
   semainesOuvertes,
   semainesCompte,
   tarifs,
+  conditions = {},
 }: {
   jeton: string;
   prenom: string;
@@ -57,6 +58,7 @@ export function MonEspaceClient({
   semainesOuvertes: SemaineOuverte[];
   semainesCompte: SemaineCompte[];
   tarifs: Tarifs;
+  conditions?: Conditions; // remise, livraison offerte (fiche du client)
 }) {
   const router = useRouter();
   const [onglet, setOnglet] = useState<Onglet>("commander");
@@ -75,7 +77,7 @@ export function MonEspaceClient({
   const semaine = semainesOuvertes.find((s) => s.lundi === lundi);
   const coches = choix[lundi] ?? [];
   const repasSemaine = coches.map(versRepas);
-  const prix = prixDemande(repasSemaine, zone, tarifs);
+  const prix = prixDemande(repasSemaine, zone, tarifs, conditions);
   const lundiActuel = lundiDe(aujourdhui);
 
   async function appeler(corps: object, cleEnCours: string) {
@@ -160,7 +162,7 @@ export function MonEspaceClient({
     const j = semainesOuvertes.flatMap((s) => s.jours).find((x) => x.date === r.date);
     return r.service === "dejeuner" ? j?.midi : j?.soir;
   };
-  const montantDe = (s: SemaineCompte) => s.montant ?? prixDemande(s.repas, zone, tarifs).total ?? prixDemande(s.repas, zone, tarifs).prixRepas;
+  const montantDe = (s: SemaineCompte) => s.montant ?? prixDemande(s.repas, zone, tarifs, conditions).total ?? prixDemande(s.repas, zone, tarifs, conditions).prixRepas;
   const aPayer = semainesCompte.filter((s) => s.repas.length > 0 && montantDe(s) - s.recu > 0);
   const totalDu = aPayer.reduce((t, s) => t + (montantDe(s) - s.recu), 0);
   const historique = semainesCompte.filter((s) => s.lundi < lundiActuel);
@@ -269,6 +271,15 @@ export function MonEspaceClient({
                 ))}
               </div>
             )}
+            <section className="rounded-2xl bg-c2b-green p-4 text-sm text-c2b-cream">
+              <p className="font-bold">Comment commander ?</p>
+              <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-[13px] text-c2b-cream/90">
+                <li>Choisissez la semaine.</li>
+                <li>Touchez ☀️ Midi et/ou 🌙 Soir pour chaque jour où vous voulez un repas.</li>
+                <li>Vérifiez votre quartier de livraison : le prix s&apos;affiche en bas.</li>
+                <li>Touchez « Valider ma commande ». Modifiable jusqu&apos;à la veille 20 h.</li>
+              </ol>
+            </section>
             {semaine.enAttente && (
               <p className="rounded-xl bg-c2b-gold/15 px-3 py-2 text-sm font-semibold text-c2b-green">
                 ⏳ Votre commande attend la confirmation de Chef2Box. Vous pouvez encore la modifier.
@@ -351,8 +362,14 @@ export function MonEspaceClient({
                   <span>{Math.round((prix.jours2 * tarifs.deux_repas) / 5)} DH</span>
                 </p>
               )}
+              {prix.remise > 0 && prix.brut > 0 && (
+                <p className="flex justify-between font-semibold text-emerald-700">
+                  <span>🎁 Remise {prix.remise} %</span>
+                  <span>−{prix.brut - prix.prixRepas} DH</span>
+                </p>
+              )}
               <p className="flex justify-between">
-                <span>Livraison{zone && prix.jours > 0 && ZONES.find((z) => z.cle === zone)?.prix ? ` (${prix.jours} × ${ZONES.find((z) => z.cle === zone)?.prix} DH)` : ""}</span>
+                <span>Livraison{conditions.livraisonOfferte ? " 🎁" : ""}{zone && prix.jours > 0 && ZONES.find((z) => z.cle === zone)?.prix ? ` (${prix.jours} × ${ZONES.find((z) => z.cle === zone)?.prix} DH)` : ""}</span>
                 <span>{!zone ? "—" : prix.prixLivraison == null ? "sur devis" : prix.prixLivraison === 0 ? "gratuit" : `${prix.prixLivraison} DH`}</span>
               </p>
               <p className="flex justify-between border-t border-c2b-green/10 pt-2 text-base font-bold text-c2b-green">

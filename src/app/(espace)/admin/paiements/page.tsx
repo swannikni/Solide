@@ -90,17 +90,20 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   for (const e of extras ?? []) noter(`n:${e.nom.trim().toLowerCase()}`, e.nom.trim(), null, e.telephone, e.date, e.quantite);
 
   // Livraison : prix par jour livré selon la zone de la fiche client.
+  // Conditions du client : livraison offerte, remise en %.
   const { data: zones } = await supabase
     .from("application_personnes")
-    .select("nom, zone")
-    .not("zone", "is", null)
-    .returns<{ nom: string; zone: Zone }[]>();
-  const fraisJour = new Map((zones ?? []).map((z) => [`n:${z.nom.trim().toLowerCase()}`, prixZone(z.zone) ?? 0]));
+    .select("nom, zone, livraison_offerte, remise")
+    .or("zone.not.is.null,remise.gt.0")
+    .returns<{ nom: string; zone: Zone | null; livraison_offerte: boolean; remise: number }[]>();
+  const fraisJour = new Map((zones ?? []).map((z) => [`n:${z.nom.trim().toLowerCase()}`, z.livraison_offerte ? 0 : (prixZone(z.zone) ?? 0)]));
+  const remiseDe = new Map((zones ?? []).map((z) => [`n:${z.nom.trim().toLowerCase()}`, z.remise ?? 0]));
 
   const personnes: PersonneMois[] = [...repas.entries()]
     .map(([cle, p]) => {
       const frais = fraisJour.get(cle) ?? 0;
-      const semaines = semainesDe(p.jours).map((s) => (frais ? { ...s, livraison: s.jours * frais } : s));
+      const remise = remiseDe.get(cle) ?? 0;
+      const semaines = semainesDe(p.jours).map((s) => ({ ...s, ...(frais ? { livraison: s.jours * frais } : {}), ...(remise ? { remise } : {}) }));
       const offre = offreDe.get(cle) ?? null;
       return {
         cle,

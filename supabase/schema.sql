@@ -1849,3 +1849,7 @@ drop trigger if exists application_demandes_semaine_notif on public.application_
 create trigger application_demandes_semaine_notif
   after insert on public.application_demandes_semaine
   for each row execute function public.application_notifier_demande();
+
+-- Prix par client (fiche) : livraison offerte et remise en % (ami, ancien client…).
+alter table public.application_personnes add column if not exists livraison_offerte boolean not null default false;
+alter table public.application_personnes add column if not exists remise smallint not null default 0 check (remise between 0 and 100);

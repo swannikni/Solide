@@ -23,6 +23,7 @@ export interface SemaineRepas {
   jours2?: number; // jours avec midi et soir
   supplement: number; // boîtes en plus d'une par repas (×2…)
   livraison?: number; // frais de livraison de la semaine (zone × jours livrés)
+  remise?: number; // remise du client en % (sur les repas)
 }
 
 const jour = (d: string) => new Date(`${d}T12:00:00Z`);
@@ -80,9 +81,10 @@ export function semainesDe(repasParJour: Map<string, RepasDuJour>): SemaineRepas
 export const prixSemaine = (s: SemaineRepas, tarifs: Tarifs, offre: number | null) => {
   // Depuis le 2 novembre 2026 (sans offre perso) : prix par jour, 1/5 de la
   // formule du jour (1 repas : 690 / 5 ; midi + soir : 1 290 / 5).
+  const avecRemise = (n: number) => Math.round((n * (100 - Math.min(100, Math.max(0, s.remise ?? 0)))) / 100);
   if (offre == null && s.lundi >= DEBUT_PRIX_PAR_JOUR && s.jours1 != null && s.jours2 != null) {
     const repas = prixParJour(s.jours1, s.jours2, tarifs);
-    return repas + Math.round(((s.supplement ?? 0) * tarifs.un_repas) / 5) + (s.livraison ?? 0);
+    return avecRemise(repas + Math.round(((s.supplement ?? 0) * tarifs.un_repas) / 5)) + (s.livraison ?? 0);
   }
   const base = offre ?? (s.formule === 2 ? tarifs.deux_repas : tarifs.un_repas);
   return base + Math.round(((s.supplement ?? 0) * base) / (5 * s.formule)) + (s.livraison ?? 0);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, X, KeyRound, Pencil, Copy, Check, MessageCircle, Inbox, Crown, Search, ChevronDown, Phone, Smartphone, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { nouveauJeton } from "@/lib/ma-semaine";
+import { decalerDate } from "@/lib/dates";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
 import {
@@ -153,12 +154,15 @@ export function ClientsClient({
   clientsInitiaux,
   questionnairesInitiaux = [],
   fichesInitiales = [],
+  relance = null,
   emails,
   cleServicePresente,
 }: {
   clientsInitiaux: Client[];
   questionnairesInitiaux?: Questionnaire[];
   fichesInitiales?: FicheResume[];
+  // Relance de la semaine prochaine : son lundi, et les fiches (clé du nom) qui ont déjà commandé.
+  relance?: { lundi: string; aujourdhui: string; dejaCommande: string[] } | null;
   emails: Record<string, string>;
   cleServicePresente: boolean;
 }) {
@@ -187,6 +191,8 @@ export function ClientsClient({
     });
   const [fiches, setFiches] = useState(fichesInitiales);
   const [toutesFiches, setToutesFiches] = useState(false);
+  const [relanceOuverte, setRelanceOuverte] = useState(false);
+  const [relances, setRelances] = useState<Set<string>>(new Set());
   const [filtreSuivi, setFiltreSuivi] = useState<SuiviProspect | "tous">("a_contacter");
   // Recherche sur le nom, l'e-mail ou le téléphone (sans tenir compte des accents).
   const normaliser = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -284,6 +290,34 @@ export function ClientsClient({
 
   // Lien personnel « Ma semaine » (créé la première fois), envoyé sur
   // WhatsApp : le client choisit ses repas, voit le prix et envoie.
+  // Relance : clients venus ces 4 dernières semaines, avec un numéro, qui
+  // n'ont pas encore commandé la semaine prochaine.
+  const aRelancer = relance
+    ? fiches
+        .filter((fc) => fc.dernier && fc.dernier >= decalerDate(relance.aujourdhui, -28) && !relance.dejaCommande.includes(fc.nom.trim().toLowerCase()))
+        .filter((fc) => numeroWhatsApp(fc.telephone).length >= 9)
+        .sort((x, y) => x.nom.localeCompare(y.nom, "fr"))
+    : [];
+  async function ouvrirRelance() {
+    if (relanceOuverte) return setRelanceOuverte(false);
+    setRelanceOuverte(true);
+    // Liens créés d'avance : chaque bouton WhatsApp est prêt d'un toucher.
+    const sansLien = aRelancer.filter((fc) => !fc.jeton);
+    const crees = await Promise.all(
+      sansLien.map(async (fc) => {
+        const jeton = nouveauJeton();
+        const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
+        return error ? null : { id: fc.id, jeton };
+      })
+    );
+    const parId = new Map(crees.filter(Boolean).map((c) => [c!.id, c!.jeton]));
+    if (parId.size) setFiches((prev) => prev.map((f) => (parId.has(f.id) ? { ...f, jeton: parId.get(f.id)! } : f)));
+  }
+  const messageRelance = (fc: FicheResume) => {
+    const jour = new Date(`${relance!.lundi}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" });
+    return `Bonjour ${fc.nom.trim().split(/\s+/)[0]} 👋 La semaine du ${jour} est ouverte chez Chef2Box ! Choisis tes repas (midi, soir) ici, avec le menu et le prix : ${window.location.origin}/ma-semaine/${fc.jeton} (modifiable jusqu'à la veille 20 h)`;
+  };
+
   // Le menu du lien s'ouvre ; le lien est créé tout de suite s'il n'existe
   // pas, pour que « Copier » marche d'un seul toucher (iPhone).
   const [lienOuvert, setLienOuvert] = useState<string | null>(null);
@@ -592,6 +626,47 @@ export function ClientsClient({
             <p className="px-1 text-xs text-c2b-muted">
               Toute personne mise en cuisine arrive ici. Sa fiche se modifie en touchant son nom dans la Cuisine.
             </p>
+            {relance && (
+              <div className="carte overflow-hidden border-c2b-gold/50">
+                <button onClick={ouvrirRelance} className="flex w-full items-center gap-2 px-4 py-3 text-left">
+                  <span className="flex-1 text-sm font-bold text-c2b-green">
+                    📣 Relancer pour la semaine du{" "}
+                    {new Date(`${relance.lundi}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" })}
+                  </span>
+                  <span className="pastille py-0.5 px-2">{aRelancer.length}</span>
+                  <ChevronDown size={16} className={`text-c2b-muted transition-transform ${relanceOuverte ? "rotate-180" : ""}`} />
+                </button>
+                {relanceOuverte && (
+                  <div className="space-y-1.5 border-t border-c2b-green/10 p-3">
+                    <p className="text-xs text-c2b-muted">
+                      Venus ces 4 dernières semaines, pas encore de commande pour la semaine prochaine. Touchez WhatsApp : le message et son lien sont prêts.
+                    </p>
+                    {aRelancer.length === 0 && <p className="py-2 text-center text-sm text-c2b-muted">Tout le monde a commandé 🎉</p>}
+                    {aRelancer.map((fc) => (
+                      <div key={fc.id} className="flex items-center gap-2 rounded-xl bg-c2b-cream px-3 py-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-c2b-green">
+                          {fc.nom}
+                          {relances.has(fc.id) && <span className="ml-1.5 text-xs font-semibold text-emerald-700">✓ envoyé</span>}
+                        </span>
+                        {fc.jeton ? (
+                          <a
+                            href={`https://wa.me/${numeroWhatsApp(fc.telephone)}?text=${encodeURIComponent(messageRelance(fc))}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setRelances((r) => new Set(r).add(fc.id))}
+                            className="flex-shrink-0 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-bold text-white"
+                          >
+                            WhatsApp
+                          </a>
+                        ) : (
+                          <span className="text-xs text-c2b-muted">Lien…</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {fichesTrouvees.length === 0 && <p className="py-2 text-center text-sm text-c2b-muted">Aucun client trouvé.</p>}
             <ul className="space-y-1.5">
               {(saisie || toutesFiches ? fichesTrouvees : fichesTrouvees.slice(0, 15)).map((fc) => {
