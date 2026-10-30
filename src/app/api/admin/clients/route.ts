@@ -79,6 +79,33 @@ export async function POST(request: Request) {
   });
   if (erreurAuth || !cree.user) {
     const existe = /already|registered|exists/i.test(erreurAuth?.message ?? "");
+    // Compte dont l'accès avait été retiré : on le réactive (mêmes données).
+    if (existe) {
+      const { data: liste } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      const ancien = liste?.users.find((u) => u.email?.toLowerCase() === email);
+      const bloque = !!ancien?.banned_until && new Date(ancien.banned_until) > new Date();
+      if (ancien && bloque) {
+        const { error: erreurReactivation } = await admin.auth.admin.updateUserById(ancien.id, {
+          ban_duration: "none",
+          password: mdp,
+          user_metadata: { ...(ancien.user_metadata ?? {}), nom, doit_choisir_mdp: true },
+        });
+        if (erreurReactivation) return erreur("Réactivation du compte impossible.", 500);
+        await admin.from("application_clients").upsert({
+          id: ancien.id,
+          nom,
+          telephone,
+          palier,
+          ...(profil ? { profil } : {}),
+          objectif_calories: calories,
+          objectif_proteines: proteines,
+          objectif_glucides: glucides,
+          objectif_lipides: lipides,
+          premium: true,
+        });
+        return NextResponse.json({ id: ancien.id, email, motDePasse: mdp, reactive: true });
+      }
+    }
     return erreur(existe ? "Un compte existe déjà avec cet email." : "Création du compte impossible.", existe ? 409 : 500);
   }
 
@@ -125,20 +152,48 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ id, email: data.user.email, motDePasse: mdp });
 }
 
-// Supprimer un compte client de l'appli (DELETE) : le compte de connexion et
-// ses données (journal, messages, commandes de l'appli). Jamais un admin.
+// DELETE :
+// - { id } : retire l'accès à l'appli (connexion bloquée). Ses données
+//   restent ; recréer son compte avec le même email le réactive.
+// - { personne } : efface le client de tout (fiche, repas, paiements,
+//   demandes et, s'il en a un, son compte appli avec ses données).
 export async function DELETE(request: Request) {
   if (!(await verifierAdmin())) return erreur("Réservé à l'admin.", 403);
   const admin = createAdminClient();
   if (!admin) return erreur("CLE_SERVICE_MANQUANTE", 503);
-
   const corps = await request.json().catch(() => null);
-  const id = typeof corps?.id === "string" && /^[0-9a-f-]{36}$/i.test(corps.id) ? corps.id : null;
+  const uuid = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v : null);
+
+  const personne = uuid(corps?.personne);
+  if (personne) {
+    const { data: fiche } = await admin.from("application_personnes").select("id, nom, client_id").eq("id", personne).maybeSingle();
+    if (!fiche) return erreur("Client inconnu.", 404);
+    const nom = String(fiche.nom).trim();
+    const motif = nom.replace(/[%_\\]/g, "\\$&");
+    if (fiche.client_id) {
+      const { data: compte } = await admin.from("application_clients").select("est_admin").eq("id", fiche.client_id).maybeSingle();
+      if (compte?.est_admin) return erreur("Impossible de supprimer un admin.", 400);
+    }
+    const resultats = await Promise.all([
+      admin.from("application_cuisine_extras").delete().ilike("nom", motif),
+      admin.from("application_paiements").delete().eq("cle", `n:${nom.toLowerCase()}`),
+      admin.from("application_cuisine_sacs").delete().eq("cle", `m:${nom.toLowerCase()}`),
+    ]);
+    if (resultats.some((r) => r.error)) return erreur("Suppression impossible, réessayez.", 500);
+    const { error } = await admin.from("application_personnes").delete().eq("id", fiche.id);
+    if (error) return erreur("Suppression impossible, réessayez.", 500);
+    if (fiche.client_id) {
+      await admin.from("application_paiements").delete().eq("client_id", fiche.client_id);
+      await admin.auth.admin.deleteUser(fiche.client_id);
+    }
+    return NextResponse.json({ ok: true, compteSupprime: fiche.client_id ?? null });
+  }
+
+  const id = uuid(corps?.id);
   if (!id) return erreur("Client inconnu.", 400);
   const { data: fiche } = await admin.from("application_clients").select("est_admin").eq("id", id).maybeSingle();
   if (!fiche || fiche.est_admin) return erreur("Client inconnu.", 404);
-
-  const { error } = await admin.auth.admin.deleteUser(id);
-  if (error) return erreur("Suppression impossible, réessayez.", 500);
+  const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: "876000h" });
+  if (error) return erreur("Retrait de l'accès impossible, réessayez.", 500);
   return NextResponse.json({ ok: true });
 }

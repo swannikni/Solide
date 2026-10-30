@@ -131,6 +131,7 @@ export interface FicheResume {
 // Un repas de la semaine (planning de la cuisine), pour « Clients de la semaine ».
 export interface RepasSemaine {
   nom: string;
+  clientId?: string; // repas commandé depuis l'appli
   date: string;
   service: "dejeuner" | "diner";
   quantite: number;
@@ -211,6 +212,8 @@ export function ClientsClient({
     });
   const [fiches, setFiches] = useState(fichesInitiales);
   const [lundiVu, setLundiVu] = useState(semaines?.defaut ?? "");
+  // Retirés à l'instant (« nom » partout, ou « lundi|nom » pour une semaine).
+  const [retiresSemaine, setRetiresSemaine] = useState<Set<string>>(new Set());
   const [toutesFiches, setToutesFiches] = useState(false);
   const [relanceOuverte, setRelanceOuverte] = useState(false);
   const [relances, setRelances] = useState<Set<string>>(new Set());
@@ -518,9 +521,10 @@ export function ClientsClient({
     setAcces({ nom: fiche.nom.trim(), email: resultat.email, motDePasse: resultat.motDePasse, telephone: numeroInternational(fiche.indicatif, fiche.telephone) });
   }
 
-  // Supprimer un compte de l'appli (connexion + journal, messages…).
+  // Retirer l'accès à l'appli : la connexion est bloquée, ses données
+  // restent. Recréer son compte (même email) le remet dans la liste.
   async function supprimerCompte(c: Client) {
-    if (!confirm(`Supprimer le compte appli de ${c.nom} ?\n\nSon accès, son journal de repas, ses messages et ses commandes de l'appli seront effacés. C'est définitif.`)) return;
+    if (!confirm(`Retirer l'accès à l'appli de ${c.nom} ?\n\nIl ne pourra plus se connecter. Ses données sont gardées : recréez son compte avec le même email pour le remettre.`)) return;
     const reponse = await fetch("/api/admin/clients", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -534,20 +538,38 @@ export function ClientsClient({
     setClients((prev) => prev.filter((x) => x.id !== c.id));
   }
 
-  // Supprimer une fiche client (Tous nos clients) et ses repas à venir ;
-  // l'historique passé reste pour les paiements.
+  // Effacer un client de tout : fiche, repas, paiements et compte appli.
   async function supprimerFiche(fc: FicheResume) {
-    if (!confirm(`Supprimer ${fc.nom} de vos clients ?\n\nSa fiche, son prix, son lien et ses repas à venir seront effacés. Les repas passés restent dans l'historique et les paiements.`)) return;
-    const demain = decalerDate(relance?.aujourdhui ?? new Date().toISOString().slice(0, 10), 1);
-    const { error } = await supabase.from("application_personnes").delete().eq("id", fc.id);
-    if (error) return alert("Suppression impossible, réessayez.");
-    await supabase
-      .from("application_cuisine_extras")
-      .delete()
-      .ilike("nom", fc.nom.replace(/[%_\\]/g, "\\$&"))
-      .gte("date", demain);
+    if (!confirm(`Effacer ${fc.nom} de TOUT ?\n\nSa fiche, tous ses repas (passés et à venir), ses paiements${fc.client_id ? ", et son compte appli avec ses données" : ""} seront supprimés. C'est définitif.`)) return;
+    const reponse = await fetch("/api/admin/clients", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personne: fc.id }),
+    });
+    const resultat = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) {
+      alert(resultat.erreur === "CLE_SERVICE_MANQUANTE" ? "La clé secrète Supabase n'est pas encore installée sur Netlify." : resultat.erreur ?? "Impossible, réessayez.");
+      return;
+    }
     setLienOuvert(null);
     setFiches((prev) => prev.filter((f) => f.id !== fc.id));
+    if (resultat.compteSupprime) setClients((prev) => prev.filter((x) => x.id !== resultat.compteSupprime));
+    setRetiresSemaine((r) => new Set(r).add(fc.nom.trim().toLowerCase()));
+  }
+
+  // Retirer un client d'une semaine seulement (ses repas de cette semaine).
+  async function retirerDeLaSemaine(nom: string, repas: RepasSemaine[], lundi: string) {
+    if (!confirm(`Retirer ${nom} de la semaine du ${new Date(`${lundi}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })} ?\n\nSes ${repas.length} repas de cette semaine seront supprimés. Sa fiche et le reste restent.`)) return;
+    const vendredi = decalerDate(lundi, 4);
+    const clientIds = [...new Set(repas.map((r) => r.clientId).filter((x): x is string => !!x))];
+    const [extras, commandes] = await Promise.all([
+      supabase.from("application_cuisine_extras").delete().ilike("nom", nom.replace(/[%_\\]/g, "\\$&")).gte("date", lundi).lte("date", vendredi),
+      clientIds.length
+        ? supabase.from("application_commandes").delete().in("client_id", clientIds).gte("date_livraison", lundi).lte("date_livraison", vendredi)
+        : Promise.resolve({ error: null }),
+    ]);
+    if (extras.error || commandes.error) return alert("Suppression impossible, réessayez.");
+    setRetiresSemaine((r) => new Set(r).add(`${lundi}|${nom.toLowerCase()}`));
   }
 
   async function nouveauMotDePasse(c: Client) {
@@ -679,7 +701,13 @@ export function ClientsClient({
       {semaines &&
         (() => {
           const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(lundiVu, i));
-          const repas = semaines.repas.filter((r) => r.date >= jours[0] && r.date <= jours[4]);
+          const repas = semaines.repas.filter(
+            (r) =>
+              r.date >= jours[0] &&
+              r.date <= jours[4] &&
+              !retiresSemaine.has(r.nom.trim().toLowerCase()) &&
+              !retiresSemaine.has(`${lundiVu}|${r.nom.trim().toLowerCase()}`)
+          );
           const parNom = new Map<string, { nom: string; repas: RepasSemaine[] }>();
           for (const r of repas) {
             const k = r.nom.trim().toLowerCase();
@@ -741,6 +769,13 @@ export function ClientsClient({
                                 {fc?.allergies && <span className="ml-1.5 text-[11px] font-bold text-red-700">⚠️ {fc.allergies}</span>}
                               </p>
                               <span className="pastille py-0.5 px-2 text-[11px]">{n} repas</span>
+                              <button
+                                onClick={() => retirerDeLaSemaine(p.nom, p.repas, lundiVu)}
+                                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-red-200 text-red-500"
+                                aria-label={`Retirer ${p.nom} de cette semaine`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
                               {numeroWhatsApp(fc?.telephone ?? null).length >= 9 && (
                                 <a
                                   href={`tel:+${numeroWhatsApp(fc?.telephone ?? null)}`}
@@ -951,7 +986,7 @@ export function ClientsClient({
                           onClick={() => supprimerFiche(fc)}
                           className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 bg-white py-2 text-xs font-bold text-red-600"
                         >
-                          <Trash2 size={14} /> Supprimer ce client
+                          <Trash2 size={14} /> Effacer ce client de tout
                         </button>
                       </div>
                     )}

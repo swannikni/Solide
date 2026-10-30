@@ -76,7 +76,7 @@ export default async function ClientsPage() {
     ...(extrasSemaine ?? []).map((e) => ({ nom: e.nom, date: e.date, service: e.repas_type, quantite: e.quantite ?? 1 })),
     ...(commandesSemaine ?? [])
       .filter((c) => nomClient.has(c.client_id))
-      .map((c) => ({ nom: nomClient.get(c.client_id)!, date: c.date_livraison, service: c.repas_type, quantite: c.quantite ?? 1 })),
+      .map((c) => ({ nom: nomClient.get(c.client_id)!, clientId: c.client_id, date: c.date_livraison, service: c.repas_type, quantite: c.quantite ?? 1 })),
   ];
   // Après vendredi 15 h, on regarde d'abord la semaine suivante.
   const semaineDefaut = debutAVenir() > decalerDate(lundiActuel, 4) ? lundiSuivant : lundiActuel;
@@ -84,15 +84,20 @@ export default async function ClientsPage() {
   // Les emails sont dans Supabase Auth : lisibles seulement avec la clé service.
   const admin = createAdminClient();
   const emails: Record<string, string> = {};
+  // Comptes dont l'admin a retiré l'accès : cachés de « Comptes de l'appli ».
+  const sansAcces = new Set<string>();
   if (admin) {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of data?.users ?? []) if (u.email) emails[u.id] = u.email;
+    for (const u of data?.users ?? []) {
+      if (u.email) emails[u.id] = u.email;
+      if (u.banned_until && new Date(u.banned_until) > new Date()) sansAcces.add(u.id);
+    }
   }
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <ClientsClient
-        clientsInitiaux={clients ?? []}
+        clientsInitiaux={(clients ?? []).filter((c) => !sansAcces.has(c.id))}
         questionnairesInitiaux={questionnaires ?? []}
         fichesInitiales={fichesResumees}
         relance={{ lundi: lundiProchain, aujourdhui, dejaCommande }}
