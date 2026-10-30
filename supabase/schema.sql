@@ -1678,3 +1678,105 @@ alter table public.application_questionnaires add column if not exists suivi tex
 alter table public.application_questionnaires add column if not exists suivi_note text
   check (suivi_note is null or char_length(suivi_note) <= 200);
 alter table public.application_questionnaires add column if not exists suivi_le timestamptz;
+
+-- ============ LOT 2 : FICHES CLIENTS, SACS PARTAGÉS ============
+
+create table if not exists public.application_personnes (
+  id uuid primary key default gen_random_uuid(),
+  nom text not null check (char_length(btrim(nom)) between 1 and 80),
+  cle text generated always as (lower(btrim(nom))) stored unique,
+  telephone text check (telephone is null or char_length(telephone) <= 30),
+  adresse text check (adresse is null or char_length(adresse) <= 200),
+  complement text check (complement is null or char_length(complement) <= 150),
+  lat double precision check (lat is null or lat between -90 and 90),
+  lng double precision check (lng is null or lng between -180 and 180),
+  palier text check (palier is null or palier in ('P1','P2','P3','P4','P5','P6')),
+  allergies text check (allergies is null or char_length(allergies) <= 300),
+  refus text check (refus is null or char_length(refus) <= 300),
+  note text check (note is null or char_length(note) <= 200),
+  client_id uuid references public.application_clients (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists application_personnes_client_idx on public.application_personnes (client_id);
+alter table public.application_personnes enable row level security;
+drop policy if exists "personnes_admin" on public.application_personnes;
+create policy "personnes_admin" on public.application_personnes
+  for all to authenticated using ((select public.application_is_admin())) with check ((select public.application_is_admin()));
+revoke all on table public.application_personnes from anon;
+grant select, insert, update, delete on table public.application_personnes to authenticated;
+grant all on table public.application_personnes to service_role;
+
+-- Une fiche par nom déjà venu (sa dernière ligne du planning).
+insert into public.application_personnes (nom, telephone, adresse, complement, lat, lng, palier, allergies, refus)
+select distinct on (lower(btrim(nom))) btrim(nom), telephone, adresse, complement, lat, lng, palier, allergies, refus
+from public.application_cuisine_extras
+order by lower(btrim(nom)), date desc, created_at desc
+on conflict (cle) do nothing;
+
+-- Toute personne ajoutée au planning a sa fiche.
+create or replace function public.application_extras_personne()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.application_personnes (nom, telephone, adresse, complement, lat, lng, palier, allergies, refus)
+  values (btrim(new.nom), new.telephone, new.adresse, new.complement, new.lat, new.lng, new.palier, new.allergies, new.refus)
+  on conflict (cle) do nothing;
+  return new;
+end;
+$$;
+revoke execute on function public.application_extras_personne() from public, anon, authenticated;
+drop trigger if exists application_cuisine_extras_personne on public.application_cuisine_extras;
+create trigger application_cuisine_extras_personne
+  after insert or update of nom on public.application_cuisine_extras
+  for each row execute function public.application_extras_personne();
+
+-- Sacs prêts / livrés, partagés entre les téléphones.
+create table if not exists public.application_cuisine_sacs (
+  date date not null,
+  cle text not null check (char_length(cle) <= 120),
+  pret boolean not null default false,
+  livre boolean not null default false,
+  maj_le timestamptz not null default now(),
+  primary key (date, cle)
+);
+alter table public.application_cuisine_sacs enable row level security;
+drop policy if exists "sacs_admin" on public.application_cuisine_sacs;
+create policy "sacs_admin" on public.application_cuisine_sacs
+  for all to authenticated using ((select public.application_is_admin())) with check ((select public.application_is_admin()));
+revoke all on table public.application_cuisine_sacs from anon;
+grant select, insert, update, delete on table public.application_cuisine_sacs to authenticated;
+grant all on table public.application_cuisine_sacs to service_role;
+
+-- Renommer une personne partout : planning, paiements, tarifs, sacs.
+create or replace function public.application_renommer_personne(p_ancien text, p_nouveau text)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_ancien text := lower(btrim(p_ancien));
+  v_nouveau text := btrim(p_nouveau);
+begin
+  if not public.application_is_admin() then
+    raise exception 'Réservé à l''admin.';
+  end if;
+  if v_nouveau is null or char_length(v_nouveau) not between 1 and 80 then
+    raise exception 'Nom invalide.';
+  end if;
+  if lower(v_nouveau) <> v_ancien and exists (select 1 from public.application_personnes where cle = lower(v_nouveau)) then
+    raise exception 'Ce nom existe déjà.';
+  end if;
+  update public.application_personnes set nom = v_nouveau, updated_at = now() where cle = v_ancien;
+  update public.application_cuisine_extras set nom = v_nouveau where lower(btrim(nom)) = v_ancien;
+  update public.application_paiements set nom = v_nouveau where client_id is null and lower(btrim(nom)) = v_ancien;
+  update public.application_tarifs_perso set cle = 'n:' || lower(v_nouveau) where cle = 'n:' || v_ancien;
+  update public.application_cuisine_sacs set cle = 'm:' || lower(v_nouveau) where cle = 'm:' || v_ancien;
+end;
+$$;
+revoke execute on function public.application_renommer_personne(text, text) from public, anon;
+grant execute on function public.application_renommer_personne(text, text) to authenticated;
