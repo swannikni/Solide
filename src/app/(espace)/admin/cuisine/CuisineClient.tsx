@@ -177,6 +177,7 @@ export function CuisineClient({
   platsInitiaux,
   fichesInitiales,
   sacsInitiaux,
+  aAjouter = null,
 }: {
   lundi: string;
   aujourdhui: string;
@@ -188,6 +189,7 @@ export function CuisineClient({
   platsInitiaux: Record<string, { dejeuner: string; diner: string }>;
   fichesInitiales: FicheClient[];
   sacsInitiaux: SacJour[];
+  aAjouter?: string | null; // venant d'un questionnaire : formulaire d'ajout prêt
 }) {
   const supabase = createClient();
   // Du lundi au vendredi (pas de livraison le week-end : le repas du samedi
@@ -262,6 +264,30 @@ export function CuisineClient({
   // Fiches clients (une par nom) et historique de paiement de la fiche ouverte.
   const [fiches, setFiches] = useState<Map<string, FicheClient>>(() => new Map(fichesInitiales.map((x) => [cleNom(x.nom), x])));
   const [historique, setHistorique] = useState<SemainePayee[] | null>(null);
+  // Arrivée depuis « Mettre en cuisine » (questionnaire) : le formulaire
+  // d'ajout s'ouvre rempli avec sa fiche ; il reste à cocher midi / soir.
+  useEffect(() => {
+    if (!aAjouter) return;
+    const fc = fiches.get(cleNom(aAjouter));
+    setVue("cuisine");
+    setFormulaire({
+      cle: null,
+      clientId: null,
+      nom: fc?.nom ?? aAjouter,
+      telephone: fc?.telephone ?? "",
+      adresse: fc?.adresse ?? "",
+      palier: fc?.palier ?? "",
+      allergies: fc?.allergies ?? "",
+      refus: fc?.refus ?? "",
+      note: fc?.note ?? "",
+      cases: [],
+    });
+    try {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search.replace(/[?&]ajouter=[^&]*/, "").replace(/^&/, "?"));
+    } catch {}
+    setTimeout(() => document.getElementById("formulaire-ajout")?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Bibliothèque PDF chargée d'avance : le PDF se fabrique sans attente au
   // toucher, ce qu'exige le partage sur iPhone.
   const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
@@ -1065,6 +1091,29 @@ export function CuisineClient({
       ) : (
         <div>
           <p className="text-xs font-bold text-c2b-muted">Ses repas cette semaine</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(
+              [
+                ["☀️ Midi toute la semaine", ["dejeuner"]],
+                ["🌙 Soir toute la semaine", ["diner"]],
+                ["☀️🌙 Midi + soir", ["dejeuner", "diner"]],
+              ] as const
+            ).map(([libelle, services]) => (
+              <button
+                key={libelle}
+                type="button"
+                onClick={() =>
+                  setFormulaire({
+                    ...formulaire,
+                    cases: jours.filter((d) => d >= aujourdhui).flatMap((d) => services.map((sv) => `${d}|${sv}`)),
+                  })
+                }
+                className="rounded-full bg-white border border-c2b-green/15 px-3 py-1.5 text-xs font-bold text-c2b-green"
+              >
+                {libelle}
+              </button>
+            ))}
+          </div>
           {cases(
             (d, s) => formulaire.cases.includes(`${d}|${s}`),
             (d, s) => {
@@ -1350,7 +1399,9 @@ export function CuisineClient({
             )}
           </ul>
           {formulaire && !formulaire.cle ? (
-            <div className="pt-2">{champsFormulaire}</div>
+            <div id="formulaire-ajout" className="scroll-mt-24 pt-2">
+              {champsFormulaire}
+            </div>
           ) : (
             <button onClick={ouvrirAjout} className="btn-secondary mt-2 w-full py-2.5 text-sm">
               <UserPlus size={16} /> Ajouter une personne

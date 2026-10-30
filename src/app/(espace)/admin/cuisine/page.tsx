@@ -22,9 +22,9 @@ function lundiDe(date: string) {
 // lundi au vendredi ; chaque case cochée est un repas sur la fiche du jour
 // (PDF à envoyer aux chefs). Par défaut : cette semaine, ou la suivante à
 // partir du samedi. `?date=` ouvre la semaine de ce jour.
-export default async function CuisinePage({ searchParams }: { searchParams: Promise<{ lundi?: string; date?: string }> }) {
+export default async function CuisinePage({ searchParams }: { searchParams: Promise<{ lundi?: string; date?: string; ajouter?: string }> }) {
   const { supabase } = await exigerAdmin();
-  const { lundi: demande, date: jourDemande } = await searchParams;
+  const { lundi: demande, date: jourDemande, ajouter } = await searchParams;
   const aujourdhui = dateDuJour();
   const jourActuel = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
   const parDefaut = jourActuel === 0 || jourActuel === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
@@ -115,6 +115,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         platsInitiaux={plats}
         fichesInitiales={fiches ?? []}
         sacsInitiaux={sacs ?? []}
+        aAjouter={typeof ajouter === "string" ? ajouter.slice(0, 80) : null}
       />
     </div>
   );

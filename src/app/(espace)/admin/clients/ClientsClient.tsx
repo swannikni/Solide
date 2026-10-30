@@ -90,6 +90,14 @@ const SUIVIS: { cle: SuiviProspect; libelle: string; couleur: string }[] = [
   { cle: "pas_interesse", libelle: "Pas intéressé", couleur: "bg-black/10 text-c2b-muted" },
 ];
 
+// Réponse libre du questionnaire, sans les « rien », « aucun », « RAS »…
+function reponseUtile(v: unknown, max: number): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t || /^(ras|r\.a\.s|rien|aucun|aucune|non|no|none|nan|pas de pr[ée]f[ée]rences?|-+|\.+)$/i.test(t)) return null;
+  return t.slice(0, max);
+}
+
 // Premier message à un prospect, avec son bilan du questionnaire.
 function messageProspect(q: Questionnaire) {
   const prenom = q.nom.trim().split(/\s+/)[0];
@@ -182,6 +190,34 @@ export function ClientsClient({
     setQuestionnaires((prev) => prev.map((x) => (x.id === q.id ? { ...x, ...maj } : x)));
     const { error } = await supabase.from("application_questionnaires").update(maj).eq("id", q.id);
     if (error) setQuestionnaires((prev) => prev.map((x) => (x.id === q.id ? q : x)));
+  }
+
+  // Questionnaire du site → fiche client de la cuisine (nom, téléphone,
+  // palier, allergies, refus, goûts), puis la cuisine s'ouvre avec le
+  // formulaire d'ajout prêt : il ne reste qu'à cocher midi / soir.
+  async function mettreEnCuisine(q: Questionnaire) {
+    const nom = q.nom.trim().replace(/\s+/g, " ").slice(0, 80);
+    if (!nom) return;
+    const { data: existante } = await supabase.from("application_personnes").select("id").eq("cle", nom.toLowerCase()).maybeSingle();
+    if (existante && !confirm(`Une fiche « ${nom} » existe déjà en cuisine. La mettre à jour avec ce questionnaire ?`)) return;
+    const { error } = await supabase.from("application_personnes").upsert(
+      {
+        nom,
+        telephone: q.telephone ? q.telephone.slice(0, 30) : null,
+        palier: q.palier,
+        allergies: reponseUtile(q.reponses?.allergies, 300),
+        refus: reponseUtile(q.reponses?.refuses, 300),
+        note: (() => {
+          const aime = reponseUtile(q.reponses?.preferes, 190);
+          return aime ? `Aime : ${aime}` : null;
+        })(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "cle" }
+    );
+    if (error) return alert("Fiche impossible à créer, réessayez.");
+    await changerSuivi(q, "client");
+    window.location.href = `/admin/cuisine?ajouter=${encodeURIComponent(nom)}`;
   }
 
   async function ignorerQuestionnaire(q: Questionnaire) {
@@ -627,6 +663,9 @@ export function ClientsClient({
                   Créer son compte
                 </button>
               </div>
+              <button onClick={() => mettreEnCuisine(q)} className="btn-primary mt-2 w-full py-2.5 text-sm">
+                🍳 Mettre en cuisine (midi / soir)
+              </button>
             </div>
           ))}
           {!saisieQ && questionnairesTrouves.length > 3 && (
