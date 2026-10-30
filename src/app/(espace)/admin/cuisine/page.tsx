@@ -6,6 +6,7 @@ import {
   type ExtraSemaine,
   type FicheClient,
   type SacJour,
+  type DemandeSemaine,
   type PersonneHistorique,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
@@ -33,7 +34,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const vendredi = decalerDate(lundi, 4);
   const lundiAvant = decalerDate(lundi, -7);
 
-  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }, { data: fiches }, { data: sacs }] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }, { data: fiches }, { data: demandes }, { data: sacs }] = await Promise.all([
     supabase
       .from("application_clients")
       .select("id, nom, palier, cuisine_allergies, cuisine_refus, telephone, livraison_adresse")
@@ -73,10 +74,17 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
     // Fiches clients (une par personne) et sacs prêts / livrés de la semaine.
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier")
       .order("nom")
       .limit(2000)
       .returns<FicheClient[]>(),
+    // Semaines envoyées par les clients depuis leur lien, à valider.
+    supabase
+      .from("application_demandes_semaine")
+      .select("*, personne:application_personnes(nom, telephone)")
+      .eq("statut", "a_valider")
+      .order("created_at")
+      .returns<DemandeSemaine[]>(),
     supabase
       .from("application_cuisine_sacs")
       .select("date, cle, pret, livre")
@@ -115,6 +123,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         platsInitiaux={plats}
         fichesInitiales={fiches ?? []}
         sacsInitiaux={sacs ?? []}
+        demandesInitiales={demandes ?? []}
         aAjouter={typeof ajouter === "string" ? ajouter.slice(0, 80) : null}
       />
     </div>

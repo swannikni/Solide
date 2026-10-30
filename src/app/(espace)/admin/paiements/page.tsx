@@ -2,6 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { PaiementsClient, type Paiement, type PersonneMois } from "@/app/(espace)/admin/paiements/PaiementsClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { completerTarifs, lundiDe, montantAuto, semainesDe, type RepasDuJour, type Tarifs } from "@/lib/paiements";
+import { prixZone, type Zone } from "@/lib/ma-semaine";
 
 export const dynamic = "force-dynamic";
 
@@ -88,9 +89,18 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
   }
   for (const e of extras ?? []) noter(`n:${e.nom.trim().toLowerCase()}`, e.nom.trim(), null, e.telephone, e.date, e.quantite);
 
+  // Livraison : prix par jour livré selon la zone de la fiche client.
+  const { data: zones } = await supabase
+    .from("application_personnes")
+    .select("nom, zone")
+    .not("zone", "is", null)
+    .returns<{ nom: string; zone: Zone }[]>();
+  const fraisJour = new Map((zones ?? []).map((z) => [`n:${z.nom.trim().toLowerCase()}`, prixZone(z.zone) ?? 0]));
+
   const personnes: PersonneMois[] = [...repas.entries()]
     .map(([cle, p]) => {
-      const semaines = semainesDe(p.jours);
+      const frais = fraisJour.get(cle) ?? 0;
+      const semaines = semainesDe(p.jours).map((s) => (frais ? { ...s, livraison: s.jours * frais } : s));
       const offre = offreDe.get(cle) ?? null;
       return {
         cle,

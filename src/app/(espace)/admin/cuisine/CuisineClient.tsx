@@ -8,6 +8,7 @@ import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
 import { lundiDe } from "@/lib/paiements";
+import { nouveauJeton, type Zone } from "@/lib/ma-semaine";
 import { boitesDe, genererFichePdf, libellePalier, nomAvecBoites, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
 import type { Palier } from "@/lib/types";
 
@@ -77,6 +78,30 @@ export interface FicheClient {
   allergies: string | null;
   refus: string | null;
   note: string | null;
+  jeton?: string | null; // lien personnel « Ma semaine »
+  zone?: Zone | null;
+  quartier?: string | null;
+}
+
+// Semaine envoyée par un client depuis son lien « Ma semaine », à valider.
+export interface DemandeSemaine {
+  id: string;
+  personne_id: string;
+  semaine: string;
+  repas: { date: string; service: Service }[];
+  allergies: string | null;
+  refus: string | null;
+  note: string | null;
+  zone: Zone | null;
+  quartier: string | null;
+  adresse: string | null;
+  lat: number | null;
+  lng: number | null;
+  prix_repas: number | null;
+  prix_livraison: number | null;
+  total: number | null;
+  created_at: string;
+  personne: { nom: string; telephone: string | null } | null;
 }
 
 // Sac du jour d'une personne : prêt, puis livré (partagé entre téléphones).
@@ -181,6 +206,7 @@ export function CuisineClient({
   fichesInitiales,
   sacsInitiaux,
   aAjouter = null,
+  demandesInitiales = [],
 }: {
   lundi: string;
   aujourdhui: string;
@@ -193,6 +219,7 @@ export function CuisineClient({
   fichesInitiales: FicheClient[];
   sacsInitiaux: SacJour[];
   aAjouter?: string | null; // venant d'un questionnaire : formulaire d'ajout prêt
+  demandesInitiales?: DemandeSemaine[]; // semaines envoyées par les clients, à valider
 }) {
   const supabase = createClient();
   // Du lundi au vendredi (pas de livraison le week-end : le repas du samedi
@@ -269,6 +296,9 @@ export function CuisineClient({
   // Fiches clients (une par nom) et historique de paiement de la fiche ouverte.
   const [fiches, setFiches] = useState<Map<string, FicheClient>>(() => new Map(fichesInitiales.map((x) => [cleNom(x.nom), x])));
   const [historique, setHistorique] = useState<SemainePayee[] | null>(null);
+  const [demandes, setDemandes] = useState(demandesInitiales);
+  const [demandesOuvertes, setDemandesOuvertes] = useState(demandesInitiales.length > 0);
+  const [menuOuvert, setMenuOuvert] = useState(false);
   // Arrivée depuis « Mettre en cuisine » (questionnaire) : le formulaire
   // d'ajout s'ouvre rempli avec sa fiche ; il reste à cocher midi / soir.
   useEffect(() => {
@@ -638,7 +668,7 @@ export function CuisineClient({
         const { data: fiche, error: e1 } = await supabase
           .from("application_personnes")
           .upsert({ nom, ...coord, ...champs, updated_at: new Date().toISOString() }, { onConflict: "cle" })
-          .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+          .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier")
           .single<FicheClient>();
         const maj = { nom, ...champs, ...coord };
         const [{ error: e2 }, { error: e3 }] = await Promise.all([
@@ -724,7 +754,7 @@ export function CuisineClient({
           { nom, telephone: texte(f.telephone, 30), adresse: texte(f.adresse, 200), ...champs, updated_at: new Date().toISOString() },
           { onConflict: "cle" }
         )
-        .select("id, nom, telephone, adresse, palier, allergies, refus, note")
+        .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier")
         .single<FicheClient>();
       fin("formulaire");
       if (error) return setMessage("Ajout impossible, réessayez.");
@@ -853,6 +883,107 @@ export function CuisineClient({
     } catch {
       setMessage("Copie impossible sur cet appareil.");
     }
+  }
+
+  // ---- « Ma semaine » : lien client et semaines à valider ----
+
+  // Envoie au client son lien personnel sur WhatsApp (créé la première fois).
+  async function envoyerLien(nom: string, telephone: string | null) {
+    const fc = fiches.get(cleNom(nom));
+    if (!fc) return setMessage("Enregistrez d'abord sa fiche (bouton Enregistrer), puis renvoyez le lien.");
+    let jeton = fc.jeton;
+    if (!jeton) {
+      jeton = nouveauJeton();
+      const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", fc.id);
+      if (error) return setMessage("Lien impossible à créer, réessayez.");
+      setFiches((m) => new Map(m).set(cleNom(nom), { ...fc, jeton }));
+    }
+    const lien = `${window.location.origin}/ma-semaine/${jeton}`;
+    const prenom = nom.trim().split(/\s+/)[0];
+    const texteLien = `Bonjour ${prenom} 👋 Voici ton lien Chef2Box pour choisir tes repas de la semaine (midi, soir), tes allergies et ta livraison. Tu vois le menu et le prix directement : ${lien}`;
+    const numero = numeroWa(telephone ?? fc.telephone);
+    window.open(numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texteLien)}` : `https://wa.me/?text=${encodeURIComponent(texteLien)}`, "_blank");
+  }
+
+  const resumeRepas = (repas: { date: string; service: Service }[]) =>
+    [...repas]
+      .sort((a, b) => (a.date + a.service).localeCompare(b.date + b.service))
+      .map((r) => `${jourCourt(r.date)} ${r.service === "dejeuner" ? "midi" : "soir"}`)
+      .join(", ");
+
+  // Valide une semaine envoyée : fiche mise à jour, repas ajoutés au planning.
+  async function validerDemande(d: DemandeSemaine) {
+    const nom = d.personne?.nom;
+    if (!nom) return;
+    debut(d.id);
+    const fc = fiches.get(cleNom(nom));
+    const majFiche = {
+      allergies: d.allergies,
+      refus: d.refus,
+      quartier: d.quartier,
+      zone: d.zone,
+      ...(d.adresse ? { adresse: d.adresse } : {}),
+      ...(d.lat != null && d.lng != null ? { lat: d.lat, lng: d.lng } : {}),
+      ...(d.note ? { note: d.note } : {}),
+      updated_at: new Date().toISOString(),
+    };
+    const { error: e1 } = await supabase.from("application_personnes").update(majFiche).eq("id", d.personne_id);
+    const dates = [...new Set(d.repas.map((r) => r.date))];
+    const { data: existants } = await supabase
+      .from("application_cuisine_extras")
+      .select("date, repas_type")
+      .ilike("nom", nom.replace(/[%_\\]/g, "\\$&"))
+      .in("date", dates)
+      .returns<{ date: string; repas_type: Service }[]>();
+    const manquants = d.repas.filter((r) => !(existants ?? []).some((x) => x.date === r.date && x.repas_type === r.service));
+    const { error: e2 } = manquants.length
+      ? await supabase.from("application_cuisine_extras").insert(
+          manquants.map((r) => ({
+            date: r.date,
+            repas_type: r.service,
+            nom,
+            palier: fc?.palier ?? null,
+            allergies: d.allergies,
+            refus: d.refus,
+            note: d.note ?? fc?.note ?? null,
+            telephone: fc?.telephone ?? d.personne?.telephone ?? null,
+            adresse: d.adresse ?? fc?.adresse ?? null,
+            lat: d.lat,
+            lng: d.lng,
+          }))
+        )
+      : { error: null };
+    const { error: e3 } = await supabase
+      .from("application_demandes_semaine")
+      .update({ statut: "validee", traitee_le: new Date().toISOString() })
+      .eq("id", d.id);
+    fin(d.id);
+    if (e1 || e2 || e3) return setMessage("Validation incomplète, réessayez.");
+    // On rouvre la semaine concernée pour voir la personne au planning.
+    window.location.href = `/admin/cuisine?date=${d.repas.map((r) => r.date).sort()[0]}`;
+  }
+
+  async function refuserDemande(d: DemandeSemaine) {
+    if (!window.confirm(`Refuser la semaine de ${d.personne?.nom ?? "ce client"} ?`)) return;
+    const { error } = await supabase
+      .from("application_demandes_semaine")
+      .update({ statut: "refusee", traitee_le: new Date().toISOString() })
+      .eq("id", d.id);
+    if (error) return setMessage("Refus impossible, réessayez.");
+    setDemandes((prev) => prev.filter((x) => x.id !== d.id));
+  }
+
+  // Menu de la semaine en texte (WhatsApp, Instagram…).
+  function texteMenu() {
+    const lignes = [`*MENU CHEF2BOX — semaine du ${dateCourte(lundi, { day: "numeric", month: "long" })}*`, ""];
+    for (const d of jours) {
+      const m = plats[d];
+      lignes.push(`*${dateCourte(d, { weekday: "long", day: "numeric" })}*`);
+      lignes.push(`☀️ ${m?.dejeuner?.trim() || "—"}`);
+      lignes.push(`🌙 ${m?.diner?.trim() || "—"}`);
+      lignes.push("");
+    }
+    return lignes.join("\n").trim();
   }
 
   async function enregistrerPlat(date: string, service: Service, valeur: string) {
@@ -1029,6 +1160,15 @@ export function CuisineClient({
       </label>
       {personneModifiee ? (
         <>
+          {!personneModifiee.clientId && (
+            <button
+              type="button"
+              onClick={() => envoyerLien(personneModifiee.nom, texte(formulaire.telephone, 30))}
+              className="w-full rounded-full bg-[#25D366] py-2.5 text-sm font-bold text-white"
+            >
+              📲 Envoyer le lien « Ma semaine »
+            </button>
+          )}
           <p className="text-[11px] text-c2b-muted">S&apos;applique à sa fiche et à tous ses repas, cette semaine et les suivantes.</p>
           <div className="rounded-xl bg-white p-3">
             <p className="text-xs font-bold text-c2b-muted">Paiements des dernières semaines</p>
@@ -1620,6 +1760,118 @@ export function CuisineClient({
           <ChevronRight size={20} />
         </Link>
       </div>
+
+      {/* Semaines envoyées par les clients (lien « Ma semaine »), à valider. */}
+      {demandes.length > 0 && (
+        <section className="carte overflow-hidden border-c2b-gold/60">
+          <button onClick={() => setDemandesOuvertes((o) => !o)} className="flex w-full items-center gap-2 px-4 py-3.5 text-left">
+            <span className="flex-1 font-bold text-c2b-green">📥 Semaines à valider</span>
+            <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{demandes.length}</span>
+            <ChevronDown size={18} className={`text-c2b-muted transition-transform ${demandesOuvertes ? "rotate-180" : ""}`} />
+          </button>
+          {demandesOuvertes && (
+            <ul className="space-y-2 border-t border-c2b-green/10 p-3">
+              {demandes.map((d) => {
+                const numero = numeroWa(d.personne?.telephone);
+                const confirmation = `C'est validé ✅ ${d.personne?.nom.split(/\s+/)[0] ?? ""}, ta semaine Chef2Box du ${dateCourte(d.semaine, { day: "numeric", month: "short" })} : ${resumeRepas(d.repas)}. Total : ${d.total != null ? `${d.total} DH` : `${d.prix_repas} DH + livraison sur devis`}. À très vite !`;
+                return (
+                  <li key={d.id} className="rounded-xl bg-c2b-cream p-3 text-sm">
+                    <p className="font-bold text-c2b-green">
+                      {d.personne?.nom ?? "Client"}{" "}
+                      <span className="text-xs font-semibold text-c2b-muted">· sem. du {dateCourte(d.semaine, { day: "numeric", month: "short" })}</span>
+                    </p>
+                    <p className="mt-1 text-c2b-text">{resumeRepas(d.repas)}</p>
+                    <p className="mt-1 text-xs text-c2b-muted">
+                      📍 {d.quartier ?? "—"}
+                      {d.adresse ? ` · ${d.adresse}` : ""}
+                      {d.lat != null ? " · position GPS ✓" : ""}
+                    </p>
+                    {(d.allergies || d.refus || d.note) && (
+                      <p className="mt-1 text-xs">
+                        {d.allergies && <span className="font-bold text-red-700">⚠️ {d.allergies} </span>}
+                        {d.refus && <span className="text-c2b-muted">· sans {d.refus} </span>}
+                        {d.note && <span className="italic text-c2b-muted">· {d.note}</span>}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm font-bold text-c2b-green">
+                      {d.prix_repas} DH + livraison {d.prix_livraison == null ? "sur devis" : d.prix_livraison === 0 ? "gratuite" : `${d.prix_livraison} DH`}
+                      {d.total != null && ` = ${d.total} DH`}
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                      <button onClick={() => validerDemande(d)} disabled={occupe(d.id)} className="btn-primary py-2 text-xs">
+                        {occupe(d.id) ? "…" : "✓ Valider"}
+                      </button>
+                      <a
+                        href={numero ? `https://wa.me/${numero}?text=${encodeURIComponent(confirmation)}` : `https://wa.me/?text=${encodeURIComponent(confirmation)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center rounded-full bg-[#25D366] py-2 text-xs font-bold text-white"
+                      >
+                        WhatsApp
+                      </a>
+                      <button onClick={() => refuserDemande(d)} className="rounded-full border border-red-200 py-2 text-xs font-bold text-red-700">
+                        ✗ Refuser
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Menu de la semaine : visible par les clients sur « Ma semaine ». */}
+      <section className="carte overflow-hidden">
+        <button onClick={() => setMenuOuvert((o) => !o)} className="flex w-full items-center gap-2 px-4 py-3.5 text-left">
+          <span className="flex-1 font-bold text-c2b-green">🍽️ Menu de la semaine</span>
+          <span className="text-xs font-semibold text-c2b-muted">
+            {jours.filter((d) => plats[d]?.dejeuner?.trim() || plats[d]?.diner?.trim()).length} / 5 jours
+          </span>
+          <ChevronDown size={18} className={`text-c2b-muted transition-transform ${menuOuvert ? "rotate-180" : ""}`} />
+        </button>
+        {menuOuvert && (
+          <div className="space-y-3 border-t border-c2b-green/10 p-3">
+            <p className="text-xs text-c2b-muted">
+              Les clients le voient sur leur lien « Ma semaine ». Enregistré automatiquement. Pour la semaine suivante, changez de semaine avec ▶ en haut.
+            </p>
+            {jours.map((d) => (
+              <div key={d}>
+                <p className="mb-1 text-xs font-bold uppercase text-c2b-green">{dateCourte(d, { weekday: "long", day: "numeric", month: "short" })}</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {SERVICES.map((sv) => (
+                    <input
+                      key={`${d}-${sv.cle}`}
+                      defaultValue={plats[d]?.[sv.cle] ?? ""}
+                      onChange={(e) => setPlats((pl) => ({ ...pl, [d]: { ...(pl[d] ?? { dejeuner: "", diner: "" }), [sv.cle]: e.target.value } }))}
+                      onBlur={(e) => enregistrerPlat(d, sv.cle, e.target.value)}
+                      placeholder={`${sv.icone} ${sv.libelle}`}
+                      maxLength={120}
+                      className="champ py-2 text-sm"
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(texteMenu())}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] px-3 py-2.5 text-sm font-bold text-white"
+              >
+                <Send size={15} /> Partager
+              </a>
+              <button
+                onClick={() => navigator.clipboard.writeText(texteMenu()).then(() => setMessage("Menu copié.")).catch(() => {})}
+                className="btn-secondary px-3 py-2 text-sm"
+              >
+                <Copy size={15} /> Copier
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {aReprendre > 0 && (
         <button onClick={reprendreSemaineAvant} disabled={occupe("reprise")} className="btn-secondary w-full">
