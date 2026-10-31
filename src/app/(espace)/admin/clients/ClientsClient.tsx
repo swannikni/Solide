@@ -673,6 +673,27 @@ export function ClientsClient({
     }
   }
 
+  // Palier d'un client (Clients de la semaine) : sa fiche et ses repas à
+  // partir de cette semaine ; les semaines passées gardent le leur.
+  async function changerPalierSemaine(nom: string, clientId: string | null, palier: Palier) {
+    const depuis = semaines?.lundis[0] ?? "";
+    if (clientId) {
+      const [r1, r2] = await Promise.all([
+        supabase.from("application_clients").update({ palier }).eq("id", clientId),
+        supabase.from("application_commandes").update({ palier: null }).eq("client_id", clientId).gte("date_livraison", depuis),
+      ]);
+      if (r1.error || r2.error) return alert("Palier non enregistré, réessayez.");
+      setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, palier } : c)));
+      return;
+    }
+    const [r1, r2] = await Promise.all([
+      supabase.from("application_personnes").upsert({ nom, palier, updated_at: new Date().toISOString() }, { onConflict: "cle" }),
+      supabase.from("application_cuisine_extras").update({ palier }).ilike("nom", nom.replace(/[%_\\]/g, "\\$&")).gte("date", depuis),
+    ]);
+    if (r1.error || r2.error) return alert("Palier non enregistré, réessayez.");
+    setFiches((prev) => prev.map((f) => (f.nom.trim().toLowerCase() === nom.toLowerCase() ? { ...f, palier } : f)));
+  }
+
   // Zone de livraison d'un client (prix de la livraison), enregistrée tout de suite.
   async function changerZone(fc: FicheResume, zone: Zone | null) {
     setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, zone } : f)));
@@ -900,6 +921,11 @@ export function ClientsClient({
                                 className="min-w-0 flex-1 truncate text-left text-sm font-bold text-c2b-green"
                               >
                                 {p.nom}
+                                {(() => {
+                                  const cid = p.repas.find((r) => r.clientId)?.clientId;
+                                  const pl = cid ? clients.find((c) => c.id === cid)?.palier : fc?.palier;
+                                  return pl ? <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{pl}</span> : null;
+                                })()}
                                 {fc?.allergies && <span className="ml-1.5 text-[11px] font-bold text-red-700">⚠️ {fc.allergies}</span>}
                                 <span className="ml-1.5 text-[11px] font-semibold text-c2b-gold">{semaineOuverte === p.nom ? "Fermer" : "Modifier"}</span>
                               </button>
@@ -962,6 +988,25 @@ export function ClientsClient({
                                 );
                                 return (
                                   <div className="mt-3 space-y-3 rounded-xl bg-c2b-cream p-3">
+                                    {(() => {
+                                      const actuel = clientId ? clients.find((c) => c.id === clientId)?.palier ?? null : fc?.palier ?? null;
+                                      return (
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className="text-xs font-bold text-c2b-muted">Palier :</span>
+                                          {(["P1", "P2", "P3", "P4", "P5", "P6"] as Palier[]).map((pl) => (
+                                            <button
+                                              key={pl}
+                                              onClick={() => changerPalierSemaine(p.nom, clientId, pl)}
+                                              className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                                                actuel === pl ? "bg-c2b-gold text-c2b-green" : "bg-white border border-c2b-green/15 text-c2b-green"
+                                              }`}
+                                            >
+                                              {pl}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
                                     <p className="text-xs font-bold text-c2b-muted">Ses repas — touchez pour ajouter ou enlever</p>
                                     <div className="space-y-1.5">
                                       {jours.map((d, i) => (
