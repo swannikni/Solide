@@ -249,6 +249,8 @@ export function CuisineClient({
   );
   // Fiche des personnes ajoutées ou modifiées à l'instant.
   const [nouvelles, setNouvelles] = useState<Personne[]>([]);
+  // Choix rapide du palier depuis la liste du jour (clé de la personne).
+  const [palierOuvert, setPalierOuvert] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<Set<string>>(new Set());
   const [formulaire, setFormulaire] = useState<Formulaire | null>(null);
   // Jour déroulé (un seul à la fois).
@@ -510,6 +512,40 @@ export function CuisineClient({
     if (error) return setMessage("Nombre de boîtes non enregistré, réessayez.");
     if (p.clientId) setCommandes((prev) => prev.map((c) => (c.id === ligne.id ? { ...c, quantite: q } : c)));
     else setExtras((prev) => prev.map((e) => (e.id === ligne.id ? { ...e, quantite: q } : e)));
+  }
+
+  // Change le palier d'une personne : sa fiche et ses repas de cette semaine
+  // et des suivantes (les semaines passées gardent leur palier).
+  async function changerPalier(p: Personne, palier: Palier) {
+    setPalierOuvert(null);
+    if (p.palier === palier) return;
+    debut(p.cle);
+    try {
+      if (p.clientId) {
+        const [r1, r2] = await Promise.all([
+          supabase.from("application_clients").update({ palier }).eq("id", p.clientId),
+          supabase.from("application_commandes").update({ palier: null }).eq("client_id", p.clientId).gte("date_livraison", lundi),
+        ]);
+        if (r1.error || r2.error) throw r1.error ?? r2.error;
+        setClients((prev) => prev.map((c) => (c.id === p.clientId ? { ...c, palier } : c)));
+        setCommandes((prev) => prev.map((c) => (c.client_id === p.clientId && c.date_livraison >= lundi ? { ...c, palier: null } : c)));
+      } else {
+        const [r1, r2] = await Promise.all([
+          supabase.from("application_personnes").upsert({ nom: p.nom, palier, updated_at: new Date().toISOString() }, { onConflict: "cle" }),
+          supabase.from("application_cuisine_extras").update({ palier }).ilike("nom", p.nom.replace(/[%_\\]/g, "\\$&")).gte("date", lundi),
+        ]);
+        if (r1.error || r2.error) throw r1.error ?? r2.error;
+        setExtras((prev) => prev.map((e) => (cleNom(e.nom) === cleNom(p.nom) && e.date >= lundi ? { ...e, palier } : e)));
+        const fc = fiches.get(cleNom(p.nom));
+        if (fc) setFiches((m) => new Map(m).set(cleNom(p.nom), { ...fc, palier }));
+      }
+      setNouvelles((prev) => prev.map((x) => (x.cle === p.cle ? { ...x, palier } : x)));
+      setMessage("");
+    } catch {
+      setMessage("Palier non enregistré, réessayez.");
+    } finally {
+      fin(p.cle);
+    }
   }
 
   // Retire un repas depuis la fiche du jour (✕ à côté du nom).
@@ -1714,13 +1750,12 @@ export function CuisineClient({
                 ) : (
                   <li
                     key={p.cle}
-                    className={`relative flex items-center gap-2 overflow-hidden rounded-xl py-2 pl-4 pr-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.fond ?? "bg-white/60"}`}
+                    className={`relative flex flex-wrap items-center gap-2 overflow-hidden rounded-xl py-2 pl-4 pr-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.fond ?? "bg-white/60"}`}
                   >
                     <span className={`absolute inset-y-0 left-0 w-2 ${formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"))?.barre ?? "bg-black/5"}`} />
                     <button onClick={() => ouvrirModification(p)} className="min-w-0 flex-1 text-left" aria-label={`Modifier ${p.nom}`}>
                       <p className={`truncate text-sm font-bold ${mange(p) ? "text-c2b-green" : "text-c2b-muted"}`}>
                         {p.nom}
-                        <span className="ml-1.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-bold text-c2b-green">{p.palier ?? "—"}</span>
                       </p>
                       {(() => {
                         const f = formuleDe(coche(p, date, "dejeuner"), coche(p, date, "diner"));
@@ -1737,6 +1772,15 @@ export function CuisineClient({
                           {p.note && <span className="italic">· {p.note}</span>}
                         </p>
                       )}
+                    </button>
+                    <button
+                      onClick={() => setPalierOuvert(palierOuvert === p.cle ? null : p.cle)}
+                      disabled={occupe(p.cle)}
+                      aria-expanded={palierOuvert === p.cle}
+                      aria-label={`Palier de ${p.nom}`}
+                      className="flex h-10 min-w-[40px] flex-shrink-0 items-center justify-center rounded-xl border border-c2b-gold/50 bg-white px-1.5 text-xs font-extrabold text-c2b-green disabled:opacity-50"
+                    >
+                      {p.palier ?? "P ?"}
                     </button>
                     {SERVICES.map((s) => {
                       const actif = coche(p, date, s.cle);
@@ -1772,6 +1816,22 @@ export function CuisineClient({
                       >
                         <Trash2 size={15} />
                       </button>
+                    )}
+                    {palierOuvert === p.cle && (
+                      <div className="flex w-full flex-wrap items-center gap-1.5 pt-1">
+                        <span className="text-[11px] font-bold text-c2b-muted">Palier :</span>
+                        {PALIERS.map((pl) => (
+                          <button
+                            key={pl}
+                            onClick={() => changerPalier(p, pl)}
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                              p.palier === pl ? "bg-c2b-gold text-c2b-green" : "bg-white border border-c2b-green/15 text-c2b-green"
+                            }`}
+                          >
+                            {pl}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </li>
                 )
