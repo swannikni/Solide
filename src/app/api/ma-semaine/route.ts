@@ -15,7 +15,19 @@ import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 export const dynamic = "force-dynamic";
 
 const texte = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
-const nombre = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? v : null);
+// Lien de position (Google Maps…) collé par le client, facultatif : gardé
+// s'il tient (150 caractères) ; ses coordonnées servent si on les y trouve.
+// Un lien invalide est ignoré : la commande passe quand même.
+function lirePosition(v: unknown) {
+  const lien = typeof v === "string" && /^https?:\/\/\S+$/i.test(v.trim()) ? v.trim() : null;
+  if (!lien) return null;
+  const m = lien.match(/(?:@|[?&](?:q|query|ll)=)(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/);
+  const lat = m ? Number(m[1]) : null;
+  const lng = m ? Number(m[2]) : null;
+  const coords = lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  return { complement: lien.length <= 150 ? lien : null, ...(coords ?? {}) };
+}
+
 const motif = (nom: string) => nom.replace(/[%_\\]/g, "\\$&");
 // « lun. 2 nov. midi »
 const libelleRepas = (r: { date: string; service: Service }) =>
@@ -26,6 +38,7 @@ interface Fiche {
   nom: string;
   telephone: string | null;
   adresse: string | null;
+  complement: string | null;
   lat: number | null;
   lng: number | null;
   palier: string | null;
@@ -69,7 +82,7 @@ export async function POST(request: Request) {
   if (!admin) return repondre({ erreur: "Service indisponible, réessayez plus tard." }, 503);
   const { data: fiche } = await admin
     .from("application_personnes")
-    .select("id, nom, telephone, adresse, lat, lng, palier, allergies, refus, note, zone, quartier, livraison_offerte, remise")
+    .select("id, nom, telephone, adresse, complement, lat, lng, palier, allergies, refus, note, zone, quartier, livraison_offerte, remise")
     .eq("jeton", jeton)
     .maybeSingle<Fiche>();
   if (!fiche) return repondre({ erreur: "Lien invalide ou expiré : demandez un nouveau lien à Chef2Box." }, 404);
@@ -94,7 +107,7 @@ export async function POST(request: Request) {
       note: texte(d.note, 200),
       ...(quartier && zone ? { quartier, zone } : {}),
       adresse: texte(d.adresse, 200),
-      ...(nombre(d.lat, -90, 90) != null && nombre(d.lng, -180, 180) != null ? { lat: d.lat as number, lng: d.lng as number } : {}),
+      ...(lirePosition(d.lien) ?? (typeof d.lien === "string" && !d.lien.trim() ? { complement: null } : {})),
       updated_at: new Date().toISOString(),
     };
     const { error } = await admin.from("application_personnes").update(maj).eq("id", fiche.id);
@@ -110,7 +123,13 @@ export async function POST(request: Request) {
     // Ses repas à venir suivent (allergies, refus, adresse).
     await admin
       .from("application_cuisine_extras")
-      .update({ allergies: maj.allergies, refus: maj.refus, adresse: maj.adresse, ...("lat" in maj ? { lat: maj.lat, lng: maj.lng } : {}) })
+      .update({
+        allergies: maj.allergies,
+        refus: maj.refus,
+        adresse: maj.adresse,
+        ...("complement" in maj ? { complement: maj.complement } : {}),
+        ...("lat" in maj ? { lat: maj.lat, lng: maj.lng } : {}),
+      })
       .ilike("nom", motif(fiche.nom))
       .gt("date", dateDuJour());
     return repondre({ ok: true });
@@ -176,11 +195,13 @@ export async function POST(request: Request) {
   const zone = quartier ? zoneDuQuartier(quartier) : null;
   if (!quartier || !zone) return repondre({ erreur: "Choisissez votre quartier de livraison." }, 400);
   const adresse = texte(d.adresse, 200) ?? fiche.adresse;
-  const lat = nombre(d.lat, -90, 90) ?? fiche.lat;
-  const lng = nombre(d.lng, -180, 180) ?? fiche.lng;
+  const position = lirePosition(d.lien);
+  const lat = position?.lat ?? fiche.lat;
+  const lng = position?.lng ?? fiche.lng;
+  const complement = position ? position.complement : typeof d.lien === "string" && !d.lien.trim() ? null : fiche.complement;
   await admin
     .from("application_personnes")
-    .update({ quartier, zone, adresse, lat, lng, updated_at: new Date().toISOString() })
+    .update({ quartier, zone, adresse, complement, lat, lng, updated_at: new Date().toISOString() })
     .eq("id", fiche.id);
 
   const { data: parametre } = await admin.from("application_parametres").select("valeur").eq("cle", "tarifs").maybeSingle<{ valeur: object }>();
@@ -249,6 +270,7 @@ export async function POST(request: Request) {
         note: fiche.note,
         telephone: fiche.telephone,
         adresse,
+        complement,
         lat,
         lng,
       }))

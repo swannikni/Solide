@@ -54,7 +54,7 @@ export function MonEspaceClient({
   prenom: string;
   aujourdhui: string;
   connu: boolean;
-  fiche: { allergies: string; refus: string; note: string; quartier: string; adresse: string; position: boolean };
+  fiche: { allergies: string; refus: string; note: string; quartier: string; adresse: string; lien: string };
   semainesOuvertes: SemaineOuverte[];
   semainesCompte: SemaineCompte[];
   tarifs: Tarifs;
@@ -67,9 +67,14 @@ export function MonEspaceClient({
   const [choix, setChoix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(semainesOuvertes.map((s) => [s.lundi, (s.enAttente ?? s.prevus).map(cle)]))
   );
-  const [form, setForm] = useState({ allergies: fiche.allergies, refus: fiche.refus, note: fiche.note, quartier: fiche.quartier, adresse: fiche.adresse });
-  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [etatPosition, setEtatPosition] = useState(fiche.position ? "Position déjà enregistrée ✓" : "");
+  const [form, setForm] = useState({
+    allergies: fiche.allergies,
+    refus: fiche.refus,
+    note: fiche.note,
+    quartier: fiche.quartier,
+    adresse: fiche.adresse,
+    lien: fiche.lien,
+  });
   const [enCours, setEnCours] = useState("");
   const [message, setMessage] = useState<{ texte: string; ok: boolean } | null>(null);
 
@@ -110,26 +115,13 @@ export function MonEspaceClient({
     }
   }
 
-  function partagerPosition() {
-    if (!navigator.geolocation) return setEtatPosition("Position indisponible sur ce téléphone.");
-    setEtatPosition("Recherche de votre position…");
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setPosition({ lat: p.coords.latitude, lng: p.coords.longitude });
-        setEtatPosition("Position enregistrée ✓");
-      },
-      () => setEtatPosition("Position refusée : indiquez votre adresse."),
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
-  }
-
   async function commander() {
     if (!semaine) return;
     if (coches.length === 0 && semaine.prevus.length === 0) return setMessage({ texte: "Choisissez au moins un repas.", ok: false });
     if (!zone) return setMessage({ texte: "Choisissez votre quartier de livraison.", ok: false });
     const modifiables = new Set(semaine.jours.filter((j) => j.modifiable).map((j) => j.date));
     const d = await appeler(
-      { action: "commander", semaine: lundi, repas: repasSemaine.filter((r) => modifiables.has(r.date)), quartier: form.quartier, adresse: form.adresse, ...(position ?? {}) },
+      { action: "commander", semaine: lundi, repas: repasSemaine.filter((r) => modifiables.has(r.date)), quartier: form.quartier, adresse: form.adresse, lien: form.lien },
       "commander"
     );
     if (!d) return;
@@ -157,7 +149,7 @@ export function MonEspaceClient({
   }
 
   async function enregistrerFiche() {
-    const d = await appeler({ action: "fiche", ...form, ...(position ?? {}) }, "fiche");
+    const d = await appeler({ action: "fiche", ...form }, "fiche");
     if (d) setMessage({ texte: "Fiche enregistrée ✓", ok: true });
   }
 
@@ -210,7 +202,7 @@ export function MonEspaceClient({
       {zone !== "retrait" && (
         <>
           <label className="block text-xs font-bold text-c2b-muted">
-            Adresse (repère pour le livreur)
+            Adresse (rue, résidence, étage, repère…)
             <input
               value={form.adresse}
               onChange={(e) => setForm({ ...form, adresse: e.target.value })}
@@ -219,10 +211,20 @@ export function MonEspaceClient({
               className="champ mt-1 py-2.5 text-sm font-normal"
             />
           </label>
-          <button onClick={partagerPosition} type="button" className="btn-secondary w-full py-2.5 text-sm">
-            <MapPin size={16} /> Partager ma position
-          </button>
-          {etatPosition && <p className="text-xs font-semibold text-c2b-green">{etatPosition}</p>}
+          <label className="block text-xs font-bold text-c2b-muted">
+            <span className="flex items-center gap-1">
+              <MapPin size={13} /> Lien Google Maps (facultatif)
+            </span>
+            <input
+              value={form.lien}
+              onChange={(e) => setForm({ ...form, lien: e.target.value })}
+              placeholder="Collez le lien de votre position"
+              inputMode="url"
+              maxLength={300}
+              className="champ mt-1 py-2.5 text-sm font-normal"
+            />
+            <span className="mt-1 block font-normal">Dans Google Maps : touchez votre position → Partager → Copier le lien.</span>
+          </label>
         </>
       )}
     </section>

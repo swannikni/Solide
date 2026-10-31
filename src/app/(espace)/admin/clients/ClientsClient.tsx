@@ -127,6 +127,7 @@ export interface FicheResume {
   livraison_offerte?: boolean; // prix du client
   remise?: number; // % sur les repas
   zone?: Zone | null; // zone de livraison
+  complement?: string | null; // lien de position (Google Maps) donné par le client
   dernier: string | null;
 }
 
@@ -998,6 +999,16 @@ export function ClientsClient({
                                         <p className="text-[11px] text-c2b-muted">Tout est enregistré tout de suite : la Cuisine, son espace et les Paiements suivent.</p>
                                       </div>
                                     ) : null}
+                                    {fc && (fc.adresse || fc.complement) && (
+                                      <p className="rounded-lg bg-white p-2.5 text-xs text-c2b-green">
+                                        📍 {fc.adresse ?? "Adresse non écrite"}
+                                        {fc.complement?.startsWith("http") && (
+                                          <a href={fc.complement} target="_blank" rel="noopener noreferrer" className="ml-1.5 font-bold text-c2b-gold">
+                                            Voir sur la carte
+                                          </a>
+                                        )}
+                                      </p>
+                                    )}
                                     {fc ? (
                                       <div className="space-y-2 rounded-lg bg-white p-2.5">
                                         <p className="text-xs font-bold text-c2b-muted">📲 Son lien de commande</p>
