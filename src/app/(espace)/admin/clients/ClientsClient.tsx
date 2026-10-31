@@ -353,6 +353,7 @@ export function ClientsClient({
   // pas, pour que « Copier » marche d'un seul toucher (iPhone).
   const [lienOuvert, setLienOuvert] = useState<string | null>(null);
   const [lienCopie, setLienCopie] = useState(false);
+  const [renommage, setRenommage] = useState<{ id: string; valeur: string } | null>(null);
   const lienDe = (fc: FicheResume) => (fc.jeton ? `${window.location.origin}/ma-semaine/${fc.jeton}` : null);
   async function ouvrirMenuLien(fc: FicheResume) {
     setLienCopie(false);
@@ -380,9 +381,9 @@ export function ClientsClient({
 
   // Changer le nom d'un client (doublons de prénom) : partout (planning,
   // paiements, sacs). Son lien reste le même.
-  async function renommerFiche(fc: FicheResume) {
-    const nom = window.prompt(`Nouveau nom pour ${fc.nom} (ex. ajoutez l'initiale du nom) :`, fc.nom)?.trim();
-    if (!nom || nom === fc.nom) return;
+  async function renommerFiche(fc: FicheResume, saisi: string) {
+    const nom = saisi.trim();
+    if (!nom || nom === fc.nom) return setRenommage(null);
     if (nom.length > 80) return alert("Nom trop long (80 caractères maximum).");
     if (nom.toLowerCase() !== fc.nom.trim().toLowerCase() && fiches.some((f) => f.nom.trim().toLowerCase() === nom.toLowerCase()))
       return alert("Ce nom existe déjà : ajoutez une initiale ou le nom de famille.");
@@ -392,6 +393,40 @@ export function ClientsClient({
     setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, nom } : f)));
     setRepasSem((prev) => prev.map((r) => (!r.clientId && r.nom.trim().toLowerCase() === ancien ? { ...r, nom } : r)));
     if (semaineOuverte?.trim().toLowerCase() === ancien) setSemaineOuverte(nom);
+    setRenommage(null);
+  }
+
+  // Champ « Changer le nom » (dans la carte du client).
+  function champNom(fc: FicheResume) {
+    if (renommage?.id !== fc.id)
+      return (
+        <button
+          onClick={() => setRenommage({ id: fc.id, valeur: fc.nom })}
+          className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 bg-white py-2 text-xs font-bold text-c2b-green"
+        >
+          <Pencil size={14} /> Changer le nom
+        </button>
+      );
+    return (
+      <div className="mt-1 space-y-1.5 rounded-lg bg-white p-2.5">
+        <p className="text-xs font-bold text-c2b-muted">Nouveau nom (ex. ajoutez l&apos;initiale du nom de famille)</p>
+        <input
+          value={renommage.valeur}
+          onChange={(e) => setRenommage({ id: fc.id, valeur: e.target.value })}
+          maxLength={80}
+          autoFocus
+          className="champ py-2 text-sm"
+        />
+        <div className="grid grid-cols-2 gap-1.5">
+          <button onClick={() => setRenommage(null)} className="btn-secondary py-2 text-xs">
+            Annuler
+          </button>
+          <button onClick={() => renommerFiche(fc, renommage.valeur)} className="btn-primary py-2 text-xs">
+            Enregistrer
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Crée le lien personnel d'un client s'il n'en a pas encore.
@@ -1027,12 +1062,7 @@ export function ClientsClient({
                                     )}
                                     {fc ? (
                                       <div className="space-y-2 rounded-lg bg-white p-2.5">
-                                        <button
-                                          onClick={() => renommerFiche(fc)}
-                                          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 py-2 text-xs font-bold text-c2b-green"
-                                        >
-                                          <Pencil size={14} /> Changer le nom
-                                        </button>
+                                        {champNom(fc)}
                                         <p className="text-xs font-bold text-c2b-muted">📲 Son lien de commande</p>
                                         {lienDe(fc) ? (
                                           <div className="grid grid-cols-3 gap-1.5">
@@ -1225,12 +1255,7 @@ export function ClientsClient({
                         ) : (
                           <p className="text-xs text-c2b-muted">Création du lien…</p>
                         )}
-                        <button
-                          onClick={() => renommerFiche(fc)}
-                          className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 bg-white py-2 text-xs font-bold text-c2b-green"
-                        >
-                          <Pencil size={14} /> Changer le nom
-                        </button>
+                        {champNom(fc)}
                         <button
                           onClick={() => supprimerFiche(fc)}
                           className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 bg-white py-2 text-xs font-bold text-red-600"
