@@ -1773,7 +1773,8 @@ begin
   end if;
   update public.application_personnes set nom = v_nouveau, updated_at = now() where cle = v_ancien;
   update public.application_cuisine_extras set nom = v_nouveau where lower(btrim(nom)) = v_ancien;
-  update public.application_paiements set nom = v_nouveau where client_id is null and lower(btrim(nom)) = v_ancien;
+  update public.application_paiements set nom = v_nouveau, cle = 'n:' || lower(v_nouveau)
+    where client_id is null and (lower(btrim(nom)) = v_ancien or cle = 'n:' || v_ancien);
   update public.application_tarifs_perso set cle = 'n:' || lower(v_nouveau) where cle = 'n:' || v_ancien;
   update public.application_cuisine_sacs set cle = 'm:' || lower(v_nouveau) where cle = 'm:' || v_ancien;
 end;

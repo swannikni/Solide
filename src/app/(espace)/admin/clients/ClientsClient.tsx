@@ -378,6 +378,22 @@ export function ClientsClient({
     }
   }
 
+  // Changer le nom d'un client (doublons de prénom) : partout (planning,
+  // paiements, sacs). Son lien reste le même.
+  async function renommerFiche(fc: FicheResume) {
+    const nom = window.prompt(`Nouveau nom pour ${fc.nom} (ex. ajoutez l'initiale du nom) :`, fc.nom)?.trim();
+    if (!nom || nom === fc.nom) return;
+    if (nom.length > 80) return alert("Nom trop long (80 caractères maximum).");
+    if (nom.toLowerCase() !== fc.nom.trim().toLowerCase() && fiches.some((f) => f.nom.trim().toLowerCase() === nom.toLowerCase()))
+      return alert("Ce nom existe déjà : ajoutez une initiale ou le nom de famille.");
+    const { error } = await supabase.rpc("application_renommer_personne", { p_ancien: fc.nom, p_nouveau: nom });
+    if (error) return alert(/existe/.test(error.message) ? "Ce nom existe déjà." : "Changement de nom impossible, réessayez.");
+    const ancien = fc.nom.trim().toLowerCase();
+    setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, nom } : f)));
+    setRepasSem((prev) => prev.map((r) => (!r.clientId && r.nom.trim().toLowerCase() === ancien ? { ...r, nom } : r)));
+    if (semaineOuverte?.trim().toLowerCase() === ancien) setSemaineOuverte(nom);
+  }
+
   // Crée le lien personnel d'un client s'il n'en a pas encore.
   async function assurerLien(fc: FicheResume) {
     if (fc.jeton) return;
@@ -1011,6 +1027,12 @@ export function ClientsClient({
                                     )}
                                     {fc ? (
                                       <div className="space-y-2 rounded-lg bg-white p-2.5">
+                                        <button
+                                          onClick={() => renommerFiche(fc)}
+                                          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 py-2 text-xs font-bold text-c2b-green"
+                                        >
+                                          <Pencil size={14} /> Changer le nom
+                                        </button>
                                         <p className="text-xs font-bold text-c2b-muted">📲 Son lien de commande</p>
                                         {lienDe(fc) ? (
                                           <div className="grid grid-cols-3 gap-1.5">
@@ -1203,6 +1225,12 @@ export function ClientsClient({
                         ) : (
                           <p className="text-xs text-c2b-muted">Création du lien…</p>
                         )}
+                        <button
+                          onClick={() => renommerFiche(fc)}
+                          className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-c2b-green/20 bg-white py-2 text-xs font-bold text-c2b-green"
+                        >
+                          <Pencil size={14} /> Changer le nom
+                        </button>
                         <button
                           onClick={() => supprimerFiche(fc)}
                           className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 bg-white py-2 text-xs font-bold text-red-600"
