@@ -209,12 +209,23 @@ export async function POST(request: Request) {
 
   if (!connu) {
     // Nouveau client : sa première commande attend la validation de l'admin.
-    if (repas.length === 0) return repondre({ erreur: "Choisissez au moins un repas (jusqu'à la veille 20 h)." }, 400);
-    const prix = prixDemande(repas, zone, tarifs, { remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte });
+    // Les jours fermés (après la veille 20 h) que l'admin a ajoutés restent :
+    // seul l'admin peut les changer.
+    const { data: enAttente } = await admin
+      .from("application_demandes_semaine")
+      .select("id, repas")
+      .eq("personne_id", fiche.id)
+      .eq("semaine", semaine)
+      .eq("statut", "a_valider")
+      .maybeSingle<{ id: string; repas: RepasChoisi[] }>();
+    const figes = (enAttente?.repas ?? []).filter((r) => !encoreModifiable(r.date));
+    const tous = [...figes, ...repas.filter((r) => !figes.some((f) => f.date === r.date && f.service === r.service))];
+    if (tous.length === 0) return repondre({ erreur: "Choisissez au moins un repas (jusqu'à la veille 20 h)." }, 400);
+    const prix = prixDemande(tous, zone, tarifs, { remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte });
     const ligne = {
       personne_id: fiche.id,
       semaine,
-      repas,
+      repas: tous,
       allergies: fiche.allergies,
       refus: fiche.refus,
       note: fiche.note,
@@ -227,13 +238,6 @@ export async function POST(request: Request) {
       prix_livraison: prix.prixLivraison,
       total: prix.total,
     };
-    const { data: enAttente } = await admin
-      .from("application_demandes_semaine")
-      .select("id")
-      .eq("personne_id", fiche.id)
-      .eq("semaine", semaine)
-      .eq("statut", "a_valider")
-      .maybeSingle<{ id: string }>();
     const { error } = enAttente
       ? await admin.from("application_demandes_semaine").update(ligne).eq("id", enAttente.id)
       : await admin.from("application_demandes_semaine").insert(ligne);
