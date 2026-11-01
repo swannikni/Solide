@@ -31,6 +31,26 @@ export interface SuiviTournee {
   ordre: number | null;
 }
 
+// Une fiche client qu'on peut ajouter à la main dans la tournée.
+export interface FicheTournee {
+  nom: string;
+  telephone: string | null;
+  adresse: string | null;
+  lien: string | null;
+  frais: number;
+}
+
+// « ordre » de la ligne de suivi : null = normal ; 1-999 = numéro du sac
+// partagé (même adresse) ; -1 = retiré ce jour ; ajouté à la main :
+// 1000 (+ numéro du sac), -2 une fois retiré (gardé pour le remettre).
+const RETIRE = -1;
+const RETIRE_AJOUT = -2;
+const AJOUT = 1000;
+const estRetire = (o: number | null) => o === RETIRE || o === RETIRE_AJOUT;
+const estAjout = (o: number | null) => o === RETIRE_AJOUT || (o ?? 0) >= AJOUT;
+const groupeDe = (o: number | null) => (o == null || o < 0 ? 0 : o >= AJOUT ? o - AJOUT : o);
+const avecGroupe = (o: number | null, n: number) => (estAjout(o) ? AJOUT + n : n || null);
+
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
 const dh = (n: number) => `${Math.round(n)} DH`;
 const chiffres = (t: string) => t.replace(/[^\d]/g, "").replace(/^0(?=[67])/, "212");
@@ -43,42 +63,76 @@ export function TourneeClient({
   arrets,
   suivisInitiaux,
   livreurInitial,
+  ajoutesInitiaux,
+  fiches,
 }: {
   date: string;
   lundi: string;
   arrets: ArretTournee[];
   suivisInitiaux: SuiviTournee[];
   livreurInitial: string;
+  ajoutesInitiaux: ArretTournee[];
+  fiches: FicheTournee[];
 }) {
   const supabase = createClient();
   const [suivis, setSuivis] = useState(() => new Map(suivisInitiaux.map((s) => [s.cle, s])));
-  const [adresses, setAdresses] = useState(() => new Map(arrets.map((a) => [a.cle, { adresse: a.adresse ?? "", lien: a.lien ?? "" }])));
+  const [adresses, setAdresses] = useState(
+    () => new Map([...arrets, ...ajoutesInitiaux].map((a) => [a.cle, { adresse: a.adresse ?? "", lien: a.lien ?? "" }]))
+  );
   const [edition, setEdition] = useState<string | null>(null);
   const [livreur, setLivreur] = useState(livreurInitial);
   const [message, setMessage] = useState("");
   const [copie, setCopie] = useState(false);
 
   const suivi = (cle: string): SuiviTournee => suivis.get(cle) ?? { cle, encaisse_par: null, recuperer: 0, frais_paye: false, ordre: null };
-  // ordre : -1 = retiré de la tournée ce jour ; même nombre > 0 = même sac / même adresse.
-  const tournee = arrets.filter((a) => !a.retrait && suivi(a.cle).ordre !== -1).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  const retires = arrets.filter((a) => !a.retrait && suivi(a.cle).ordre === -1);
+  // Clients ajoutés à la main (hors planning), avec leur fiche.
+  const [ajoutes, setAjoutes] = useState<ArretTournee[]>(() => ajoutesInitiaux);
+  const tous = [...arrets, ...ajoutes.filter((x) => !arrets.some((a) => a.cle === x.cle))];
+  const tournee = tous.filter((a) => !a.retrait && !estRetire(suivi(a.cle).ordre)).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const retires = tous.filter((a) => !a.retrait && estRetire(suivi(a.cle).ordre));
   const retraits = arrets.filter((a) => a.retrait);
   const groupes: ArretTournee[][] = [];
   for (const a of tournee) {
-    const o = suivi(a.cle).ordre;
-    const g = o && o > 0 ? groupes.find((x) => suivi(x[0].cle).ordre === o) : undefined;
+    const n = groupeDe(suivi(a.cle).ordre);
+    const g = n ? groupes.find((x) => groupeDe(suivi(x[0].cle).ordre) === n) : undefined;
     if (g) g.push(a);
     else groupes.push([a]);
   }
   const [regroupe, setRegroupe] = useState<string | null>(null);
+  const [ajout, setAjout] = useState(false);
+  const [recherche, setRecherche] = useState("");
 
   // Met b dans le même sac que a (même numéro de groupe).
   async function regrouper(a: ArretTournee, b: ArretTournee) {
-    const existant = suivi(a.cle).ordre;
-    const n = existant && existant > 0 ? existant : Math.max(0, ...[...suivis.values()].map((x) => x.ordre ?? 0)) + 1;
+    const n = groupeDe(suivi(a.cle).ordre) || Math.max(0, ...[...suivis.values()].map((x) => groupeDe(x.ordre))) + 1;
     setRegroupe(null);
-    if (suivi(a.cle).ordre !== n) await enregistrer(a.cle, { ordre: n });
-    await enregistrer(b.cle, { ordre: n });
+    if (groupeDe(suivi(a.cle).ordre) !== n) await enregistrer(a.cle, { ordre: avecGroupe(suivi(a.cle).ordre, n) });
+    await enregistrer(b.cle, { ordre: avecGroupe(suivi(b.cle).ordre, n) });
+  }
+
+  // Ajoute un client à la main dans la tournée du jour (gardé même retiré).
+  async function ajouterALaMain(f: FicheTournee) {
+    const cle = `n:${f.nom.trim().toLowerCase()}`;
+    setAjout(false);
+    setRecherche("");
+    if (!tous.some((a) => a.cle === cle)) {
+      const a: ArretTournee = {
+        cle,
+        nom: f.nom,
+        telephone: f.telephone,
+        adresse: f.adresse,
+        lien: f.lien,
+        midi: 0,
+        soir: 0,
+        frais: f.frais,
+        reste: null,
+        retrait: false,
+        modifiable: true,
+      };
+      setAjoutes((l) => [...l, a]);
+      setAdresses((m) => new Map(m).set(cle, { adresse: f.adresse ?? "", lien: f.lien ?? "" }));
+    }
+    await enregistrer(cle, { ordre: estAjout(suivi(cle).ordre) || !arrets.some((a) => a.cle === cle) ? AJOUT : null });
   }
   const parLivreur = (a: ArretTournee) => suivi(a.cle).encaisse_par === "livreur" && suivi(a.cle).recuperer > 0;
 
@@ -136,7 +190,8 @@ export function TourneeClient({
       const midi = g.reduce((t, a) => t + a.midi, 0);
       const soir = g.reduce((t, a) => t + a.soir, 0);
       const repas = [midi && `☀️ ${midi} midi`, soir && `🌙 ${soir} soir`].filter(Boolean).join(" + ");
-      l.push(`${i + 1}. *${g.map((a) => a.nom).join(" + ")}* (${repas}${g.length > 1 ? ", même sac" : ""})`);
+      const precision = [repas, g.length > 1 && "même sac"].filter(Boolean).join(", ");
+      l.push(`${i + 1}. *${g.map((a) => a.nom).join(" + ")}*${precision ? ` (${precision})` : ""}`);
       const tels = g.map((a) => a.telephone).filter(Boolean);
       if (tels.length) l.push(`📞 ${tels.join(" / ")}`);
       const ref = g.find((a) => adresses.get(a.cle)?.adresse.trim() || adresses.get(a.cle)?.lien.trim()) ?? g[0];
@@ -247,6 +302,42 @@ export function TourneeClient({
 
       {message && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{message}</p>}
 
+      {/* Ajouter un client à la main (hors planning) */}
+      {ajout ? (
+        <section className="carte space-y-2 p-3">
+          <input
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="Rechercher un client…"
+            autoFocus
+            className="champ py-2.5 text-sm"
+          />
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {fiches
+              .filter((f) => !tournee.some((a) => a.nom.trim().toLowerCase() === f.nom.trim().toLowerCase()))
+              .filter((f) => !recherche.trim() || f.nom.toLowerCase().includes(recherche.trim().toLowerCase()))
+              .slice(0, 30)
+              .map((f) => (
+                <button
+                  key={f.nom}
+                  onClick={() => ajouterALaMain(f)}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-c2b-cream"
+                >
+                  <span className="font-semibold text-c2b-green">{f.nom}</span>
+                  <span className="truncate pl-2 text-xs text-c2b-muted">{f.adresse ?? (f.lien ? "lien GPS" : "sans adresse")}</span>
+                </button>
+              ))}
+          </div>
+          <button onClick={() => setAjout(false)} className="btn-secondary w-full py-2 text-xs">
+            Fermer
+          </button>
+        </section>
+      ) : (
+        <button onClick={() => setAjout(true)} className="btn-secondary w-full py-2.5 text-sm">
+          + Ajouter un client à la tournée
+        </button>
+      )}
+
       {/* Clients à livrer */}
       {tournee.length === 0 ? (
         <p className="carte p-5 text-center text-sm text-c2b-muted">Personne à livrer ce jour-là dans le planning de la cuisine.</p>
@@ -270,7 +361,7 @@ export function TourneeClient({
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-c2b-green">{a.nom}</p>
                     <p className="text-xs text-c2b-muted">
-                      {[a.midi && `☀️ ${a.midi} midi`, a.soir && `🌙 ${a.soir} soir`].filter(Boolean).join(" · ")}
+                      {[a.midi && `☀️ ${a.midi} midi`, a.soir && `🌙 ${a.soir} soir`].filter(Boolean).join(" · ") || "Ajouté à la main"}
                       {a.telephone && <span className="select-all"> · 📞 {a.telephone}</span>}
                     </p>
                   </div>
@@ -403,7 +494,7 @@ export function TourneeClient({
                 ) : (
                   <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-c2b-green/10 pt-2 text-xs font-bold">
                     {g.length > 1 ? (
-                      <button onClick={() => enregistrer(a.cle, { ordre: null })} className="text-c2b-green underline">
+                      <button onClick={() => enregistrer(a.cle, { ordre: avecGroupe(suivi(a.cle).ordre, 0) })} className="text-c2b-green underline">
                         Séparer (autre arrêt)
                       </button>
                     ) : (
@@ -413,7 +504,7 @@ export function TourneeClient({
                         </button>
                       )
                     )}
-                    <button onClick={() => enregistrer(a.cle, { ordre: -1 })} className="text-red-600 underline">
+                    <button onClick={() => enregistrer(a.cle, { ordre: estAjout(suivi(a.cle).ordre) ? RETIRE_AJOUT : RETIRE })} className="text-red-600 underline">
                       Retirer de la tournée
                     </button>
                   </div>
@@ -433,7 +524,7 @@ export function TourneeClient({
           {retires.map((a) => (
             <div key={a.cle} className="flex items-center justify-between gap-2">
               <span className="text-c2b-muted">{a.nom}</span>
-              <button onClick={() => enregistrer(a.cle, { ordre: null })} className="text-xs font-bold text-c2b-green underline">
+              <button onClick={() => enregistrer(a.cle, { ordre: estAjout(suivi(a.cle).ordre) ? AJOUT : null })} className="text-xs font-bold text-c2b-green underline">
                 Remettre
               </button>
             </div>

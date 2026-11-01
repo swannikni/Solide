@@ -1,5 +1,5 @@
 import { exigerAdmin } from "@/lib/admin";
-import { TourneeClient, type ArretTournee, type SuiviTournee } from "@/app/(espace)/admin/tournee/TourneeClient";
+import { TourneeClient, type ArretTournee, type FicheTournee, type SuiviTournee } from "@/app/(espace)/admin/tournee/TourneeClient";
 import { completerTarifs, type Tarifs } from "@/lib/paiements";
 import { dateDuJour, decalerDate, estDateValide, FUSEAU } from "@/lib/dates";
 import { lundiDe, prixDemande, prixZone, type RepasChoisi, type Zone } from "@/lib/ma-semaine";
@@ -146,6 +146,24 @@ export default async function TourneePage({ searchParams }: { searchParams: Prom
     a.reste = p ? Math.max(0, Number(p.montant) - Number(p.recu)) : (prix.total ?? null);
   }
 
+  // Fiches clients (ajout à la main) et ceux déjà ajoutés à la main ce jour.
+  const fichesTournee: FicheTournee[] = (fiches ?? [])
+    .filter((f) => f.zone !== "retrait" && !f.partenaire)
+    .map((f) => ({
+      nom: f.nom.trim(),
+      telephone: f.telephone,
+      adresse: f.adresse,
+      lien: lien(f.complement, null, null),
+      frais: f.livraison_offerte ? 0 : (prixZone(f.zone) ?? 0),
+    }))
+    .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const ajoutes: ArretTournee[] = (suivis ?? [])
+    .filter((s) => (s.ordre === -2 || (s.ordre ?? 0) >= 1000) && !arrets.has(s.cle) && s.cle.startsWith("n:"))
+    .flatMap((s) => {
+      const f = fichesTournee.find((x) => `n:${x.nom.toLowerCase()}` === s.cle);
+      return f ? [{ cle: s.cle, ...f, midi: 0, soir: 0, reste: null, retrait: false, modifiable: true }] : [];
+    });
+
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
       <TourneeClient
@@ -154,6 +172,8 @@ export default async function TourneePage({ searchParams }: { searchParams: Prom
         arrets={[...arrets.values()]}
         suivisInitiaux={suivis ?? []}
         livreurInitial={reglages?.livreur_telephone ?? ""}
+        ajoutesInitiaux={ajoutes}
+        fiches={fichesTournee}
       />
     </div>
   );
