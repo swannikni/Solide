@@ -1876,3 +1876,30 @@ alter table public.application_personnes add constraint application_personnes_pa
 alter table public.application_cuisine_extras add constraint application_cuisine_extras_palier_check check (palier is null or palier = any (array['P1','P2','P3']));
 alter table public.application_commandes add constraint application_commandes_palier_check check (palier is null or palier = any (array['P1','P2','P3']));
 -- application_maj_mon_profil : accepte P1-P3 (P4 → P2, P5/P6 → P3 pour une ancienne appli en cache).
+
+-- ============================================================
+-- Tournée du livreur : par jour et par client, qui encaisse (moi /
+-- livreur), la somme à récupérer et si la livraison est payée.
+-- ============================================================
+create table if not exists public.application_tournee (
+  date date not null,
+  cle text not null check (char_length(cle) between 1 and 90),
+  encaisse_par text check (encaisse_par is null or encaisse_par in ('moi', 'livreur')),
+  recuperer integer not null default 0 check (recuperer between 0 and 100000),
+  frais_paye boolean not null default false,
+  ordre integer,
+  maj_le timestamptz not null default now(),
+  primary key (date, cle)
+);
+alter table public.application_tournee enable row level security;
+drop policy if exists tournee_admin on public.application_tournee;
+create policy tournee_admin on public.application_tournee for all to authenticated
+  using (public.application_is_admin()) with check (public.application_is_admin());
+create table if not exists public.application_tournee_reglages (
+  id integer primary key default 1 check (id = 1),
+  livreur_telephone text check (livreur_telephone is null or char_length(livreur_telephone) <= 30)
+);
+alter table public.application_tournee_reglages enable row level security;
+drop policy if exists tournee_reglages_admin on public.application_tournee_reglages;
+create policy tournee_reglages_admin on public.application_tournee_reglages for all to authenticated
+  using (public.application_is_admin()) with check (public.application_is_admin());
