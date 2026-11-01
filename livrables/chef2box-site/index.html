@@ -1050,7 +1050,7 @@ HA
     <div class="q-grid">
       <div class="q-field"><label>Prénom & Nom *</label><input type="text" id="q-nom" placeholder=""></div>
       <div class="q-field"><label>Email *</label><input type="email" id="q-email" placeholder="" autocomplete="off"></div>
-      <div class="q-field q-full"><label>WhatsApp</label><div style="display:flex;gap:8px"><select id="q-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="q-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
+      <div class="q-field q-full"><label>WhatsApp *</label><div style="display:flex;gap:8px"><select id="q-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="q-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
       <div class="q-field"><label>Âge *</label><input type="number" id="q-age" placeholder="ex. 32" min="16" max="80" inputmode="numeric"></div>
       <div class="q-field"><label>Taille (cm) *</label><input type="number" id="q-taille" placeholder="ex. 175" min="130" max="220" inputmode="numeric"></div>
       <div class="q-field"><label>Poids (kg) *</label><input type="number" id="q-poids" placeholder="ex. 72" min="35" max="250" inputmode="numeric"></div>
@@ -1413,7 +1413,7 @@ function genererBilan() {
   var preferes = getV('q-preferes');
 
   var errEl = document.getElementById('q-error');
-  var MSG_OBLIGATOIRE = '⚠️ Merci de remplir tous les champs obligatoires (nom, email, profil, objectif, séances, travail, repas/jour).';
+  var MSG_OBLIGATOIRE = '⚠️ Merci de remplir tous les champs obligatoires (nom, email, WhatsApp, profil, objectif, séances, travail, repas/jour).';
   var afficherErreur = function(msg) {
     errEl.textContent = msg;
     errEl.style.display = 'block';
@@ -1422,6 +1422,15 @@ function genererBilan() {
 
   if (!nom || nom === '—' || !sexe || !age || !taille || !poids || !objectif || objectif === '—') {
     afficherErreur(MSG_OBLIGATOIRE);
+    return;
+  }
+
+  // WhatsApp obligatoire : c'est par là que Chef2Box confirme et suit chaque client.
+  var chiffresTel = tel === '—' ? '' : tel.replace(/[^0-9]/g, '');
+  if (chiffresTel.length < 9 || chiffresTel.length > 15) {
+    afficherErreur('⚠️ Merci d\'indiquer votre numéro WhatsApp complet (ex. 06 12 34 56 78) : c\'est par là que nous vous envoyons votre bilan et votre menu.');
+    var champTel = document.getElementById('q-tel');
+    if (champTel) champTel.focus();
     return;
   }
 

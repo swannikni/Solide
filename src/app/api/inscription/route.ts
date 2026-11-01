@@ -27,6 +27,8 @@ export async function POST(request: Request) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return erreur("Adresse e-mail invalide.", 400);
   if (motDePasse.length < 8 || motDePasse.length > 72) return erreur("Mot de passe : 8 caractères minimum.", 400);
   if (corps?.accepte !== true) return erreur("Acceptez les conditions pour continuer.", 400);
+  const chiffresTel = (telephone ?? "").replace(/[^\d]/g, "").length;
+  if (chiffresTel < 9 || chiffresTel > 15) return erreur("Indiquez votre numéro WhatsApp complet (ex. 06 12 34 56 78).", 400);
 
   const admin = createAdminClient();
   if (!admin) return erreur("Inscription indisponible pour le moment.", 503);

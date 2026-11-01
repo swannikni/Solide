@@ -28,6 +28,8 @@ export default function InscriptionPage() {
     setErreur(null);
     if (form.nom.trim().length < 2) return setErreur("Indiquez votre prénom.");
     if (form.motDePasse.length < 8) return setErreur("Mot de passe : 8 caractères minimum.");
+    const chiffres = form.telephone.replace(/[^\d]/g, "").length;
+    if (chiffres < 9 || chiffres > 15) return setErreur("Indiquez votre numéro WhatsApp complet (ex. 06 12 34 56 78).");
     if (!accepte) return setErreur("Acceptez les conditions pour continuer.");
     setEnCours(true);
     if (await motDePassePirate(form.motDePasse)) {
@@ -115,9 +117,9 @@ export default function InscriptionPage() {
           </div>
           <div>
             <label htmlFor="tel" className={etiquette}>
-              Téléphone <span className="normal-case tracking-normal font-normal">(facultatif, pour WhatsApp)</span>
+              Numéro WhatsApp *
             </label>
-            <input id="tel" type="tel" autoComplete="tel" value={form.telephone} onChange={maj("telephone")} className="champ" placeholder="06…" />
+            <input id="tel" type="tel" autoComplete="tel" required value={form.telephone} onChange={maj("telephone")} className="champ" placeholder="06 12 34 56 78" />
           </div>
           {/* Champ piège pour les robots, invisible pour les personnes. */}
           <input
