@@ -10,6 +10,7 @@ import {
   type PersonneHistorique,
 } from "@/app/(espace)/admin/cuisine/CuisineClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
+import { completerTarifs, type Tarifs } from "@/lib/paiements";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
   const vendredi = decalerDate(lundi, 4);
   const lundiAvant = decalerDate(lundi, -7);
 
-  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }, { data: fiches }, { data: demandes }, { data: sacs }] = await Promise.all([
+  const [{ data: clients }, { data: commandes }, { data: extras }, { data: historique }, { data: services }, { data: fiches }, { data: demandes }, { data: sacs }, { data: parametre }] = await Promise.all([
     supabase
       .from("application_clients")
       .select("id, nom, palier, cuisine_allergies, cuisine_refus, telephone, livraison_adresse")
@@ -91,6 +92,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
       .gte("date", lundi)
       .lte("date", vendredi)
       .returns<SacJour[]>(),
+    supabase.from("application_parametres").select("valeur").eq("cle", "tarifs").maybeSingle<{ valeur: Partial<Tarifs> }>(),
   ]);
 
   const connues = new Map<string, PersonneHistorique>();
@@ -124,6 +126,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
         fichesInitiales={fiches ?? []}
         sacsInitiaux={sacs ?? []}
         demandesInitiales={demandes ?? []}
+        tarifs={completerTarifs(parametre?.valeur)}
         aAjouter={typeof ajouter === "string" ? ajouter.slice(0, 80) : null}
       />
     </div>

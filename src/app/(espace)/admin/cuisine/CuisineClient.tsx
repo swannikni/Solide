@@ -7,8 +7,8 @@ import type { jsPDF as JsPDF } from "jspdf";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
-import { lundiDe } from "@/lib/paiements";
-import { nouveauJeton, type Zone } from "@/lib/ma-semaine";
+import { lundiDe, type Tarifs } from "@/lib/paiements";
+import { nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
 import { boitesDe, genererFichePdf, libellePalier, nomAvecBoites, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
 import type { Palier } from "@/lib/types";
 
@@ -212,6 +212,7 @@ export function CuisineClient({
   sacsInitiaux,
   aAjouter = null,
   demandesInitiales = [],
+  tarifs,
 }: {
   lundi: string;
   aujourdhui: string;
@@ -225,6 +226,7 @@ export function CuisineClient({
   sacsInitiaux: SacJour[];
   aAjouter?: string | null; // venant d'un questionnaire : formulaire d'ajout prêt
   demandesInitiales?: DemandeSemaine[]; // semaines envoyées par les clients, à valider
+  tarifs: Tarifs; // prix des repas (recalcul d'une semaine à valider)
 }) {
   const supabase = createClient();
   // Du lundi au vendredi (pas de livraison le week-end : le repas du samedi
@@ -1072,6 +1074,22 @@ export function CuisineClient({
     if (e1 || e2 || e3) return setMessage("Validation incomplète, réessayez.");
     // On rouvre la semaine concernée pour voir la personne au planning.
     window.location.href = `/admin/cuisine?date=${d.repas.map((r) => r.date).sort()[0]}`;
+  }
+
+  // L'admin change les jours d'une semaine à valider, sans limite d'heure
+  // (ex. un client qui voulait demain mais après 20 h). Prix recalculé.
+  async function modifierDemande(d: DemandeSemaine, date: string, service: Service) {
+    const present = d.repas.some((r) => r.date === date && r.service === service);
+    const repas = present ? d.repas.filter((r) => !(r.date === date && r.service === service)) : [...d.repas, { date, service }];
+    repas.sort((a, b) => (a.date + a.service).localeCompare(b.date + b.service));
+    const fc = d.personne ? fiches.get(cleNom(d.personne.nom)) : undefined;
+    const prix = prixDemande(repas, d.zone, tarifs, { remise: fc?.remise ?? 0, livraisonOfferte: !!fc?.livraison_offerte });
+    const maj = { repas, prix_repas: prix.prixRepas, prix_livraison: prix.prixLivraison, total: prix.total };
+    debut(d.id);
+    const { error } = await supabase.from("application_demandes_semaine").update(maj).eq("id", d.id);
+    fin(d.id);
+    if (error) return setMessage("Modification non enregistrée, réessayez.");
+    setDemandes((prev) => prev.map((x) => (x.id === d.id ? { ...x, ...maj } : x)));
   }
 
   async function refuserDemande(d: DemandeSemaine) {
@@ -2040,6 +2058,38 @@ export function CuisineClient({
                       <span className="text-xs font-semibold text-c2b-muted">· sem. du {dateCourte(d.semaine, { day: "numeric", month: "short" })}</span>
                     </p>
                     <p className="mt-1 text-c2b-text">{resumeRepas(d.repas)}</p>
+                    <div className="mt-2 rounded-lg bg-white p-2">
+                      <p className="mb-1 text-[11px] font-bold text-c2b-muted">Modifier ses jours (même après 20 h)</p>
+                      <div className="grid grid-cols-[auto_repeat(5,1fr)] items-center gap-1">
+                        <span />
+                        {Array.from({ length: 5 }, (_, k) => decalerDate(d.semaine, k)).map((j) => (
+                          <span key={j} className="text-center text-[10px] font-bold text-c2b-muted">
+                            {jourCourt(j)}
+                          </span>
+                        ))}
+                        {SERVICES.map((s) => (
+                          <Fragment key={s.cle}>
+                            <span className="pr-1 text-sm">{s.icone}</span>
+                            {Array.from({ length: 5 }, (_, k) => decalerDate(d.semaine, k)).map((j) => {
+                              const actif = d.repas.some((r) => r.date === j && r.service === s.cle);
+                              return (
+                                <button
+                                  key={j}
+                                  type="button"
+                                  disabled={occupe(d.id) || j < aujourdhui}
+                                  onClick={() => modifierDemande(d, j, s.cle)}
+                                  aria-pressed={actif}
+                                  aria-label={`${s.libelle} ${jourCourt(j)}`}
+                                  className={`h-8 rounded-lg text-xs font-bold disabled:opacity-30 ${actif ? ALLUME[s.cle] : "border border-c2b-green/15 bg-white text-c2b-muted"}`}
+                                >
+                                  {actif ? "✓" : ""}
+                                </button>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
                     <p className="mt-1 text-xs text-c2b-muted">
                       📍 {d.quartier ?? "—"}
                       {d.adresse ? ` · ${d.adresse}` : ""}
