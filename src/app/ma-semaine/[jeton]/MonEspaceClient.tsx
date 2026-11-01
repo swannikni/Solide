@@ -29,6 +29,12 @@ const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "fiche", libelle: "👤 Ma fiche" },
   { cle: "historique", libelle: "🕘 Historique" },
 ];
+// Numéro WhatsApp : 9 à 15 chiffres (06…, +212…, +33…).
+const whatsappValide = (t: string) => {
+  const n = t.replace(/[^\d]/g, "");
+  return n.length >= 9 && n.length <= 15;
+};
+
 const SERVICES: { cle: Service; libelle: string; icone: string; allume: string }[] = [
   { cle: "dejeuner", libelle: "Midi", icone: "☀️", allume: "bg-amber-400 text-amber-950 border-amber-400" },
   { cle: "diner", libelle: "Soir", icone: "🌙", allume: "bg-indigo-500 text-white border-indigo-500" },
@@ -54,7 +60,7 @@ export function MonEspaceClient({
   prenom: string;
   aujourdhui: string;
   connu: boolean;
-  fiche: { allergies: string; refus: string; note: string; quartier: string; adresse: string; lien: string };
+  fiche: { allergies: string; refus: string; note: string; quartier: string; adresse: string; lien: string; telephone: string };
   semainesOuvertes: SemaineOuverte[];
   semainesCompte: SemaineCompte[];
   tarifs: Tarifs;
@@ -74,6 +80,7 @@ export function MonEspaceClient({
     quartier: fiche.quartier,
     adresse: fiche.adresse,
     lien: fiche.lien,
+    telephone: fiche.telephone,
   });
   const [enCours, setEnCours] = useState("");
   const [message, setMessage] = useState<{ texte: string; ok: boolean } | null>(null);
@@ -119,9 +126,10 @@ export function MonEspaceClient({
     if (!semaine) return;
     if (coches.length === 0 && semaine.prevus.length === 0) return setMessage({ texte: "Choisissez au moins un repas.", ok: false });
     if (!zone) return setMessage({ texte: "Choisissez votre quartier de livraison.", ok: false });
+    if (!whatsappValide(form.telephone)) return setMessage({ texte: "Indiquez votre numéro WhatsApp (obligatoire).", ok: false });
     const modifiables = new Set(semaine.jours.filter((j) => j.modifiable).map((j) => j.date));
     const d = await appeler(
-      { action: "commander", semaine: lundi, repas: repasSemaine.filter((r) => modifiables.has(r.date)), quartier: form.quartier, adresse: form.adresse, lien: form.lien },
+      { action: "commander", semaine: lundi, repas: repasSemaine.filter((r) => modifiables.has(r.date)), quartier: form.quartier, adresse: form.adresse, lien: form.lien, telephone: form.telephone },
       "commander"
     );
     if (!d) return;
@@ -149,6 +157,7 @@ export function MonEspaceClient({
   }
 
   async function enregistrerFiche() {
+    if (!whatsappValide(form.telephone)) return setMessage({ texte: "Indiquez votre numéro WhatsApp (obligatoire).", ok: false });
     const d = await appeler({ action: "fiche", ...form }, "fiche");
     if (d) setMessage({ texte: "Fiche enregistrée ✓", ok: true });
   }
@@ -184,6 +193,19 @@ export function MonEspaceClient({
   const livraison = (
     <section className="carte p-4 space-y-3">
       <h2 className="font-bold text-c2b-green">Livraison</h2>
+      <label className="block text-xs font-bold text-c2b-muted">
+        Numéro WhatsApp <span className="text-red-600">*</span>
+        <input
+          value={form.telephone}
+          onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+          placeholder="Ex : 06 12 34 56 78"
+          inputMode="tel"
+          autoComplete="tel"
+          maxLength={30}
+          className={`champ mt-1 py-2.5 text-sm font-normal ${form.telephone && !whatsappValide(form.telephone) ? "border-red-400" : ""}`}
+        />
+        <span className="mt-1 block font-normal">Obligatoire : pour confirmer votre commande et prévenir le livreur.</span>
+      </label>
       <label className="block text-xs font-bold text-c2b-muted">
         Quartier
         <select value={form.quartier} onChange={(e) => setForm({ ...form, quartier: e.target.value })} className="champ mt-1 py-2.5 text-sm font-normal">

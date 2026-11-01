@@ -223,6 +223,7 @@ export function ClientsClient({
   // Retirés à l'instant (« nom » partout, ou « lundi|nom » pour une semaine).
   const [retiresSemaine, setRetiresSemaine] = useState<Set<string>>(new Set());
   const [toutesFiches, setToutesFiches] = useState(false);
+  const [filtreSansWa, setFiltreSansWa] = useState(false);
   const [relanceOuverte, setRelanceOuverte] = useState(false);
   const [relances, setRelances] = useState<Set<string>>(new Set());
   const [filtreSuivi, setFiltreSuivi] = useState<SuiviProspect | "tous">("a_contacter");
@@ -235,7 +236,10 @@ export function ClientsClient({
     .filter((q) => filtreSuivi === "tous" || suiviDe(q) === filtreSuivi)
     .filter((q) => !saisieQ || normaliser([q.nom, q.email, q.telephone].filter(Boolean).join(" ")).includes(saisieQ));
   const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnairesTrouves.slice(0, 3);
+  const sansWhatsApp = (fc: FicheResume) => numeroWhatsApp(fc.telephone).length < 9 && !fc.partenaire;
+  const nbSansWhatsApp = fiches.filter(sansWhatsApp).length;
   const fichesTrouvees = fiches
+    .filter((fc) => !filtreSansWa || sansWhatsApp(fc))
     .filter((fc) => !saisie || normaliser([fc.nom, fc.telephone, fc.adresse].filter(Boolean).join(" ")).includes(saisie))
     .sort((x, y) => (y.dernier ?? "").localeCompare(x.dernier ?? "") || x.nom.localeCompare(y.nom, "fr"));
   const clientsAffiches = clients
@@ -370,6 +374,21 @@ export function ClientsClient({
       setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, jeton } : f)));
     }
   }
+  // Numéro WhatsApp d'un client, enregistré en quittant le champ (fiche et repas à venir).
+  async function changerTelephone(fc: FicheResume, valeur: string) {
+    const telephone = valeur.trim().slice(0, 30) || null;
+    if (telephone === (fc.telephone ?? null)) return;
+    if (telephone && numeroWhatsApp(telephone).length < 9) return alert("Numéro trop court : indiquez le numéro complet (ex. 06 12 34 56 78).");
+    const { error } = await supabase.from("application_personnes").update({ telephone }).eq("id", fc.id);
+    if (error) return alert("Numéro non enregistré, réessayez.");
+    await supabase
+      .from("application_cuisine_extras")
+      .update({ telephone })
+      .ilike("nom", fc.nom.replace(/[%_\\]/g, "\\$&"))
+      .gte("date", relance?.aujourdhui ?? new Date().toISOString().slice(0, 10));
+    setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, telephone } : f)));
+  }
+
   // Prix du client (livraison offerte, remise), enregistré tout de suite.
   async function changerPrix(fc: FicheResume, maj: { livraison_offerte?: boolean; remise?: number }) {
     setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, ...maj } : f)));
@@ -1257,6 +1276,22 @@ export function ClientsClient({
             <p className="px-1 text-xs text-c2b-muted">
               Toute personne mise en cuisine arrive ici. Sa fiche se modifie en touchant son nom dans la Cuisine.
             </p>
+            {nbSansWhatsApp > 0 && (
+              <button
+                onClick={() => setFiltreSansWa((f) => !f)}
+                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-bold ${
+                  filtreSansWa ? "bg-red-600 text-white" : "border border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
+                <span className="flex-1">
+                  📵 {nbSansWhatsApp} client{nbSansWhatsApp > 1 ? "s" : ""} sans WhatsApp
+                  <span className="block text-[11px] font-semibold opacity-80">
+                    {filtreSansWa ? "Toucher pour revoir tout le monde" : "Envoyez-leur leur lien : le numéro est obligatoire pour commander"}
+                  </span>
+                </span>
+                <span>{filtreSansWa ? "✕" : "Voir"}</span>
+              </button>
+            )}
             {relance && (
               <div className="carte overflow-hidden border-c2b-gold/50">
                 <button onClick={ouvrirRelance} className="flex w-full items-center gap-2 px-4 py-3 text-left">
@@ -1320,6 +1355,7 @@ export function ClientsClient({
                         )}
                       </p>
                       <p className="truncate text-[11px] text-c2b-muted">
+                        {sansWhatsApp(fc) && <span className="font-bold text-red-700">📵 Pas de WhatsApp · </span>}
                         {fc.dernier ? `Dernier repas : ${new Date(`${fc.dernier}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" })}` : "Pas encore de repas"}
                         {fc.allergies && <span className="font-bold text-red-700"> · ⚠️ {fc.allergies}</span>}
                       </p>
@@ -1354,6 +1390,18 @@ export function ClientsClient({
                     </div>
                     {lienOuvert === fc.id && (
                       <div className="mt-2 space-y-2 rounded-xl bg-c2b-cream p-3">
+                        <label className="block rounded-lg bg-white p-2.5 text-xs font-bold text-c2b-muted">
+                          📱 Son WhatsApp {sansWhatsApp(fc) && <span className="text-red-600">(manquant)</span>}
+                          <input
+                            key={`${fc.id}-${fc.telephone ?? ""}`}
+                            defaultValue={fc.telephone ?? ""}
+                            placeholder="Ex : 06 12 34 56 78"
+                            inputMode="tel"
+                            maxLength={30}
+                            onBlur={(e) => changerTelephone(fc, e.target.value)}
+                            className="champ mt-1 py-2 text-sm font-normal"
+                          />
+                        </label>
                         <div className="space-y-2 rounded-lg bg-white p-2.5">
                           <p className="text-xs font-bold text-c2b-muted">💰 Son prix — à régler une fois, puis envoyez le lien</p>
                           <label className="flex items-center gap-2 text-sm font-semibold text-c2b-green">

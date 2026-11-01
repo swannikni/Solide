@@ -28,6 +28,13 @@ function lirePosition(v: unknown) {
   return { complement: lien.length <= 150 ? lien : null, ...(coords ?? {}) };
 }
 
+// Numéro WhatsApp : 9 à 15 chiffres, gardé tel que saisi (30 caractères max).
+function lireTelephone(v: unknown) {
+  if (typeof v !== "string") return null;
+  const n = v.replace(/[^\d]/g, "");
+  return n.length >= 9 && n.length <= 15 ? v.trim().slice(0, 30) : null;
+}
+
 const motif = (nom: string) => nom.replace(/[%_\\]/g, "\\$&");
 // « lun. 2 nov. midi »
 const libelleRepas = (r: { date: string; service: Service }) =>
@@ -107,6 +114,7 @@ export async function POST(request: Request) {
       note: texte(d.note, 200),
       ...(quartier && zone ? { quartier, zone } : {}),
       adresse: texte(d.adresse, 200),
+      ...(lireTelephone(d.telephone) ? { telephone: lireTelephone(d.telephone) } : {}),
       ...(lirePosition(d.lien) ?? (typeof d.lien === "string" && !d.lien.trim() ? { complement: null } : {})),
       updated_at: new Date().toISOString(),
     };
@@ -127,6 +135,7 @@ export async function POST(request: Request) {
         allergies: maj.allergies,
         refus: maj.refus,
         adresse: maj.adresse,
+        ...("telephone" in maj ? { telephone: maj.telephone } : {}),
         ...("complement" in maj ? { complement: maj.complement } : {}),
         ...("lat" in maj ? { lat: maj.lat, lng: maj.lng } : {}),
       })
@@ -195,13 +204,16 @@ export async function POST(request: Request) {
   const zone = quartier ? zoneDuQuartier(quartier) : null;
   if (!quartier || !zone) return repondre({ erreur: "Choisissez votre quartier de livraison." }, 400);
   const adresse = texte(d.adresse, 200) ?? fiche.adresse;
+  // WhatsApp obligatoire pour commander (celui de la fiche, sinon celui saisi).
+  const telephone = lireTelephone(d.telephone) ?? fiche.telephone;
+  if (!telephone) return repondre({ erreur: "Indiquez votre numéro WhatsApp (obligatoire)." }, 400);
   const position = lirePosition(d.lien);
   const lat = position?.lat ?? fiche.lat;
   const lng = position?.lng ?? fiche.lng;
   const complement = position ? position.complement : typeof d.lien === "string" && !d.lien.trim() ? null : fiche.complement;
   await admin
     .from("application_personnes")
-    .update({ quartier, zone, adresse, complement, lat, lng, updated_at: new Date().toISOString() })
+    .update({ quartier, zone, adresse, complement, lat, lng, telephone, updated_at: new Date().toISOString() })
     .eq("id", fiche.id);
 
   const { data: parametre } = await admin.from("application_parametres").select("valeur").eq("cle", "tarifs").maybeSingle<{ valeur: object }>();
@@ -272,7 +284,7 @@ export async function POST(request: Request) {
         allergies: fiche.allergies,
         refus: fiche.refus,
         note: fiche.note,
-        telephone: fiche.telephone,
+        telephone,
         adresse,
         complement,
         lat,

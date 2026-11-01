@@ -20,11 +20,12 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       ? (
           await admin
             .from("application_personnes")
-            .select("id, nom, allergies, refus, note, quartier, zone, adresse, complement, livraison_offerte, remise")
+            .select("id, nom, telephone, allergies, refus, note, quartier, zone, adresse, complement, livraison_offerte, remise")
             .eq("jeton", jeton)
             .maybeSingle<{
               id: string;
               nom: string;
+              telephone: string | null;
               allergies: string | null;
               refus: string | null;
               note: string | null;
@@ -134,6 +135,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
         quartier: fiche.quartier ?? "",
         adresse: fiche.adresse ?? "",
         lien: fiche.complement?.startsWith("http") ? fiche.complement : "",
+        telephone: fiche.telephone ?? "",
       }}
       semainesOuvertes={semainesOuvertes}
       semainesCompte={semainesCompte}
