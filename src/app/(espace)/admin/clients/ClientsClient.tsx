@@ -993,7 +993,7 @@ export function ClientsClient({
                                       return (
                                         <div className="flex flex-wrap items-center gap-1.5">
                                           <span className="text-xs font-bold text-c2b-muted">Palier :</span>
-                                          {(["P1", "P2", "P3", "P4", "P5", "P6"] as Palier[]).map((pl) => (
+                                          {(["P1", "P2", "P3"] as Palier[]).map((pl) => (
                                             <button
                                               key={pl}
                                               onClick={() => changerPalierSemaine(p.nom, clientId, pl)}

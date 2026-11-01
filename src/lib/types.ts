@@ -1,4 +1,4 @@
-export type Palier = "P1" | "P2" | "P3" | "P4" | "P5" | "P6";
+export type Palier = "P1" | "P2" | "P3";
 export type RepasType = "petit_dejeuner" | "dejeuner" | "diner" | "collation";
 export type SourceRepas = "chef2box" | "code_barres" | "manuel";
 

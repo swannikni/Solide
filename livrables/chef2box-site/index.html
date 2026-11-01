@@ -1498,20 +1498,14 @@ function genererBilan() {
   var nbRepas = parseInt(repas) || 3;
 
   // Repas Chef2Box — SYSTEME DE PALIERS (identique au questionnaire / PDF)
+  // Les 3 paliers Chef2Box (mêmes en cuisine et dans l'appli) :
+  // P1 ≈ 800 kcal, P2 ≈ 680-700 kcal, P3 ≈ 550-600 kcal.
   var C2B_PALIERS = [
-    { n:1, min:3800, kcal:1000, prot:50, lip:30, gluc:132 },
-    { n:2, min:3000, kcal:950,  prot:50, lip:30, gluc:120 },
-    { n:3, min:2500, kcal:800,  prot:45, lip:27, gluc:94  },
-    { n:4, min:2000, kcal:680,  prot:40, lip:24, gluc:76  },
-    { n:5, min:1500, kcal:550,  prot:35, lip:20, gluc:57  },
-    { n:6, min:0,    kcal:450,  prot:30, lip:17, gluc:44  }
+    { n:1, min:2500, kcal:800, prot:45, lip:27, gluc:94 },
+    { n:2, min:2000, kcal:680, prot:40, lip:24, gluc:76 },
+    { n:3, min:0,    kcal:550, prot:35, lip:20, gluc:57 }
   ];
   var palier = C2B_PALIERS.find(function(p){ return kcal >= p.min; }) || C2B_PALIERS[C2B_PALIERS.length-1];
-
-  // Repas Chef2Box : entre 550 et 800 kcal quel que soit le résultat.
-  // Au-dessus -> palier 3 (800 kcal), en dessous -> palier 5 (550 kcal).
-  if (palier.kcal > 800) palier = C2B_PALIERS.find(function(p){ return p.n === 3; });
-  if (palier.kcal < 550) palier = C2B_PALIERS.find(function(p){ return p.n === 5; });
 
   var deuxRepas = (repartition && repartition.indexOf('+') !== -1) || nbRepas >= 2;
   var repasKcal  = palier.kcal;

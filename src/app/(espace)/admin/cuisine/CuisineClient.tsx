@@ -143,7 +143,7 @@ const SERVICES: { cle: Service; libelle: string; court: string; icone: string }[
   { cle: "dejeuner", libelle: "Midi", court: "MIDI", icone: "☀️" },
   { cle: "diner", libelle: "Soir", court: "SOIR", icone: "🌙" },
 ];
-const PALIERS: Palier[] = ["P1", "P2", "P3", "P4", "P5", "P6"];
+const PALIERS: Palier[] = ["P1", "P2", "P3"];
 const CHAMPS_EXTRA = "id, date, repas_type, nom, palier, allergies, refus, note, quantite, adresse, lat, lng, telephone, complement";
 const CHAMPS_COMMANDE = "id, client_id, date_livraison, repas_type, note, palier, quantite";
 

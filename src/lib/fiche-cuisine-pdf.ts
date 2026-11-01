@@ -31,7 +31,9 @@ export interface ServiceFiche {
   paliers: { palier: Palier | null; lignes: LigneFiche[] }[];
 }
 
-export const libellePalier = (p: Palier | null) => (p ? `Palier ${p.slice(1)}` : "Sans palier");
+// Calories d'un repas selon le palier (P1 800, P2 680-700, P3 550-600).
+export const KCAL_PALIER: Record<Palier, string> = { P1: "800 kcal", P2: "680-700 kcal", P3: "550-600 kcal" };
+export const libellePalier = (p: Palier | null) => (p ? `Palier ${p.slice(1)} · ${KCAL_PALIER[p] ?? ""}`.replace(/ · $/, "") : "Sans palier");
 
 type Rvb = [number, number, number];
 const VERT: Rvb = [28, 46, 30];

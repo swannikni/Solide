@@ -2,7 +2,7 @@
 // chef2box.com (fonction genererBilan), pour que l'appli donne les mêmes
 // chiffres que le bilan reçu par le client.
 
-export const PALIERS = ["P1", "P2", "P3", "P4", "P5", "P6"] as const;
+export const PALIERS = ["P1", "P2", "P3"] as const;
 
 export const OBJECTIFS = [
   "Perte de poids",
@@ -33,14 +33,13 @@ export const PLAISIR = [
   "J'ai du mal à m'arrêter",
 ] as const;
 
-// Paliers du repas Chef2Box, choisis selon les calories du jour (identique au site).
+// Les 3 paliers du repas Chef2Box (mêmes en cuisine, sur le site et dans
+// l'appli), choisis selon les calories du jour (identique au site) :
+// P1 ≈ 800 kcal, P2 ≈ 680-700 kcal, P3 ≈ 550-600 kcal.
 export const C2B_PALIERS = [
-  { n: 1, min: 3800, kcal: 1000, prot: 50, lip: 30, gluc: 132 },
-  { n: 2, min: 3000, kcal: 950, prot: 50, lip: 30, gluc: 120 },
-  { n: 3, min: 2500, kcal: 800, prot: 45, lip: 27, gluc: 94 },
-  { n: 4, min: 2000, kcal: 680, prot: 40, lip: 24, gluc: 76 },
-  { n: 5, min: 1500, kcal: 550, prot: 35, lip: 20, gluc: 57 },
-  { n: 6, min: 0, kcal: 450, prot: 30, lip: 17, gluc: 44 },
+  { n: 1, min: 2500, kcal: 800, prot: 45, lip: 27, gluc: 94 },
+  { n: 2, min: 2000, kcal: 680, prot: 40, lip: 24, gluc: 76 },
+  { n: 3, min: 0, kcal: 550, prot: 35, lip: 20, gluc: 57 },
 ] as const;
 
 export interface Profil {
@@ -125,10 +124,7 @@ export function calculerObjectifs(p: Profil) {
   const glucides = Math.max(50, Math.round((kcal - proteines * 4 - lipides * 9) / 4));
   kcal = proteines * 4 + glucides * 4 + lipides * 9;
 
-  let palier: (typeof C2B_PALIERS)[number] = C2B_PALIERS.find((x) => kcal >= x.min) ?? C2B_PALIERS[C2B_PALIERS.length - 1];
-  // Repas entre 550 et 800 kcal quel que soit le résultat : P3 au plus haut, P5 au plus bas.
-  if (palier.kcal > REPAS_KCAL.max) palier = C2B_PALIERS[2];
-  if (palier.kcal < REPAS_KCAL.min) palier = C2B_PALIERS[4];
+  const palier = C2B_PALIERS.find((x) => kcal >= x.min) ?? C2B_PALIERS[C2B_PALIERS.length - 1];
 
   return { calories: kcal, proteines, glucides, lipides, palier: `P${palier.n}` as (typeof PALIERS)[number] };
 }
@@ -141,7 +137,7 @@ export const LIMITES = {
   poids: { min: 35, max: 250 },
 } as const;
 
-// Un repas Chef2Box : entre 550 et 800 kcal (paliers P3 à P5).
+// Un repas Chef2Box : entre 550 et 800 kcal (paliers P3 à P1).
 export const REPAS_KCAL = { min: 550, max: 800 } as const;
 
 export function horsLimites(p: Partial<Profil>): string[] {
