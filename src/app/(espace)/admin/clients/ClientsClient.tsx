@@ -128,6 +128,7 @@ export interface FicheResume {
   remise?: number; // % sur les repas
   zone?: Zone | null; // zone de livraison
   complement?: string | null; // lien de position (Google Maps) donné par le client
+  partenaire?: boolean; // partenaire (ex. Sweat On) : toujours dans la semaine, quantités libres
   dernier: string | null;
 }
 
@@ -694,6 +695,35 @@ export function ClientsClient({
     setFiches((prev) => prev.map((f) => (f.nom.trim().toLowerCase() === nom.toLowerCase() ? { ...f, palier } : f)));
   }
 
+  // Nombre de boîtes d'un repas pour un partenaire (0 = pas de repas).
+  async function changerQuantiteSemaine(fc: FicheResume, date: string, service: "dejeuner" | "diner", quantite: number) {
+    const q = Math.max(0, Math.min(100, Math.round(quantite)));
+    const existant = repasSem.find((r) => r.nom.trim().toLowerCase() === fc.nom.trim().toLowerCase() && r.date === date && r.service === service);
+    if ((existant?.quantite ?? 0) === q) return;
+    setEnCoursSem(`${date}|${service}`);
+    try {
+      if (q === 0 && existant) {
+        const { error } = await supabase.from("application_cuisine_extras").delete().eq("id", existant.id);
+        if (error) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => prev.filter((r) => r.id !== existant.id));
+      } else if (existant) {
+        const { error } = await supabase.from("application_cuisine_extras").update({ quantite: q }).eq("id", existant.id);
+        if (error) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => prev.map((r) => (r.id === existant.id ? { ...r, quantite: q } : r)));
+      } else if (q > 0) {
+        const { data, error } = await supabase
+          .from("application_cuisine_extras")
+          .insert({ date, repas_type: service, nom: fc.nom, palier: fc.palier, allergies: fc.allergies, refus: fc.refus, note: fc.note, telephone: fc.telephone, adresse: fc.adresse, quantite: q })
+          .select("id")
+          .single<{ id: string }>();
+        if (error || !data) return alert("Modification impossible, réessayez.");
+        setRepasSem((prev) => [...prev, { id: data.id, nom: fc.nom, date, service, quantite: q }]);
+      }
+    } finally {
+      setEnCoursSem(null);
+    }
+  }
+
   // Zone de livraison d'un client (prix de la livraison), enregistrée tout de suite.
   async function changerZone(fc: FicheResume, zone: Zone | null) {
     setFiches((prev) => prev.map((f) => (f.id === fc.id ? { ...f, zone } : f)));
@@ -861,11 +891,19 @@ export function ClientsClient({
             if (!parNom.has(k)) parNom.set(k, { nom: r.nom.trim(), repas: [] });
             parNom.get(k)!.repas.push(r);
           }
-          const tous = [...parNom.values()].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+          const ficheDe = (nom: string) => fiches.find((f) => f.nom.trim().toLowerCase() === nom.toLowerCase());
+          // Partenaires : toujours présents, même sans repas cette semaine.
+          for (const f of fiches.filter((x) => x.partenaire)) {
+            const k = f.nom.trim().toLowerCase();
+            if (!parNom.has(k)) parNom.set(k, { nom: f.nom.trim(), repas: [] });
+          }
+          const tous = [...parNom.values()].sort(
+            (a, b) =>
+              Number(!!ficheDe(b.nom)?.partenaire) - Number(!!ficheDe(a.nom)?.partenaire) || a.nom.localeCompare(b.nom, "fr")
+          );
           const liste = saisie ? tous.filter((p) => normaliser(p.nom).includes(saisie)) : tous;
           const ouvert = ouvertes.has("semaine") || (!!saisie && liste.length > 0);
           const total = (s?: "dejeuner" | "diner") => repas.filter((r) => !s || r.service === s).reduce((t, r) => t + r.quantite, 0);
-          const ficheDe = (nom: string) => fiches.find((f) => f.nom.trim().toLowerCase() === nom.toLowerCase());
           return (
             <section className="space-y-2.5">
               <EnTeteSection
@@ -926,6 +964,7 @@ export function ClientsClient({
                                   const pl = cid ? clients.find((c) => c.id === cid)?.palier : fc?.palier;
                                   return pl ? <span className="ml-1.5 pastille py-0.5 px-1.5 text-[10px]">{pl}</span> : null;
                                 })()}
+                                {fc?.partenaire && <span className="ml-1.5 text-[10px] font-bold text-emerald-700">🤝 Partenaire</span>}
                                 {fc?.allergies && <span className="ml-1.5 text-[11px] font-bold text-red-700">⚠️ {fc.allergies}</span>}
                                 <span className="ml-1.5 text-[11px] font-semibold text-c2b-gold">{semaineOuverte === p.nom ? "Fermer" : "Modifier"}</span>
                               </button>
@@ -1007,6 +1046,65 @@ export function ClientsClient({
                                         </div>
                                       );
                                     })()}
+                                    {fc?.partenaire ? (
+                                      <div className="space-y-1.5">
+                                        <p className="text-xs font-bold text-c2b-muted">🤝 Partenaire — nombre de repas par jour</p>
+                                        {jours.map((d, i) => (
+                                          <div key={d} className="flex items-center gap-2">
+                                            <span className="w-10 text-xs font-bold text-c2b-green">{JOURS_COURTS[i]}</span>
+                                            {(["dejeuner", "diner"] as const).map((sv) => {
+                                              const q = p.repas.find((r) => r.date === d && r.service === sv)?.quantite ?? 0;
+                                              const attente = enCoursSem === `${d}|${sv}`;
+                                              return (
+                                                <div
+                                                  key={sv}
+                                                  className={`flex flex-1 items-center justify-between rounded-lg border px-1 py-1 ${
+                                                    q > 0
+                                                      ? sv === "dejeuner"
+                                                        ? "border-amber-400 bg-amber-100"
+                                                        : "border-indigo-400 bg-indigo-100"
+                                                      : "border-c2b-green/15 bg-white"
+                                                  } ${attente ? "opacity-50" : ""}`}
+                                                >
+                                                  <button
+                                                    disabled={attente || q === 0}
+                                                    onClick={() => changerQuantiteSemaine(fc, d, sv, q - 1)}
+                                                    className="h-7 w-7 rounded-full bg-white text-sm font-bold text-c2b-green disabled:opacity-30"
+                                                    aria-label="Moins"
+                                                  >
+                                                    −
+                                                  </button>
+                                                  <input
+                                                    type="number"
+                                                    inputMode="numeric"
+                                                    min={0}
+                                                    max={100}
+                                                    key={`${d}|${sv}|${q}`}
+                                                    defaultValue={q}
+                                                    disabled={attente}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onBlur={(e) => changerQuantiteSemaine(fc, d, sv, Number(e.target.value) || 0)}
+                                                    onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                                                    className="w-9 bg-transparent text-center text-sm font-bold text-c2b-green outline-none"
+                                                    aria-label={`${sv === "dejeuner" ? "Midi" : "Soir"} ${JOURS_COURTS[i]}`}
+                                                  />
+                                                  <span className="text-xs">{sv === "dejeuner" ? "☀️" : "🌙"}</span>
+                                                  <button
+                                                    disabled={attente || q >= 100}
+                                                    onClick={() => changerQuantiteSemaine(fc, d, sv, q + 1)}
+                                                    className="h-7 w-7 rounded-full bg-white text-sm font-bold text-c2b-green disabled:opacity-30"
+                                                    aria-label="Plus"
+                                                  >
+                                                    +
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <>
                                     <p className="text-xs font-bold text-c2b-muted">Ses repas — touchez pour ajouter ou enlever</p>
                                     <div className="space-y-1.5">
                                       {jours.map((d, i) => (
@@ -1034,6 +1132,8 @@ export function ClientsClient({
                                         </div>
                                       ))}
                                     </div>
+                                      </>
+                                    )}
                                     {fc ? (
                                       <div className="space-y-2 rounded-lg bg-white p-2.5">
                                         <p className="text-xs font-bold text-c2b-muted">💰 Son prix</p>
