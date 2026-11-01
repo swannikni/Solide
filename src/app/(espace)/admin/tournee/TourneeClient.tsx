@@ -58,9 +58,28 @@ export function TourneeClient({
   const [message, setMessage] = useState("");
   const [copie, setCopie] = useState(false);
 
-  const tournee = arrets.filter((a) => !a.retrait).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  const retraits = arrets.filter((a) => a.retrait);
   const suivi = (cle: string): SuiviTournee => suivis.get(cle) ?? { cle, encaisse_par: null, recuperer: 0, frais_paye: false, ordre: null };
+  // ordre : -1 = retiré de la tournée ce jour ; même nombre > 0 = même sac / même adresse.
+  const tournee = arrets.filter((a) => !a.retrait && suivi(a.cle).ordre !== -1).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const retires = arrets.filter((a) => !a.retrait && suivi(a.cle).ordre === -1);
+  const retraits = arrets.filter((a) => a.retrait);
+  const groupes: ArretTournee[][] = [];
+  for (const a of tournee) {
+    const o = suivi(a.cle).ordre;
+    const g = o && o > 0 ? groupes.find((x) => suivi(x[0].cle).ordre === o) : undefined;
+    if (g) g.push(a);
+    else groupes.push([a]);
+  }
+  const [regroupe, setRegroupe] = useState<string | null>(null);
+
+  // Met b dans le même sac que a (même numéro de groupe).
+  async function regrouper(a: ArretTournee, b: ArretTournee) {
+    const existant = suivi(a.cle).ordre;
+    const n = existant && existant > 0 ? existant : Math.max(0, ...[...suivis.values()].map((x) => x.ordre ?? 0)) + 1;
+    setRegroupe(null);
+    if (suivi(a.cle).ordre !== n) await enregistrer(a.cle, { ordre: n });
+    await enregistrer(b.cle, { ordre: n });
+  }
   const parLivreur = (a: ArretTournee) => suivi(a.cle).encaisse_par === "livreur" && suivi(a.cle).recuperer > 0;
 
   const totalLivreur = tournee.filter(parLivreur).reduce((t, a) => t + suivi(a.cle).recuperer, 0);
@@ -74,7 +93,15 @@ export function TourneeClient({
     setSuivis((m) => new Map(m).set(cle, apres));
     const { error } = await supabase
       .from("application_tournee")
-      .upsert({ date, cle, encaisse_par: apres.encaisse_par, recuperer: apres.recuperer, frais_paye: apres.frais_paye, maj_le: new Date().toISOString() });
+      .upsert({
+        date,
+        cle,
+        encaisse_par: apres.encaisse_par,
+        recuperer: apres.recuperer,
+        frais_paye: apres.frais_paye,
+        ordre: apres.ordre,
+        maj_le: new Date().toISOString(),
+      });
     if (error) {
       setSuivis((m) => new Map(m).set(cle, avant));
       setMessage("Non enregistré, réessayez.");
@@ -103,16 +130,21 @@ export function TourneeClient({
   }
 
   function texteLivreur() {
-    if (!tournee.length) return `🚚 Livraisons du ${jourLong(date)}\n\nAucune livraison.`;
-    const l = [`🚚 Livraisons du ${jourLong(date)} — ${tournee.length} client${tournee.length > 1 ? "s" : ""}`, ""];
-    tournee.forEach((a, i) => {
-      const v = adresses.get(a.cle);
-      const repas = [a.midi && `☀️ ${a.midi} midi`, a.soir && `🌙 ${a.soir} soir`].filter(Boolean).join(" + ");
-      l.push(`${i + 1}. *${a.nom}* (${repas})`);
-      if (a.telephone) l.push(`📞 ${a.telephone}`);
+    if (!groupes.length) return `🚚 Livraisons du ${jourLong(date)}\n\nAucune livraison.`;
+    const l = [`🚚 Livraisons du ${jourLong(date)} — ${groupes.length} arrêt${groupes.length > 1 ? "s" : ""}`, ""];
+    groupes.forEach((g, i) => {
+      const midi = g.reduce((t, a) => t + a.midi, 0);
+      const soir = g.reduce((t, a) => t + a.soir, 0);
+      const repas = [midi && `☀️ ${midi} midi`, soir && `🌙 ${soir} soir`].filter(Boolean).join(" + ");
+      l.push(`${i + 1}. *${g.map((a) => a.nom).join(" + ")}* (${repas}${g.length > 1 ? ", même sac" : ""})`);
+      const tels = g.map((a) => a.telephone).filter(Boolean);
+      if (tels.length) l.push(`📞 ${tels.join(" / ")}`);
+      const ref = g.find((a) => adresses.get(a.cle)?.adresse.trim() || adresses.get(a.cle)?.lien.trim()) ?? g[0];
+      const v = adresses.get(ref.cle);
       if (v?.adresse.trim()) l.push(`📍 ${v.adresse.trim()}`);
       if (v?.lien.trim()) l.push(v.lien.trim());
-      if (parLivreur(a)) l.push(`💰 Récupérer : ${dh(suivi(a.cle).recuperer)}`);
+      const recup = g.filter(parLivreur).reduce((t, a) => t + suivi(a.cle).recuperer, 0);
+      if (recup) l.push(`💰 Récupérer : ${dh(recup)}`);
       l.push("");
     });
     if (totalLivreur) l.push(`*Total à récupérer : ${dh(totalLivreur)}*`);
@@ -162,8 +194,8 @@ export function TourneeClient({
       {/* Résumé */}
       <section className="carte grid grid-cols-3 gap-2 p-4 text-center">
         <div>
-          <p className="font-serif text-2xl text-c2b-green">{tournee.length}</p>
-          <p className="text-[11px] text-c2b-muted">livraisons</p>
+          <p className="font-serif text-2xl text-c2b-green">{groupes.length}</p>
+          <p className="text-[11px] text-c2b-muted">arrêts</p>
         </div>
         <div>
           <p className="font-serif text-2xl text-c2b-gold">{dh(totalLivreur)}</p>
@@ -220,13 +252,21 @@ export function TourneeClient({
         <p className="carte p-5 text-center text-sm text-c2b-muted">Personne à livrer ce jour-là dans le planning de la cuisine.</p>
       ) : (
         <ul className="space-y-2.5">
-          {tournee.map((a, i) => {
+          {groupes.map((g, gi) => (
+            <li key={g[0].cle} className={g.length > 1 ? "space-y-2 rounded-2xl border-2 border-dashed border-c2b-gold/60 p-2" : ""}>
+              {g.length > 1 && (
+                <p className="px-2 pt-1 text-xs font-bold text-c2b-gold">
+                  {gi + 1}. Même sac / même adresse : {g.map((a) => a.nom).join(" + ")}
+                </p>
+              )}
+              <ul className="space-y-2">
+          {g.map((a) => {
             const s = suivi(a.cle);
             const v = adresses.get(a.cle) ?? { adresse: "", lien: "" };
             return (
               <li key={a.cle} className={`carte space-y-2.5 p-4 ${s.frais_paye ? "ring-1 ring-emerald-500" : ""}`}>
                 <div className="flex items-start gap-2">
-                  <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-c2b-gold/20 text-xs font-bold text-c2b-gold">{i + 1}</span>
+                  <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-c2b-gold/20 text-xs font-bold text-c2b-gold">{gi + 1}</span>
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-c2b-green">{a.nom}</p>
                     <p className="text-xs text-c2b-muted">
@@ -338,10 +378,67 @@ export function TourneeClient({
                     </button>
                   )}
                 </div>
+
+                {/* Même sac / retirer de la tournée */}
+                {regroupe === a.cle ? (
+                  <div className="space-y-1.5 rounded-xl bg-c2b-cream p-2.5">
+                    <p className="text-xs font-bold text-c2b-muted">Même sac / même adresse que :</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tournee
+                        .filter((x) => x.cle !== a.cle)
+                        .map((x) => (
+                          <button
+                            key={x.cle}
+                            onClick={() => regrouper(x, a)}
+                            className="rounded-full border border-c2b-green/15 bg-white px-3 py-1.5 text-xs font-bold text-c2b-green"
+                          >
+                            {x.nom}
+                          </button>
+                        ))}
+                      <button onClick={() => setRegroupe(null)} className="px-2 text-xs font-semibold text-c2b-muted">
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-c2b-green/10 pt-2 text-xs font-bold">
+                    {g.length > 1 ? (
+                      <button onClick={() => enregistrer(a.cle, { ordre: null })} className="text-c2b-green underline">
+                        Séparer (autre arrêt)
+                      </button>
+                    ) : (
+                      tournee.length > 1 && (
+                        <button onClick={() => setRegroupe(a.cle)} className="text-c2b-green underline">
+                          Même sac / adresse que…
+                        </button>
+                      )
+                    )}
+                    <button onClick={() => enregistrer(a.cle, { ordre: -1 })} className="text-red-600 underline">
+                      Retirer de la tournée
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}
+              </ul>
+            </li>
+          ))}
         </ul>
+      )}
+
+      {retires.length > 0 && (
+        <section className="carte space-y-1.5 p-4 text-sm">
+          <p className="font-bold text-c2b-green">Retirés de la tournée ce jour</p>
+          {retires.map((a) => (
+            <div key={a.cle} className="flex items-center justify-between gap-2">
+              <span className="text-c2b-muted">{a.nom}</span>
+              <button onClick={() => enregistrer(a.cle, { ordre: null })} className="text-xs font-bold text-c2b-green underline">
+                Remettre
+              </button>
+            </div>
+          ))}
+        </section>
       )}
 
       {retraits.length > 0 && (
