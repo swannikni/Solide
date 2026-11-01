@@ -74,7 +74,7 @@ export default async function CuisinePage({ searchParams }: { searchParams: Prom
     // Fiches clients (une par personne) et sacs prêts / livrés de la semaine.
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier, livraison_offerte, remise")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, jeton, zone, quartier, livraison_offerte, remise, partenaire")
       .order("nom")
       .limit(2000)
       .returns<FicheClient[]>(),

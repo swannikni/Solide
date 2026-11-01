@@ -83,6 +83,7 @@ export interface FicheClient {
   quartier?: string | null;
   livraison_offerte?: boolean;
   remise?: number; // % sur les repas
+  partenaire?: boolean; // partenaire (ex. Sweat On) : toujours au planning, nombre de repas libre
 }
 
 // Semaine envoyée par un client depuis son lien « Ma semaine », à valider.
@@ -245,6 +246,8 @@ export function CuisineClient({
       new Set([
         ...commandesInitiales.filter((c) => cetteSemaine(c.date_livraison)).map((c) => `c:${c.client_id}`),
         ...extrasInitiaux.filter((e) => cetteSemaine(e.date)).map((e) => `m:${cleNom(e.nom)}`),
+        // Partenaires : chaque semaine au planning, même sans repas.
+        ...fichesInitiales.filter((f) => f.partenaire).map((f) => `m:${cleNom(f.nom)}`),
       ])
   );
   // Fiche des personnes ajoutées ou modifiées à l'instant.
@@ -398,6 +401,12 @@ export function CuisineClient({
         : { cle, clientId: null, nom: e.nom, palier: e.palier, allergies: e.allergies, refus: e.refus, note: cetteSemaine(e.date) ? e.note : null }
     );
   }
+  for (const fc of fiches.values()) {
+    const cle = `m:${cleNom(fc.nom)}`;
+    if (fc.partenaire && !personnes.has(cle))
+      personnes.set(cle, { cle, clientId: null, nom: fc.nom, palier: fc.palier, allergies: fc.allergies, refus: fc.refus, note: fc.note });
+  }
+  const estPartenaire = (p: Personne) => !p.clientId && !!fiches.get(cleNom(p.nom))?.partenaire;
   const parNom = (a: Personne, b: Personne) => a.nom.localeCompare(b.nom, "fr");
   const liste = Array.from(personnes.values()).filter((p) => actifs.has(p.cle)).sort(parNom);
   // Venus la semaine dernière, pas (encore) dans le planning de cette semaine.
@@ -564,6 +573,29 @@ export function CuisineClient({
   async function retirerJour(p: Personne, date: string) {
     if (!window.confirm(`Retirer ${p.nom} le ${new Date(`${date}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", timeZone: "UTC" })} ?`)) return;
     for (const s of SERVICES) if (coche(p, date, s.cle)) await poser(p, date, s.cle, false);
+  }
+
+  // Partenaire : nombre de repas d'un service (0 = pas de repas ce jour).
+  async function reglerPartenaire(p: Personne, date: string, service: Service, quantite: number) {
+    const q = Math.max(0, Math.min(100, quantite));
+    const ligne = extraDe(p, date, service);
+    if (q === 0) return ligne ? poser(p, date, service, false) : undefined;
+    if (!ligne) {
+      await poser(p, date, service, true);
+      if (q === 1) return;
+    }
+    const id = `${p.cle}|${date}|${service}`;
+    debut(id);
+    const { data, error } = await supabase
+      .from("application_cuisine_extras")
+      .update({ quantite: q })
+      .ilike("nom", p.nom.replace(/[%_\\]/g, "\\$&"))
+      .eq("date", date)
+      .eq("repas_type", service)
+      .select("id");
+    fin(id);
+    if (error || !data?.length) return setMessage("Nombre de repas non enregistré, réessayez.");
+    setExtras((prev) => prev.map((e) => (data.some((d) => d.id === e.id) ? { ...e, quantite: q } : e)));
   }
 
   async function toutLaSemaine(p: Personne, service: Service) {
@@ -1651,7 +1683,7 @@ export function CuisineClient({
     // Ceux qui mangent ce jour-là d'abord, puis le reste du planning.
     const mange = (p: Personne) => SERVICES.some((s) => coche(p, date, s.cle));
     const filtre = sansAccents(rechercheJour);
-    const ordre = [...liste.filter(mange), ...liste.filter((p) => !mange(p))].filter((p) => !filtre || sansAccents(p.nom).includes(filtre));
+    const ordre = [...liste.filter(estPartenaire), ...liste.filter((p) => !estPartenaire(p) && mange(p)), ...liste.filter((p) => !estPartenaire(p) && !mange(p))].filter((p) => !filtre || sansAccents(p.nom).includes(filtre));
     const onglets = (
       <div className="grid grid-cols-2 gap-1 rounded-full bg-c2b-green/[0.06] p-1">
         {(
@@ -1782,7 +1814,40 @@ export function CuisineClient({
                     >
                       {p.palier ?? "P ?"}
                     </button>
-                    {SERVICES.map((s) => {
+                    {estPartenaire(p) && SERVICES.map((s) => {
+                      const q = extraDe(p, date, s.cle)?.quantite ?? 0;
+                      const attente = occupe(`${p.cle}|${date}|${s.cle}`);
+                      return (
+                        <div
+                          key={s.cle}
+                          className={`flex h-10 flex-shrink-0 items-center gap-0.5 rounded-xl px-1 text-xs font-bold ${
+                            q > 0 ? ALLUME[s.cle] : "bg-white border border-c2b-green/15 text-c2b-muted"
+                          } ${attente ? "opacity-50" : ""}`}
+                        >
+                          <button
+                            disabled={attente || q === 0}
+                            onClick={() => reglerPartenaire(p, date, s.cle, q - 1)}
+                            className="h-7 w-6 rounded-lg bg-white/70 text-c2b-green disabled:opacity-30"
+                            aria-label={`${s.libelle} moins`}
+                          >
+                            −
+                          </button>
+                          <span className="min-w-[30px] text-center">
+                            {s.icone}
+                            {q}
+                          </span>
+                          <button
+                            disabled={attente || q >= 100}
+                            onClick={() => reglerPartenaire(p, date, s.cle, q + 1)}
+                            className="h-7 w-6 rounded-lg bg-white/70 text-c2b-green disabled:opacity-30"
+                            aria-label={`${s.libelle} plus`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {!estPartenaire(p) && SERVICES.map((s) => {
                       const actif = coche(p, date, s.cle);
                       const attente = occupe(`${p.cle}|${date}|${s.cle}`);
                       return (
