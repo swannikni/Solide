@@ -501,7 +501,7 @@ export function CuisineClient({
 
   // Nombre de boîtes d'un repas (1 à 10), enregistré tout de suite.
   async function changerQuantite(p: Personne, date: string, service: Service, quantite: number) {
-    const q = Math.min(10, Math.max(1, quantite));
+    const q = Math.min(100, Math.max(1, quantite));
     const ligne = p.clientId ? commandeDe(p, date, service) : extraDe(p, date, service);
     if (!ligne || (ligne.quantite ?? 1) === q) return;
     const id = `${p.cle}|${date}|${service}`;
@@ -1368,7 +1368,7 @@ export function CuisineClient({
                         <button
                           type="button"
                           onClick={() => changerQuantite(personneModifiee, jourOuvert, s.cle, q + 1)}
-                          disabled={attente || q >= 10}
+                          disabled={attente || q >= 100}
                           className="w-9 h-9 rounded-full border border-c2b-green/20 text-lg font-bold text-c2b-green disabled:opacity-30"
                           aria-label={`Une boîte de plus, ${s.libelle.toLowerCase()}`}
                         >
