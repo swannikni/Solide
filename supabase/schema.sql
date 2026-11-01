@@ -1854,3 +1854,25 @@ create trigger application_demandes_semaine_notif
 -- Prix par client (fiche) : livraison offerte et remise en % (ami, ancien client…).
 alter table public.application_personnes add column if not exists livraison_offerte boolean not null default false;
 alter table public.application_personnes add column if not exists remise smallint not null default 0 check (remise between 0 and 100);
+
+-- ============================================================
+-- 3 paliers partout (P1 ≈ 800 kcal, P2 ≈ 680-700, P3 ≈ 550-600).
+-- Questionnaires et comptes appli étaient sur l'ancienne échelle à 6
+-- (P3 800, P4 680, P5 550) : ramenés aux 3 paliers de la cuisine.
+-- ============================================================
+alter table public.application_questionnaires drop constraint if exists application_questionnaires_palier_check;
+alter table public.application_clients drop constraint if exists application_clients_palier_check;
+alter table public.application_personnes drop constraint if exists application_personnes_palier_check;
+alter table public.application_cuisine_extras drop constraint if exists application_cuisine_extras_palier_check;
+alter table public.application_commandes drop constraint if exists application_commandes_palier_check;
+update public.application_questionnaires set palier = case when palier in ('P1','P2','P3') then 'P1' when palier = 'P4' then 'P2' else 'P3' end where palier is not null;
+update public.application_clients set palier = case when palier in ('P1','P2','P3') then 'P1' when palier = 'P4' then 'P2' else 'P3' end where palier is not null;
+update public.application_personnes set palier = case when palier = 'P4' then 'P2' else 'P3' end where palier in ('P4','P5','P6');
+update public.application_cuisine_extras set palier = case when palier = 'P4' then 'P2' else 'P3' end where palier in ('P4','P5','P6');
+update public.application_commandes set palier = case when palier = 'P4' then 'P2' else 'P3' end where palier in ('P4','P5','P6');
+alter table public.application_questionnaires add constraint application_questionnaires_palier_check check (palier = any (array['P1','P2','P3']));
+alter table public.application_clients add constraint application_clients_palier_check check (palier = any (array['P1','P2','P3']));
+alter table public.application_personnes add constraint application_personnes_palier_check check (palier is null or palier = any (array['P1','P2','P3']));
+alter table public.application_cuisine_extras add constraint application_cuisine_extras_palier_check check (palier is null or palier = any (array['P1','P2','P3']));
+alter table public.application_commandes add constraint application_commandes_palier_check check (palier is null or palier = any (array['P1','P2','P3']));
+-- application_maj_mon_profil : accepte P1-P3 (P4 → P2, P5/P6 → P3 pour une ancienne appli en cache).
