@@ -103,11 +103,11 @@ export default async function TourneePage({ searchParams }: { searchParams: Prom
     jour: string,
     service: Service,
     quantite: number | null,
-    infos: () => Omit<ArretTournee, "cle" | "midi" | "soir" | "frais" | "reste" | "retrait">
+    infos: () => Omit<ArretTournee, "cle" | "midi" | "soir" | "frais" | "reste" | "retrait" | "montant" | "recu">
   ) => {
     semaine.set(cle, [...(semaine.get(cle) ?? []), { date: jour, service }]);
     if (jour !== date) return;
-    const a = arrets.get(cle) ?? { cle, midi: 0, soir: 0, frais: 0, reste: null, retrait: false, ...infos() };
+    const a = arrets.get(cle) ?? { cle, midi: 0, soir: 0, frais: 0, reste: null, montant: null, recu: 0, retrait: false, ...infos() };
     if (service === "dejeuner") a.midi += quantite ?? 1;
     else a.soir += quantite ?? 1;
     arrets.set(cle, a);
@@ -144,6 +144,8 @@ export default async function TourneePage({ searchParams }: { searchParams: Prom
     a.frais = prix.prixLivraison === 0 || prix.prixLivraison == null ? 0 : (prixZone(zone) ?? 0);
     const p = payeDe.get(a.cle);
     a.reste = p ? Math.max(0, Number(p.montant) - Number(p.recu)) : (prix.total ?? null);
+    a.montant = p && Number(p.montant) > 0 ? Number(p.montant) : (prix.total ?? null);
+    a.recu = p ? Number(p.recu) : 0;
   }
 
   // Fiches clients (ajout à la main) et ceux déjà ajoutés à la main ce jour.
@@ -161,7 +163,7 @@ export default async function TourneePage({ searchParams }: { searchParams: Prom
     .filter((s) => (s.ordre === -2 || (s.ordre ?? 0) >= 1000) && !arrets.has(s.cle) && s.cle.startsWith("n:"))
     .flatMap((s) => {
       const f = fichesTournee.find((x) => `n:${x.nom.toLowerCase()}` === s.cle);
-      return f ? [{ cle: s.cle, ...f, midi: 0, soir: 0, reste: null, retrait: false, modifiable: true }] : [];
+      return f ? [{ cle: s.cle, ...f, midi: 0, soir: 0, reste: null, montant: null, recu: 0, retrait: false, modifiable: true }] : [];
     });
 
   return (

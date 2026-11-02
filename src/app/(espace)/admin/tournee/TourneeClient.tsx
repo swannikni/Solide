@@ -19,6 +19,8 @@ export interface ArretTournee {
   soir: number;
   frais: number; // prix de la livraison ce jour (0 : offerte / retrait)
   reste: number | null; // reste à payer de la semaine (suggestion)
+  montant: number | null; // prix de sa semaine (Paiements, sinon calculé)
+  recu: number; // déjà reçu pour sa semaine (Paiements)
   retrait: boolean; // retrait sur place (Sweat On) : hors tournée
   modifiable: boolean; // adresse modifiable ici (fiche cuisine)
 }
@@ -84,11 +86,17 @@ export function TourneeClient({
   const [telephones, setTelephones] = useState<Map<string, string>>(new Map());
   const [saisieTel, setSaisieTel] = useState<Map<string, string>>(new Map());
   const [confirmeEnvoi, setConfirmeEnvoi] = useState(false);
+  // « Déjà payé » : montant reçu pour la semaine, enregistré dans Paiements.
+  const [recus, setRecus] = useState<Map<string, number>>(new Map());
+  const [paiementOuvert, setPaiementOuvert] = useState<string | null>(null);
+  const [montantSaisi, setMontantSaisi] = useState("");
   const [livreur, setLivreur] = useState(livreurInitial);
   const [message, setMessage] = useState("");
   const [copie, setCopie] = useState(false);
 
   const suivi = (cle: string): SuiviTournee => suivis.get(cle) ?? { cle, encaisse_par: null, recuperer: 0, frais_paye: false, ordre: null };
+  const recuDe = (a: ArretTournee) => recus.get(a.cle) ?? a.recu;
+  const estPaye = (a: ArretTournee) => recuDe(a) > 0 && (a.montant == null || recuDe(a) >= a.montant);
   // Clients ajoutés à la main (hors planning), avec leur fiche.
   const [ajoutes, setAjoutes] = useState<ArretTournee[]>(() => ajoutesInitiaux);
   const tous = [...arrets, ...ajoutes.filter((x) => !arrets.some((a) => a.cle === x.cle))];
@@ -130,6 +138,8 @@ export function TourneeClient({
         soir: 0,
         frais: f.frais,
         reste: null,
+        montant: null,
+        recu: 0,
         retrait: false,
         modifiable: true,
       };
@@ -138,7 +148,8 @@ export function TourneeClient({
     }
     await enregistrer(cle, { ordre: estAjout(suivi(cle).ordre) || !arrets.some((a) => a.cle === cle) ? AJOUT : null });
   }
-  const parLivreur = (a: ArretTournee) => suivi(a.cle).encaisse_par === "livreur" && suivi(a.cle).recuperer > 0;
+  // Déjà payé (virement…) : le livreur n'a plus rien à récupérer.
+  const parLivreur = (a: ArretTournee) => suivi(a.cle).encaisse_par === "livreur" && suivi(a.cle).recuperer > 0 && !estPaye(a);
 
   const totalLivreur = tournee.filter(parLivreur).reduce((t, a) => t + suivi(a.cle).recuperer, 0);
   const totalFrais = tournee.reduce((t, a) => t + a.frais, 0);
@@ -199,6 +210,29 @@ export function TourneeClient({
         ]);
     if (resultats.some((r) => r.error)) return setMessage("Numéro non enregistré, réessayez.");
     setTelephones((m) => new Map(m).set(a.cle, telephone));
+    setMessage("");
+  }
+
+
+  // Paiement de la semaine reçu (virement…) : enregistré dans Paiements.
+  async function validerPaiement(a: ArretTournee, montant: number) {
+    const recu = Math.max(0, Math.min(999999, Math.round(montant)));
+    const clientId = a.cle.startsWith("c:") ? a.cle.slice(2) : null;
+    const { error } = await supabase.from("application_paiements").upsert(
+      {
+        semaine: lundi,
+        nom: a.nom.slice(0, 80),
+        client_id: clientId,
+        ...(a.montant && a.montant > 0 ? {} : { montant: recu }),
+        recu,
+        paye_le: recu > 0 ? new Date().toISOString().slice(0, 10) : null,
+        ...(recu > 0 ? { moyen: suivi(a.cle).encaisse_par === "livreur" ? "especes" : "virement" } : {}),
+      },
+      { onConflict: "semaine,cle" }
+    );
+    if (error) return setMessage("Paiement non enregistré, réessayez.");
+    setRecus((m) => new Map(m).set(a.cle, recu));
+    setPaiementOuvert(null);
     setMessage("");
   }
 
@@ -527,6 +561,57 @@ export function TourneeClient({
                     <p className="text-[11px] text-c2b-muted">Reste à payer de sa semaine : {dh(a.reste)}</p>
                   )}
                 </div>
+
+                {/* Paiement de la semaine (relié à Paiements) */}
+                {paiementOuvert === a.cle ? (
+                  <div className="space-y-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5">
+                    <p className="text-xs font-bold text-emerald-800">Montant reçu pour sa semaine</p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={montantSaisi}
+                        onChange={(e) => setMontantSaisi(e.target.value)}
+                        inputMode="numeric"
+                        autoFocus
+                        className="champ w-28 py-2 text-sm"
+                      />
+                      <span className="text-sm font-semibold text-emerald-800">DH</span>
+                      <button
+                        onClick={() => validerPaiement(a, Number(montantSaisi.replace(/[^\d]/g, "")) || 0)}
+                        className="ml-auto rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white"
+                      >
+                        Valider
+                      </button>
+                      <button onClick={() => setPaiementOuvert(null)} className="px-2 text-xs font-semibold text-c2b-muted">
+                        Annuler
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">Enregistré dans Paiements pour la semaine.</p>
+                  </div>
+                ) : estPaye(a) ? (
+                  <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2">
+                    <span className="text-sm font-bold text-emerald-700">✅ Semaine payée : {dh(recuDe(a))}</span>
+                    <button
+                      onClick={() => {
+                        setMontantSaisi(String(recuDe(a)));
+                        setPaiementOuvert(a.cle);
+                      }}
+                      className="text-xs font-bold text-emerald-800 underline"
+                    >
+                      Modifier
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setMontantSaisi(String(a.montant ?? a.reste ?? ""));
+                      setPaiementOuvert(a.cle);
+                    }}
+                    className="w-full rounded-full border border-emerald-300 bg-white py-2 text-xs font-bold text-emerald-700"
+                  >
+                    💳 Déjà payé{a.montant ? ` (${dh(a.montant)})` : ""}
+                    {recuDe(a) > 0 ? ` · ${dh(recuDe(a))} reçus` : ""}
+                  </button>
+                )}
 
                 {/* Prix de la livraison */}
                 <div className="flex items-center justify-between gap-2">
