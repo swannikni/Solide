@@ -219,6 +219,10 @@ export function ClientsClient({
   const [lundiVu, setLundiVu] = useState(semaines?.defaut ?? "");
   const [repasSem, setRepasSem] = useState<RepasSemaine[]>(semaines?.repas ?? []);
   const [semaineOuverte, setSemaineOuverte] = useState<string | null>(null);
+  // Clients ajoutés à la main à une semaine (« lundi|nom »), avant leurs repas.
+  const [ajoutesSem, setAjoutesSem] = useState<string[]>([]);
+  const [ajoutSem, setAjoutSem] = useState(false);
+  const [rechercheSem, setRechercheSem] = useState("");
   const [enCoursSem, setEnCoursSem] = useState<string | null>(null);
   // Retirés à l'instant (« nom » partout, ou « lundi|nom » pour une semaine).
   const [retiresSemaine, setRetiresSemaine] = useState<Set<string>>(new Set());
@@ -911,7 +915,12 @@ export function ClientsClient({
             parNom.get(k)!.repas.push(r);
           }
           const ficheDe = (nom: string) => fiches.find((f) => f.nom.trim().toLowerCase() === nom.toLowerCase());
-          // Partenaires : toujours présents, même sans repas cette semaine.
+          // Partenaires (toujours présents) et clients ajoutés à la main cette
+          // semaine, même sans repas pour l'instant.
+          for (const nom of ajoutesSem.filter((x) => x.startsWith(`${lundiVu}|`)).map((x) => x.slice(lundiVu.length + 1))) {
+            const k = nom.trim().toLowerCase();
+            if (!parNom.has(k)) parNom.set(k, { nom: nom.trim(), repas: [] });
+          }
           for (const f of fiches.filter((x) => x.partenaire)) {
             const k = f.nom.trim().toLowerCase();
             if (!parNom.has(k)) parNom.set(k, { nom: f.nom.trim(), repas: [] });
@@ -956,6 +965,48 @@ export function ClientsClient({
                       (☀️ {total("dejeuner")} · 🌙 {total("diner")})
                     </span>
                   </p>
+                  {ajoutSem ? (
+                    <div className="carte space-y-2 p-3">
+                      <input
+                        value={rechercheSem}
+                        onChange={(e) => setRechercheSem(e.target.value)}
+                        placeholder="Tapez son nom…"
+                        autoFocus
+                        className="champ py-2.5 text-sm"
+                      />
+                      <div className="max-h-64 space-y-1 overflow-y-auto">
+                        {fiches
+                          .filter((f) => !tous.some((p) => p.nom.toLowerCase() === f.nom.trim().toLowerCase()))
+                          .filter((f) => !rechercheSem.trim() || normaliser(f.nom).includes(normaliser(rechercheSem)))
+                          .slice(0, 30)
+                          .map((f) => (
+                            <button
+                              key={f.id}
+                              onClick={() => {
+                                setAjoutesSem((l) => [...l, `${lundiVu}|${f.nom.trim()}`]);
+                                setAjoutSem(false);
+                                setRechercheSem("");
+                                setSemaineOuverte(f.nom.trim());
+                              }}
+                              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-c2b-cream"
+                            >
+                              <span className="font-semibold text-c2b-green">{f.nom}</span>
+                              <span className="text-xs text-c2b-muted">{f.palier ?? ""}</span>
+                            </button>
+                          ))}
+                        {rechercheSem.trim() && !fiches.some((f) => normaliser(f.nom).includes(normaliser(rechercheSem))) && (
+                          <p className="px-2 py-2 text-xs text-c2b-muted">Aucun client de ce nom. Un nouveau client se crée depuis la Cuisine (« Ajouter une personne »).</p>
+                        )}
+                      </div>
+                      <button onClick={() => setAjoutSem(false)} className="btn-secondary w-full py-2 text-xs">
+                        Fermer
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setAjoutSem(true)} className="btn-secondary w-full py-2.5 text-sm">
+                      + Ajouter un client à cette semaine
+                    </button>
+                  )}
                   {liste.length === 0 ? (
                     <p className="carte p-4 text-center text-sm text-c2b-muted">
                       {saisie ? "Personne de ce nom cette semaine." : "Personne au planning cette semaine."}
