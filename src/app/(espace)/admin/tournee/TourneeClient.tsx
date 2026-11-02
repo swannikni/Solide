@@ -80,6 +80,10 @@ export function TourneeClient({
     () => new Map([...arrets, ...ajoutesInitiaux].map((a) => [a.cle, { adresse: a.adresse ?? "", lien: a.lien ?? "" }]))
   );
   const [edition, setEdition] = useState<string | null>(null);
+  // Numéros saisis ici (client sans numéro), et confirmation d'envoi s'il en manque.
+  const [telephones, setTelephones] = useState<Map<string, string>>(new Map());
+  const [saisieTel, setSaisieTel] = useState<Map<string, string>>(new Map());
+  const [confirmeEnvoi, setConfirmeEnvoi] = useState(false);
   const [livreur, setLivreur] = useState(livreurInitial);
   const [message, setMessage] = useState("");
   const [copie, setCopie] = useState(false);
@@ -179,6 +183,25 @@ export function TourneeClient({
     setMessage("");
   }
 
+  const telDe = (a: ArretTournee) => telephones.get(a.cle) ?? a.telephone;
+  const sansNumero = tournee.filter((a) => !telDe(a));
+
+  // Numéro d'un client (sa fiche, ou son compte appli) et ses repas à venir.
+  async function enregistrerTelephone(a: ArretTournee) {
+    const telephone = (saisieTel.get(a.cle) ?? "").trim().slice(0, 30);
+    const chiffres = telephone.replace(/[^\d]/g, "").length;
+    if (chiffres < 9 || chiffres > 15) return setMessage(`Numéro de ${a.nom} incomplet : indiquez le numéro entier (ex. 06 12 34 56 78).`);
+    const resultats = a.cle.startsWith("c:")
+      ? [await supabase.from("application_clients").update({ telephone }).eq("id", a.cle.slice(2))]
+      : await Promise.all([
+          supabase.from("application_personnes").upsert({ nom: a.nom, telephone, updated_at: new Date().toISOString() }, { onConflict: "cle" }),
+          supabase.from("application_cuisine_extras").update({ telephone }).ilike("nom", a.nom.replace(/[%_\\]/g, "\\$&")).gte("date", date),
+        ]);
+    if (resultats.some((r) => r.error)) return setMessage("Numéro non enregistré, réessayez.");
+    setTelephones((m) => new Map(m).set(a.cle, telephone));
+    setMessage("");
+  }
+
   async function enregistrerLivreur() {
     await supabase.from("application_tournee_reglages").upsert({ id: 1, livreur_telephone: livreur.trim().slice(0, 30) || null });
   }
@@ -192,7 +215,7 @@ export function TourneeClient({
       const repas = [midi && `☀️ ${midi} midi`, soir && `🌙 ${soir} soir`].filter(Boolean).join(" + ");
       const precision = [repas, g.length > 1 && "même sac"].filter(Boolean).join(", ");
       l.push(`${i + 1}. *${g.map((a) => a.nom).join(" + ")}*${precision ? ` (${precision})` : ""}`);
-      const tels = g.map((a) => a.telephone).filter(Boolean);
+      const tels = g.map((a) => telDe(a) ?? `${a.nom} : numéro manquant`);
       if (tels.length) l.push(`📞 ${tels.join(" / ")}`);
       const ref = g.find((a) => adresses.get(a.cle)?.adresse.trim() || adresses.get(a.cle)?.lien.trim()) ?? g[0];
       const v = adresses.get(ref.cle);
@@ -278,10 +301,40 @@ export function TourneeClient({
             className="champ mt-1 py-2.5 text-sm font-normal"
           />
         </label>
+        {sansNumero.length > 0 && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+            📵 {sansNumero.length} client{sansNumero.length > 1 ? "s" : ""} sans numéro : {sansNumero.map((a) => a.nom).join(", ")}. Ajoutez-les plus bas avant d&apos;envoyer.
+          </p>
+        )}
+        {confirmeEnvoi && sansNumero.length > 0 && (
+          <div className="flex gap-2">
+            <a
+              href={lienWhatsApp()}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setConfirmeEnvoi(false)}
+              className="flex-1 rounded-full border border-red-300 bg-white py-2.5 text-center text-xs font-bold text-red-700"
+            >
+              Envoyer quand même
+            </a>
+            <button onClick={() => setConfirmeEnvoi(false)} className="btn-primary flex-1 py-2.5 text-xs">
+              Compléter les numéros
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
-          <a href={lienWhatsApp()} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] py-3 text-sm font-bold text-white">
-            <Send size={15} /> Envoyer au livreur
-          </a>
+          {sansNumero.length > 0 ? (
+            <button
+              onClick={() => setConfirmeEnvoi(true)}
+              className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] py-3 text-sm font-bold text-white opacity-60"
+            >
+              <Send size={15} /> Envoyer au livreur
+            </button>
+          ) : (
+            <a href={lienWhatsApp()} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 rounded-full bg-[#25D366] py-3 text-sm font-bold text-white">
+              <Send size={15} /> Envoyer au livreur
+            </a>
+          )}
           <button
             onClick={() =>
               navigator.clipboard
@@ -362,10 +415,30 @@ export function TourneeClient({
                     <p className="font-bold text-c2b-green">{a.nom}</p>
                     <p className="text-xs text-c2b-muted">
                       {[a.midi && `☀️ ${a.midi} midi`, a.soir && `🌙 ${a.soir} soir`].filter(Boolean).join(" · ") || "Ajouté à la main"}
-                      {a.telephone && <span className="select-all"> · 📞 {a.telephone}</span>}
+                      {telDe(a) && <span className="select-all"> · 📞 {telDe(a)}</span>}
                     </p>
                   </div>
                 </div>
+
+                {/* Numéro obligatoire pour le livreur */}
+                {!telDe(a) && (
+                  <div className="space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5">
+                    <p className="text-xs font-bold text-red-700">📵 Pas de numéro : le livreur ne pourra pas l&apos;appeler</p>
+                    <div className="flex gap-1.5">
+                      <input
+                        value={saisieTel.get(a.cle) ?? ""}
+                        onChange={(e) => setSaisieTel((m) => new Map(m).set(a.cle, e.target.value))}
+                        placeholder="06 12 34 56 78"
+                        inputMode="tel"
+                        maxLength={30}
+                        className="champ min-w-0 flex-1 py-2 text-sm"
+                      />
+                      <button onClick={() => enregistrerTelephone(a)} className="btn-primary px-4 py-2 text-xs">
+                        Enregistrer
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Adresse et lien */}
                 {edition === a.cle ? (
