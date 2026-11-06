@@ -44,11 +44,11 @@ const propre = (t: string) =>
     .replace(/ | /g, " ")
     .replace(/⚠️|☀️|🌙/g, "");
 
-export function genererRecettePdf(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo?: { data: string; ratio: number } | null): Blob {
+function rendre(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo: { data: string; ratio: number } | null | undefined, k: number) {
   const doc = new JsPdf({ unit: "mm", format: "a4" });
   const marge = 14;
   const largeur = 210 - marge * 2;
-  const bas = 297 - 16;
+  const bas = 297 - 12;
   let y = 0;
 
   const police = (taille: number, style: "normal" | "bold" | "italic" = "normal", couleur: Rvb = TEXTE) => {
@@ -61,7 +61,7 @@ export function genererRecettePdf(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo?
     if (y + h > bas) {
       doc.addPage();
       y = marge;
-      police(8.5, "bold", GRIS);
+      police(8.5 * k, "bold", GRIS);
       doc.text(`${propre(f.nom.toUpperCase())} (suite)`, marge, y + 2);
       y += 7;
     }
@@ -69,82 +69,82 @@ export function genererRecettePdf(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo?
 
   // Bandeau de section : fond vert, titre or.
   const section = (titre: string, droite?: string) => {
-    place(16);
-    y += 3;
+    place(16 * k);
+    y += 3 * k;
     doc.setFillColor(...VERT);
-    doc.roundedRect(marge, y, largeur, 8.5, 1.5, 1.5, "F");
-    police(10.5, "bold", [255, 255, 255]);
-    doc.text(propre(titre.toUpperCase()), marge + 4, y + 5.8);
+    doc.roundedRect(marge, y, largeur, 8.5 * k, 1.5, 1.5, "F");
+    police(10.5 * k, "bold", [255, 255, 255]);
+    doc.text(propre(titre.toUpperCase()), marge + 4, y + 5.8 * k);
     if (droite) {
-      police(9.5, "bold", OR);
-      doc.text(propre(droite), marge + largeur - 4, y + 5.8, { align: "right" });
+      police(9.5 * k, "bold", OR);
+      doc.text(propre(droite), marge + largeur - 4, y + 5.8 * k, { align: "right" });
     }
-    y += 11;
+    y += 11.5 * k;
   };
 
-  // ---------- En-tête ----------
+  // ---------- En-tête : logo, nom, allergènes ; effectifs à droite ----------
+  const hEntete = 40 * k;
   doc.setFillColor(...CREME);
-  doc.rect(0, 0, 210, 44, "F");
+  doc.rect(0, 0, 210, hEntete, "F");
   doc.setFillColor(...OR);
-  doc.rect(0, 44, 210, 1.2, "F");
-  const hLogo = 26;
-  if (logo) doc.addImage(logo.data, "PNG", marge, 9, hLogo * logo.ratio, hLogo, "logo", "FAST");
-  const xT = logo ? marge + hLogo * logo.ratio + 8 : marge;
-  police(9, "bold", OR);
-  doc.text("FICHE CUISINE & MONTAGE", xT, 15);
-  police(22, "bold", VERT);
-  doc.text(propre(f.nom), xT, 24.5);
-  police(12, "normal", GRIS);
-  doc.text(propre(f.sousTitre), xT, 31);
-  police(8.5, "normal", GRIS);
-  doc.text(lignes(f.description, 210 - xT - marge).slice(0, 2), xT, 37);
-  y = 52;
-
-  // ---------- Effectifs ----------
+  doc.rect(0, hEntete, 210, 1.2, "F");
+  const hLogo = 24 * k;
+  if (logo) doc.addImage(logo.data, "PNG", marge, 8 * k, hLogo * logo.ratio, hLogo, "logo", "FAST");
+  const xT = logo ? marge + hLogo * logo.ratio + 6 : marge;
+  // Effectifs : 4 tuiles compactes en colonne à droite (2 × 2).
+  const lT = 21;
+  const hT = 14 * k;
+  const xTuiles = 210 - marge - lT * 2 - 3;
   const tuiles: { libelle: string; valeur: number; fond: Rvb; texte: Rvb; etiquette: Rvb }[] = [
     { libelle: "TOTAL", valeur: f.total, fond: VERT, texte: [255, 255, 255], etiquette: OR },
-    ...PALIERS.map((p) => ({ libelle: p, valeur: f.effectifs[p] || 0, fond: CREME, texte: VERT, etiquette: COULEUR_PALIER[p] })),
+    ...PALIERS.map((p) => ({ libelle: p, valeur: f.effectifs[p] || 0, fond: [255, 255, 255] as Rvb, texte: VERT, etiquette: COULEUR_PALIER[p] })),
   ];
-  const ecart = 4;
-  const lT = (largeur - ecart * 3) / 4;
   tuiles.forEach((t, i) => {
-    const x = marge + i * (lT + ecart);
+    const x = xTuiles + (i % 2) * (lT + 3);
+    const yT = 5 * k + Math.floor(i / 2) * (hT + 2.5 * k);
     doc.setFillColor(...t.fond);
-    doc.roundedRect(x, y, lT, 18, 3, 3, "F");
-    police(8, "bold", t.etiquette);
-    doc.text(t.libelle, x + 5, y + 6.5);
-    police(18, "bold", t.texte);
-    doc.text(String(t.valeur), x + 5, y + 14.5);
-    police(8, "normal", t.fond === VERT ? [220, 220, 220] : GRIS);
-    doc.text("box", x + lT - 5, y + 14.5, { align: "right" });
+    doc.roundedRect(x, yT, lT, hT, 2, 2, "F");
+    police(7 * k, "bold", t.etiquette);
+    doc.text(t.libelle, x + 3, yT + 4.8 * k);
+    police(15 * k, "bold", t.texte);
+    doc.text(String(t.valeur), x + lT - 3, yT + 11.5 * k, { align: "right" });
   });
-  y += 24;
+  const lTitre = xTuiles - xT - 4;
+  police(8.5 * k, "bold", OR);
+  doc.text("FICHE CUISINE & MONTAGE", xT, 13 * k);
+  police(21 * k, "bold", VERT);
+  doc.text(lignes(f.nom, lTitre)[0], xT, 22 * k);
+  police(11.5 * k, "normal", GRIS);
+  doc.text(lignes(f.sousTitre, lTitre)[0], xT, 28.5 * k);
+  police(8.5 * k, "bold", ROUGE);
+  doc.text(lignes(`Allergènes : ${f.allergenes}`, lTitre).slice(0, 2), xT, 34.5 * k);
+  y = hEntete + 3 * k;
 
   // ---------- À préparer ----------
   section("À préparer", "cru / net  >  cuit");
   const col = { nom: marge + 3, cru: marge + 112, cuit: marge + 150 };
-  police(8, "bold", GRIS);
+  police(8 * k, "bold", GRIS);
   doc.text("ALIMENT", col.nom, y);
   doc.text("CRU / NET", col.cru, y);
   doc.text("CUIT", col.cuit, y);
-  y += 2.5;
+  y += 2.5 * k;
   f.aliments.forEach((a, i) => {
     const note = a.note ? lignes(a.note, 95) : [];
-    const h = 7.5 + note.length * 3.6;
+    const h = (7.5 + note.length * 3.6) * k;
     place(h);
     if (i % 2 === 0) {
       doc.setFillColor(...ALTERNE);
       doc.rect(marge, y, largeur, h, "F");
     }
-    police(10.5, "bold", VERT);
-    doc.text(propre(a.nom), col.nom, y + 5.2);
-    police(11, "bold", TEXTE);
-    doc.text(propre(a.cru), col.cru, y + 5.2);
-    police(10.5, "normal", TEXTE);
-    doc.text(propre(a.cuit), col.cuit, y + 5.2);
+    police(10.5 * k, "bold", VERT);
+    doc.text(propre(a.nom), col.nom, y + 5.2 * k);
+    police(11 * k, "bold", TEXTE);
+    doc.text(propre(a.cru), col.cru, y + 5.2 * k);
+    police(10.5 * k, "normal", TEXTE);
+    doc.text(propre(a.cuit), col.cuit, y + 5.2 * k);
     if (note.length) {
-      police(8, "italic", GRIS);
-      doc.text(note, col.nom, y + 8.8);
+      police(8 * k, "italic", GRIS);
+      doc.text(note, col.nom, y + 8.8 * k);
     }
     y += h;
   });
@@ -155,109 +155,103 @@ export function genererRecettePdf(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo?
     const moitie = Math.ceil(p.ingredients.length / 2);
     const colonnes = [p.ingredients.slice(0, moitie), p.ingredients.slice(moitie)];
     const lC = (largeur - 6) / 2;
-    const hLigne = 7;
+    const hLigne = 7 * k;
     place(moitie * hLigne);
     const y0 = y;
-    colonnes.forEach((c, k) => {
-      const x = marge + k * (lC + 6);
+    colonnes.forEach((c, colonne) => {
+      const x = marge + colonne * (lC + 6);
       c.forEach((ing, i) => {
         const yy = y0 + i * hLigne;
         if (i % 2 === 0) {
           doc.setFillColor(...ALTERNE);
           doc.rect(x, yy, lC, hLigne, "F");
         }
-        police(10, "normal", TEXTE);
-        doc.text(propre(ing.nom), x + 3, yy + 4.8);
-        police(10.5, "bold", VERT);
-        doc.text(propre(ing.qte), x + lC - 3, yy + 4.8, { align: "right" });
+        police(10 * k, "normal", TEXTE);
+        doc.text(propre(ing.nom), x + 3, yy + 4.8 * k);
+        police(10.5 * k, "bold", VERT);
+        doc.text(propre(ing.qte), x + lC - 3, yy + 4.8 * k, { align: "right" });
       });
     });
-    y = y0 + moitie * hLigne + 2;
-    police(9, "italic", GRIS);
-    for (const e of p.etapes) {
-      const l = lignes(e, largeur - 6);
-      place(l.length * 4.2);
-      doc.text(l, marge + 3, y + 3.5);
-      y += l.length * 4.2;
-    }
+    y = y0 + moitie * hLigne + 2 * k;
+    police(9.5 * k, "italic", GRIS);
+    const le = lignes(p.etapes.join(" "), largeur - 6);
+    place(le.length * 4.4 * k);
+    doc.text(le, marge + 3, y + 3.5 * k);
+    y += le.length * 4.4 * k;
   }
 
   // ---------- Cuisine ----------
   section("Cuisine");
   f.cuisine.forEach((e, i) => {
     const l = lignes(e, largeur - 14);
-    const h = l.length * 4.8 + 2.5;
+    const h = (l.length * 4.8 + 2.5) * k;
     place(h);
     doc.setFillColor(...OR);
-    doc.circle(marge + 4, y + 2.6, 2.6, "F");
-    police(8.5, "bold", [255, 255, 255]);
-    doc.text(String(i + 1), marge + 4, y + 3.6, { align: "center" });
-    police(10.5, "normal", TEXTE);
-    doc.text(l, marge + 10, y + 3.8);
+    doc.circle(marge + 4, y + 2.6 * k, 2.6 * k, "F");
+    police(8.5 * k, "bold", [255, 255, 255]);
+    doc.text(String(i + 1), marge + 4, y + 3.6 * k, { align: "center" });
+    police(10.5 * k, "normal", TEXTE);
+    doc.text(l, marge + 10, y + 3.8 * k);
     y += h;
   });
 
   // ---------- Montage ----------
   section("Montage", "poids cuits par box");
   const cm = { nom: marge + 3, P1: marge + 108, P2: marge + 128, P3: marge + 148, total: marge + largeur - 3 };
-  police(8, "bold", GRIS);
+  police(8 * k, "bold", GRIS);
   doc.text("DANS LA BOX", cm.nom, y);
   for (const p of PALIERS) {
-    police(8.5, "bold", COULEUR_PALIER[p]);
+    police(8.5 * k, "bold", COULEUR_PALIER[p]);
     doc.text(p, cm[p] + 8, y, { align: "right" });
   }
-  police(8, "bold", GRIS);
+  police(8 * k, "bold", GRIS);
   doc.text("TOTAL", cm.total, y, { align: "right" });
   y += 2.5;
   f.elements.forEach((e, i) => {
     const l = lignes(e.nom, 90);
-    const h = 3.5 + l.length * 4.4;
+    const h = (3.5 + l.length * 4.4) * k;
     place(h);
     if (i % 2 === 0) {
       doc.setFillColor(...ALTERNE);
       doc.rect(marge, y, largeur, h, "F");
     }
-    police(10.5, "bold", VERT);
-    doc.text(l, cm.nom, y + 5);
-    police(10.5, "normal", TEXTE);
-    for (const p of PALIERS) doc.text(`${e.portions[p]} g`, cm[p] + 8, y + 5, { align: "right" });
-    police(10.5, "bold", VERT);
-    doc.text(propre(e.total), cm.total, y + 5, { align: "right" });
+    police(10.5 * k, "bold", VERT);
+    doc.text(l, cm.nom, y + 5 * k);
+    police(10.5 * k, "normal", TEXTE);
+    for (const p of PALIERS) doc.text(`${e.portions[p]} g`, cm[p] + 8, y + 5 * k, { align: "right" });
+    police(10.5 * k, "bold", VERT);
+    doc.text(propre(e.total), cm.total, y + 5 * k, { align: "right" });
     y += h;
   });
   y += 2;
   for (const m of f.montage) {
     const l = lignes(`> ${m}`, largeur - 6);
-    place(l.length * 4.8);
-    police(10.5, "bold", VERT);
-    doc.text(l, marge + 3, y + 3.8);
-    y += l.length * 4.8;
+    place(l.length * 4.8 * k);
+    police(10.5 * k, "bold", VERT);
+    doc.text(l, marge + 3, y + 3.8 * k);
+    y += l.length * 4.8 * k;
   }
-  police(9, "italic", GRIS);
-  for (const n of f.notes) {
-    const l = lignes(n, largeur - 6);
-    place(l.length * 4.2);
-    doc.text(l, marge + 3, y + 3.8);
-    y += l.length * 4.2;
-  }
-
-  // ---------- Allergènes ----------
-  const la = lignes(`ALLERGÈNES : ${f.allergenes}`, largeur - 10);
-  const hA = la.length * 5 + 6;
-  place(hA + 6);
-  y += 4;
-  doc.setFillColor(...ROUGE_FOND);
-  doc.roundedRect(marge, y, largeur, hA, 2, 2, "F");
-  police(10.5, "bold", ROUGE);
-  doc.text(la, marge + 5, y + 6.5);
+  police(9.5 * k, "italic", GRIS);
+  const ln = lignes(f.notes.join(" "), largeur - 6);
+  place(ln.length * 4.4 * k);
+  doc.text(ln, marge + 3, y + 3.8 * k);
+  y += ln.length * 4.4 * k;
 
   // ---------- Pied de page ----------
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    police(8, "normal", GRIS);
-    doc.text(`CHEF2BOX · ${propre(f.nom)} · ${f.total} box · poids crus indicatifs, à ajuster selon le rendement`, marge, 290);
-    doc.text(`${i} / ${pages}`, 210 - marge, 290, { align: "right" });
+    police(8 * k, "normal", GRIS);
+    doc.text(`CHEF2BOX · ${propre(f.nom)} · ${f.total} box · poids crus indicatifs, à ajuster selon le rendement`, marge, 292);
+    doc.text(`${i} / ${pages}`, 210 - marge, 292, { align: "right" });
   }
+  return doc;
+}
+
+// Une seule page : on part d'un texte plus grand et on réduit jusqu'à ce que
+// toute la fiche tienne sur une A4 (sans descendre sous un minimum lisible).
+export function genererRecettePdf(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo?: { data: string; ratio: number } | null): Blob {
+  let doc = rendre(JsPdf, f, logo, 1.25);
+  for (let k = 1.2; doc.getNumberOfPages() > 1 && k >= 0.7; k -= 0.05) doc = rendre(JsPdf, f, logo, k);
   return doc.output("blob");
 }
