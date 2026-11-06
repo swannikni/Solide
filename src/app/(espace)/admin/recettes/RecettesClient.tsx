@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { jsPDF as JsPDF } from "jspdf";
+import { genererRecettePdf } from "@/lib/recette-pdf";
 import { Copy, FileDown, Send } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import {
@@ -106,52 +108,65 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
     return l.join("\n");
   }
 
-  async function pdf() {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const marge = 14;
-    let y = 16;
-    const ligne = (t: string, taille = 10, gras = false, ecart = 5) => {
-      doc.setFont("helvetica", gras ? "bold" : "normal");
-      doc.setFontSize(taille);
-      for (const morceau of doc.splitTextToSize(t, 182) as string[]) {
-        if (y > 282) {
-          doc.addPage();
-          y = 16;
-        }
-        doc.text(morceau, marge, y);
-        y += ecart;
-      }
+  // Bibliothèque PDF et logo chargés d'avance : le PDF se fabrique sans
+  // attente au toucher, ce qu'exige le partage sur iPhone.
+  const [JsPdf, setJsPdf] = useState<typeof JsPDF | null>(null);
+  const [logo, setLogo] = useState<{ data: string; ratio: number } | null>(null);
+  useEffect(() => {
+    import("jspdf").then((m) => setJsPdf(() => m.jsPDF)).catch(() => {});
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d")?.drawImage(image, 0, 0);
+      setLogo({ data: canvas.toDataURL("image/png"), ratio: image.naturalWidth / image.naturalHeight });
     };
-    ligne("CHEF2BOX · FICHE CUISINE", 9, true);
-    ligne(`${r.nom.toUpperCase()} — ${r.sousTitre}`, 18, true, 8);
-    ligne(`${c.total} box : P1 × ${eff.P1} · P2 × ${eff.P2} · P3 × ${eff.P3}`, 11, true, 8);
-    ligne("À PRÉPARER (cru / net → cuit)", 12, true, 6);
-    for (const a of c.aliments)
-      ligne(
-        `• ${a.nom} : ${a.cruCalc != null ? quantite(a.cruCalc, a.unite) : "—"}${a.cuitCalc != null && a.cuitCalc !== a.cruCalc ? ` → ${quantite(a.cuitCalc, a.unite)} cuit` : ""}${a.note ? ` (${a.note})` : ""}`
-      );
-    for (const p of c.preparations) {
-      y += 2;
-      ligne(`${p.titre.toUpperCase()}${p.totalG ? ` (≈ ${quantite(p.totalG)})` : ""}`, 12, true, 6);
-      for (const i of p.ingredients) ligne(`• ${i.nom} : ${fmtIngredient(i)}`);
-      for (const e of p.etapes) ligne(`  ${e}`, 9);
-    }
-    y += 2;
-    ligne("CUISINE", 12, true, 6);
-    c.cuisine.forEach((e, i) => ligne(`${i + 1}. ${e}`));
-    y += 2;
-    ligne("MONTAGE — poids cuits par box (P1 / P2 / P3)", 12, true, 6);
-    for (const e of c.elements) ligne(`• ${e.nom} : ${e.portions.P1} / ${e.portions.P2} / ${e.portions.P3} g — total ${quantite(e.total)}`);
-    for (const m of r.montage) ligne(`→ ${m}`);
-    for (const n of r.notes) ligne(n, 9);
-    y += 2;
-    ligne(`Allergènes : ${r.allergenes}`, 10, true);
+    image.src = "/logo-fiche.png";
+  }, []);
+
+  async function pdf() {
+    if (!JsPdf) return;
+    const blob = genererRecettePdf(
+      JsPdf,
+      {
+        nom: r.nom,
+        sousTitre: r.sousTitre,
+        description: r.description,
+        effectifs: eff,
+        total: c.total,
+        aliments: c.aliments.map((a) => ({
+          nom: a.nom,
+          note: a.note,
+          cru: a.cruCalc != null ? quantite(a.cruCalc, a.unite) : "-",
+          cuit: a.cuitCalc != null ? quantite(a.cuitCalc, a.unite) : "-",
+        })),
+        preparations: c.preparations.map((p) => ({
+          titre: p.titre,
+          total: p.totalG > 0 ? quantite(p.totalG) : null,
+          ingredients: p.ingredients.map((i) => ({ nom: i.nom, qte: fmtIngredient(i) })),
+          etapes: p.etapes,
+        })),
+        cuisine: c.cuisine,
+        elements: c.elements.map((e) => ({ nom: e.nom, portions: e.portions, total: quantite(e.total) })),
+        montage: r.montage,
+        notes: r.notes,
+        allergenes: r.allergenes,
+      },
+      logo
+    );
     const fichier = `Chef2Box_${r.id}_${c.total}box.pdf`;
-    const blob = doc.output("blob");
     const file = new File([blob], fichier, { type: "application/pdf" });
-    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: r.nom }).catch(() => {});
-    else doc.save(fichier);
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: r.nom }).catch(() => {});
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fichier;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
   return (
@@ -384,7 +399,7 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">⚠️ Allergènes : {r.allergenes}</p>
 
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={pdf} className="btn-primary px-3 py-2.5 text-sm">
+              <button onClick={pdf} disabled={!JsPdf} className="btn-primary px-3 py-2.5 text-sm">
                 <FileDown size={15} /> PDF
               </button>
               <a

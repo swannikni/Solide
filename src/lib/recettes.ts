@@ -84,7 +84,10 @@ export function quantite(v: number, unite = "g") {
     }
     return `${arrondi} ${unite}`;
   }
-  const demi = Math.round(v * 2) / 2;
+  // Pièces, gousses, feuilles… : arrondies à l'unité supérieure (on n'achète pas une demi-pièce) ;
+  // cuillères : à la demi près.
+  if (!unite.startsWith("c.")) return `${Math.max(1, Math.ceil(v - 0.05))} ${unite}`;
+  const demi = Math.max(0.5, Math.round(v * 2) / 2);
   return `${demi.toLocaleString("fr-FR")} ${unite}`;
 }
 
