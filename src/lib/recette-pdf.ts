@@ -82,43 +82,42 @@ function rendre(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo: { data: string; r
     y += 11.5 * k;
   };
 
-  // ---------- En-tête : logo, nom, allergènes ; effectifs à droite ----------
-  const hEntete = 40 * k;
+  // ---------- En-tête compact : logo, nom, allergènes ; effectifs à droite ----------
+  const hEntete = 24 * k;
   doc.setFillColor(...CREME);
   doc.rect(0, 0, 210, hEntete, "F");
   doc.setFillColor(...OR);
-  doc.rect(0, hEntete, 210, 1.2, "F");
-  const hLogo = 24 * k;
-  if (logo) doc.addImage(logo.data, "PNG", marge, 8 * k, hLogo * logo.ratio, hLogo, "logo", "FAST");
-  const xT = logo ? marge + hLogo * logo.ratio + 6 : marge;
-  // Effectifs : 4 tuiles compactes en colonne à droite (2 × 2).
-  const lT = 21;
-  const hT = 14 * k;
-  const xTuiles = 210 - marge - lT * 2 - 3;
+  doc.rect(0, hEntete, 210, 0.8, "F");
+  const hLogo = 16 * k;
+  if (logo) doc.addImage(logo.data, "PNG", marge, 4 * k, hLogo * logo.ratio, hLogo, "logo", "FAST");
+  const xT = logo ? marge + hLogo * logo.ratio + 5 : marge;
+  // Effectifs : 4 petites tuiles sur une ligne, à droite.
+  const lT = 15;
+  const hT = 13 * k;
+  const xTuiles = 210 - marge - lT * 4 - 2 * 3;
   const tuiles: { libelle: string; valeur: number; fond: Rvb; texte: Rvb; etiquette: Rvb }[] = [
     { libelle: "TOTAL", valeur: f.total, fond: VERT, texte: [255, 255, 255], etiquette: OR },
     ...PALIERS.map((p) => ({ libelle: p, valeur: f.effectifs[p] || 0, fond: [255, 255, 255] as Rvb, texte: VERT, etiquette: COULEUR_PALIER[p] })),
   ];
   tuiles.forEach((t, i) => {
-    const x = xTuiles + (i % 2) * (lT + 3);
-    const yT = 5 * k + Math.floor(i / 2) * (hT + 2.5 * k);
+    const x = xTuiles + i * (lT + 2);
+    const yT = (hEntete - hT) / 2;
     doc.setFillColor(...t.fond);
-    doc.roundedRect(x, yT, lT, hT, 2, 2, "F");
-    police(7 * k, "bold", t.etiquette);
-    doc.text(t.libelle, x + 3, yT + 4.8 * k);
-    police(15 * k, "bold", t.texte);
-    doc.text(String(t.valeur), x + lT - 3, yT + 11.5 * k, { align: "right" });
+    doc.roundedRect(x, yT, lT, hT, 1.5, 1.5, "F");
+    police(6.5 * k, "bold", t.etiquette);
+    doc.text(t.libelle, x + lT / 2, yT + 4.2 * k, { align: "center" });
+    police(13 * k, "bold", t.texte);
+    doc.text(String(t.valeur), x + lT / 2, yT + 10.5 * k, { align: "center" });
   });
   const lTitre = xTuiles - xT - 4;
-  police(8.5 * k, "bold", OR);
-  doc.text("FICHE CUISINE & MONTAGE", xT, 13 * k);
-  police(21 * k, "bold", VERT);
-  doc.text(lignes(f.nom, lTitre)[0], xT, 22 * k);
-  police(11.5 * k, "normal", GRIS);
-  doc.text(lignes(f.sousTitre, lTitre)[0], xT, 28.5 * k);
-  police(8.5 * k, "bold", ROUGE);
-  doc.text(lignes(`Allergènes : ${f.allergenes}`, lTitre).slice(0, 2), xT, 34.5 * k);
-  y = hEntete + 3 * k;
+  police(16 * k, "bold", VERT);
+  const titre = lignes(f.nom, lTitre)[0];
+  doc.text(titre, xT, 11 * k);
+  police(10 * k, "normal", GRIS);
+  doc.text(lignes(f.sousTitre, lTitre)[0], xT, 16 * k);
+  police(7.5 * k, "bold", ROUGE);
+  doc.text(lignes(`Allergènes : ${f.allergenes}`, lTitre)[0], xT, 20.5 * k);
+  y = hEntete + 2 * k;
 
   // ---------- À préparer ----------
   section("À préparer", "cru / net  >  cuit");
