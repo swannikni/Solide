@@ -55,20 +55,27 @@ const fmtIngredient = (i: { qteCalc: number; maxCalc: number | null; unite: stri
   i.maxCalc != null ? `${quantite(i.qteCalc, i.unite)} à ${quantite(i.maxCalc, i.unite)}` : quantite(i.qteCalc, i.unite);
 
 export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; aujourdhui: string }) {
-  // Par défaut : le prochain service du planning qui a une recette du catalogue.
-  const depart =
-    jours
-      .filter((j) => j.date >= aujourdhui)
-      .flatMap((j) => (["dejeuner", "diner"] as Service[]).map((s) => ({ j, s })))
-      .find(({ j, s }) => recetteDuPlat(j.plats[s])) ?? null;
-  const [recetteId, setRecetteId] = useState(depart ? recetteDuPlat(depart.j.plats[depart.s])!.id : RECETTES[0].id);
-  const [eff, setEff] = useState<Effectifs>(depart ? { P1: depart.j[depart.s].P1, P2: depart.j[depart.s].P2, P3: depart.j[depart.s].P3 } : { P1: 0, P2: BASE, P3: 0 });
-  const [source, setSource] = useState<string>(depart ? `${depart.j.date}|${depart.s}` : "");
+  // Par défaut : le prochain jour de livraison (lundi → mardi, vendredi → lundi),
+  // le midi sauf si seul le soir a une recette du catalogue.
+  const prochain = jours.find((j) => j.date > aujourdhui) ?? jours[jours.length - 1];
+  const serviceDefaut: Service = !recetteDuPlat(prochain.plats.dejeuner) && recetteDuPlat(prochain.plats.diner) ? "diner" : "dejeuner";
+  const recetteDefaut = recetteDuPlat(prochain.plats[serviceDefaut]);
+  const [recetteId, setRecetteId] = useState(recetteDefaut?.id ?? RECETTES[0].id);
+  const [eff, setEff] = useState<Effectifs>({ P1: prochain[serviceDefaut].P1, P2: prochain[serviceDefaut].P2, P3: prochain[serviceDefaut].P3 });
+  const [source, setSource] = useState<string>(`${prochain.date}|${serviceDefaut}`);
+  const [semaine, setSemaine] = useState(jours.indexOf(prochain) >= 5 ? 1 : 0);
+  const [recherche, setRecherche] = useState("");
   const [copie, setCopie] = useState(false);
-
   const r = RECETTES.find((x) => x.id === recetteId)!;
   const c = calculer(r, eff);
   const sansPalier = source ? jours.find((j) => j.date === source.split("|")[0])?.[source.split("|")[1] as Service].sans ?? 0 : 0;
+
+  const resultats = recherche.trim()
+    ? RECETTES.filter((x) => sansAccents(`${x.nom} ${x.sousTitre} ${x.description}`).includes(sansAccents(recherche.trim())))
+    : [];
+  const [dateSource, serviceSource] = source.split("|") as [string, Service | undefined];
+  const jourSource = jours.find((j) => j.date === dateSource);
+  const platSource = jourSource && serviceSource ? jourSource.plats[serviceSource] : null;
 
   function reprendre(j: JourPlanning, s: Service) {
     setEff({ P1: j[s].P1, P2: j[s].P2, P3: j[s].P3 });
@@ -158,19 +165,79 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
         <p className="text-sm text-c2b-muted">Choisissez la recette et le nombre de box par palier : les quantités se recalculent.</p>
       </div>
 
-      {/* Catalogue */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {RECETTES.map((x) => (
-          <button
-            key={x.id}
-            onClick={() => setRecetteId(x.id)}
-            className={`rounded-2xl px-3 py-3 text-left ${x.id === recetteId ? "bg-c2b-green text-c2b-cream" : "carte text-c2b-green"}`}
-          >
-            <p className="font-bold leading-tight">{x.nom}</p>
-            <p className={`text-xs ${x.id === recetteId ? "text-c2b-cream/80" : "text-c2b-muted"}`}>{x.sousTitre}</p>
+      {/* Jour : le plat et les effectifs du planning */}
+      <section className="carte space-y-2 p-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-bold text-c2b-green">{semaine === 0 ? "Cette semaine" : "Semaine prochaine"}</p>
+          <button onClick={() => setSemaine(semaine === 0 ? 1 : 0)} className="text-xs font-bold text-c2b-gold">
+            {semaine === 0 ? "Semaine prochaine →" : "← Cette semaine"}
           </button>
-        ))}
-      </div>
+        </div>
+        <div className="grid grid-cols-5 gap-1">
+          {jours.slice(semaine * 5, semaine * 5 + 5).map((j) => (
+            <div key={j.date} className="space-y-1">
+              <p className={`text-center text-[10px] font-bold first-letter:uppercase ${j.date === aujourdhui ? "text-c2b-gold" : "text-c2b-muted"}`}>
+                {jourCourt(j.date)}
+              </p>
+              {(["dejeuner", "diner"] as Service[]).map((sv) => {
+                const n = j[sv].P1 + j[sv].P2 + j[sv].P3 + j[sv].sans;
+                const actif = source === `${j.date}|${sv}`;
+                const rec = recetteDuPlat(j.plats[sv]);
+                return (
+                  <button
+                    key={sv}
+                    disabled={n === 0}
+                    onClick={() => reprendre(j, sv)}
+                    className={`w-full rounded-lg px-0.5 py-1.5 text-[11px] font-bold leading-tight disabled:opacity-30 ${
+                      actif ? (sv === "dejeuner" ? "bg-amber-400 text-amber-950" : "bg-indigo-500 text-white") : "border border-c2b-green/15 bg-white text-c2b-green"
+                    }`}
+                  >
+                    {sv === "dejeuner" ? "☀️" : "🌙"} {n}
+                    {rec && <span className="block truncate text-[9px] font-semibold opacity-80">{rec.nom}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {jourSource && serviceSource && (
+          <p className="text-xs text-c2b-muted first-letter:uppercase">
+            {new Date(`${dateSource}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} ·{" "}
+            {serviceSource === "dejeuner" ? "midi" : "soir"} · plat : <strong className="text-c2b-green">{platSource || "non renseigné"}</strong>
+            {platSource && !recetteDuPlat(platSource) && " (pas de fiche : cherchez-la ci-dessous)"}
+          </p>
+        )}
+      </section>
+
+      {/* Recherche d'une recette */}
+      <section className="relative">
+        <input
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder={`🔍 Chercher une recette (${RECETTES.length} fiches)…`}
+          className="champ py-3 text-sm"
+        />
+        {recherche.trim() && (
+          <div className="carte absolute inset-x-0 top-full z-10 mt-1 max-h-72 overflow-y-auto p-1">
+            {resultats.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-c2b-muted">Aucune recette trouvée.</p>
+            ) : (
+              resultats.map((x) => (
+                <button
+                  key={x.id}
+                  onClick={() => {
+                    setRecetteId(x.id);
+                    setRecherche("");
+                  }}
+                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-c2b-cream"
+                >
+                  <span className="font-bold text-c2b-green">{x.nom}</span> <span className="text-xs text-c2b-muted">· {x.sousTitre}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Effectifs */}
       <section className="carte space-y-3 p-4">
@@ -196,31 +263,6 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
           ))}
         </div>
         <div>
-          <p className="mb-1.5 text-xs font-bold text-c2b-muted">Reprendre le planning de la cuisine</p>
-          <div className="grid grid-cols-5 gap-1">
-            {jours.map((j) => (
-              <div key={j.date} className="space-y-1">
-                <p className="text-center text-[10px] font-bold text-c2b-muted first-letter:uppercase">{jourCourt(j.date)}</p>
-                {(["dejeuner", "diner"] as Service[]).map((s) => {
-                  const n = j[s].P1 + j[s].P2 + j[s].P3 + j[s].sans;
-                  const actif = source === `${j.date}|${s}`;
-                  return (
-                    <button
-                      key={s}
-                      disabled={n === 0}
-                      onClick={() => reprendre(j, s)}
-                      title={j.plats[s] ?? undefined}
-                      className={`w-full rounded-lg py-1.5 text-[11px] font-bold disabled:opacity-30 ${
-                        actif ? (s === "dejeuner" ? "bg-amber-400 text-amber-950" : "bg-indigo-500 text-white") : "border border-c2b-green/15 bg-white text-c2b-green"
-                      }`}
-                    >
-                      {s === "dejeuner" ? "☀️" : "🌙"} {n}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
           {sansPalier > 0 && (
             <p className="mt-1.5 text-xs font-bold text-red-700">⚠️ {sansPalier} repas sans palier dans ce service : ajoutez-les à la main.</p>
           )}

@@ -15,7 +15,8 @@ export default async function RecettesPage() {
   const aujourdhui = dateDuJour();
   const j = new Date(`${aujourdhui}T12:00:00Z`).getUTCDay();
   const lundi = j === 0 || j === 6 ? lundiDe(decalerDate(aujourdhui, 2)) : lundiDe(aujourdhui);
-  const vendredi = decalerDate(lundi, 4);
+  // Cette semaine et la suivante (le vendredi, on prépare le lundi).
+  const vendredi = decalerDate(lundi, 11);
 
   const [{ data: extras }, { data: commandes }, { data: services }] = await Promise.all([
     supabase
@@ -39,7 +40,7 @@ export default async function RecettesPage() {
       .returns<{ date: string; repas_type: Service; plat: string | null }[]>(),
   ]);
 
-  const jours: JourPlanning[] = [0, 1, 2, 3, 4].map((i) => {
+  const jours: JourPlanning[] = [0, 1, 2, 3, 4, 7, 8, 9, 10, 11].map((i) => {
     const date = decalerDate(lundi, i);
     const vide = () => ({ P1: 0, P2: 0, P3: 0, sans: 0 });
     return { date, dejeuner: vide(), diner: vide(), plats: { dejeuner: null, diner: null } };
