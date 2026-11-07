@@ -15,7 +15,9 @@ export type Effectifs = Record<Palier, number>;
 export interface ElementBox {
   id: string;
   nom: string;
-  portions: Effectifs; // g par box
+  portions: Effectifs; // par box (g, ou unités si `unite`)
+  unite?: string; // "g" par défaut ; "u" pour 1 tostinette, 1 galette…
+  texte?: string; // sans poids imposé (ex. « Au montage »)
 }
 
 // Un aliment à préparer (fiche cuisine, base 10 P2).
@@ -26,6 +28,7 @@ export interface Aliment {
   cuit?: number; // g cuit / prêt à servir
   unite?: string; // "g" par défaut
   note?: string;
+  texte?: string; // sans quantité chiffrée (ex. « Selon montage »)
 }
 
 // Une préparation (sauce, marinade…) : ingrédients pour la base de 10.
@@ -58,7 +61,11 @@ export function facteurs(r: Recette, eff: Effectifs) {
   const f: Record<string, number> = {};
   for (const e of r.elements) {
     const besoin = PALIERS_RECETTE.reduce((t, p) => t + (eff[p] || 0) * e.portions[p], 0);
-    f[e.id] = e.portions.P2 > 0 ? besoin / (BASE * e.portions.P2) : 0;
+    // Base de la fiche : 10 box P2 ; si l'élément n'existe qu'en P1 (ex. pommes
+    // de terre du wrap), base : 10 box du premier palier qui en a.
+    const ref = PALIERS_RECETTE.map((p) => e.portions[p]).find((v) => v > 0) ?? 0;
+    const base = e.portions.P2 > 0 ? e.portions.P2 : ref;
+    f[e.id] = base > 0 ? besoin / (BASE * base) : 0;
   }
   return f;
 }
@@ -67,6 +74,20 @@ export function facteurDe(suit: Aliment["suit"], f: Record<string, number>) {
   if (typeof suit === "string") return f[suit] ?? 0;
   const total = suit.reduce((t, s) => t + s.part, 0);
   return total ? suit.reduce((t, s) => t + s.part * (f[s.id] ?? 0), 0) / total : 0;
+}
+
+// Portion d'un élément pour un palier, telle qu'affichée (« 130 g », « 1 », « Au montage », « Aucune »).
+export function portionTexte(e: ElementBox, p: Palier) {
+  if (e.texte) return e.texte;
+  if (!e.portions[p]) return "Aucune";
+  return e.unite === "u" ? String(e.portions[p]) : `${e.portions[p]} ${e.unite ?? "g"}`;
+}
+
+// Total d'un élément pour ces effectifs, tel qu'affiché.
+export function totalTexte(e: ElementBox, eff: Effectifs) {
+  if (e.texte) return "—";
+  const t = totalElement(e, eff);
+  return e.unite === "u" ? String(t) : quantite(t, e.unite ?? "g");
 }
 
 // Total cuit d'un élément de la box.
@@ -447,5 +468,117 @@ export const RECETTES: Recette[] = [
     montage: ["Riz → Poulet → Crudités → Sauce → Cacahuètes.", "Crudités par box : 30 g de chou rouge + 30 g de carotte + 40 g de concombre."],
     notes: ["Ne pas ajouter d'huile au dressage : l'huile de cuisson est déjà prévue."],
     allergenes: "Arachides, soja, sésame ; blé selon la sauce soja utilisée.",
+  },
+  {
+    id: "cheesy-burger-bowl",
+    nom: "Cheesy Burger Bowl",
+    sousTitre: "Steak haché & pommes de terre",
+    description: "Steak haché 5 %, pommes de terre, tostinette, crudités et sauce burger. Pommes de terre comme base de féculents. Sauce en pot à côté.",
+    elements: [
+      { id: "steak", nom: "Steak 5 % (poids CRU)", portions: pP(130, 100, 90) },
+      { id: "tostinette", nom: "Tostinette (≈ 60 kcal)", portions: pP(1, 1, 1), unite: "u" },
+      { id: "pdt", nom: "Pommes de terre cuites", portions: pP(300, 250, 200) },
+      { id: "crudites", nom: "Crudités", portions: pP(0, 0, 0), texte: "Au montage" },
+      { id: "pot", nom: "Pot de sauce à côté", portions: pP(25, 25, 25) },
+    ],
+    aliments: [
+      { nom: "Steaks hachés 5 %", suit: "steak", cru: 1000, note: "pesés CRUS : 130 / 100 / 90 g par palier" },
+      { nom: "Tostinettes", suit: "tostinette", cru: 10, unite: "unité(s)", note: "1 par box" },
+      { nom: "Pommes de terre", suit: "pdt", cru: 3100, cuit: 2500, note: "net" },
+      { nom: "Huile pommes de terre", suit: "pdt", cru: 4, unite: "c. à s." },
+      { nom: "Crudités", suit: "crudites", texte: "Salade, etc.", note: "sans grammage imposé" },
+    ],
+    preparations: [
+      {
+        titre: "Sauce burger",
+        suit: "pot",
+        ingredients: [
+          { nom: "Yaourt", qte: 123, unite: "g" },
+          { nom: "Mayonnaise", qte: 61, unite: "g" },
+          { nom: "Ketchup", qte: 33, unite: "g" },
+          { nom: "Moutarde", qte: 12, unite: "g" },
+          { nom: "Cornichons hachés", qte: 15, unite: "g" },
+          { nom: "Jus de cornichons", qte: 6, unite: "g" },
+        ],
+        etapes: ["Hacher les cornichons. Mélanger tous les ingrédients.", "Assaisonnement habituel, à goûter avant de saler. Répartir en pots de 25 g."],
+      },
+    ],
+    cuisine: [
+      "Former les steaks crus : P1 130 g / P2 100 g / P3 90 g. Cuire sans huile.",
+      "Préparer la sauce et remplir les pots de 25 g ({pot} au total).",
+      "Couper les pommes de terre. Mélanger avec l'huile.",
+      "Cuire au four puis peser les portions cuites ({pdt} au total). Préparer les crudités.",
+      "Monter les box selon la fiche montage. Ajouter la tostinette et le pot de sauce.",
+    ],
+    montage: [
+      "Peser les pommes de terre, puis déposer le steak haché entier.",
+      "Déposer la tostinette sur le steak. Ajouter les crudités.",
+      "Ajouter le pot de sauce de 25 g, fermé, à côté.",
+    ],
+    notes: [
+      "Bœuf : poids CRU, servir la portion préparée sans compléter son poids après cuisson. Pommes de terre : poids CUIT.",
+      "Pas de +20 % sur les pommes de terre : huile déjà comprise. Même yaourt et mêmes marques à chaque production.",
+    ],
+    allergenes: "Lait, œuf, moutarde. Vérifier les étiquettes des produits.",
+  },
+  {
+    id: "burger-wrap",
+    nom: "Burger Wrap",
+    sousTitre: "Bœuf 5 % & tostinette",
+    description: "Galette, bœuf 5 %, tostinette, salade et sauce burger. Sauce dans le wrap + un pot à côté. Aucune autre crudité.",
+    elements: [
+      { id: "galette", nom: "Galette à 300 kcal", portions: pP(1, 1, 1), unite: "u" },
+      { id: "boeuf", nom: "Bœuf 5 % (poids CRU)", portions: pP(130, 100, 90) },
+      { id: "tostinette", nom: "Tostinette (≈ 60 kcal)", portions: pP(1, 1, 1), unite: "u" },
+      { id: "salade", nom: "Salade uniquement", portions: pP(0, 0, 0), texte: "Au montage" },
+      { id: "sauceWrap", nom: "Sauce dans le wrap (1 c. à s.)", portions: pP(15, 15, 15) },
+      { id: "pot", nom: "Pot de sauce à côté", portions: pP(25, 25, 25) },
+      { id: "pdt", nom: "Pommes de terre (P1 seulement)", portions: pP(50, 0, 0) },
+    ],
+    aliments: [
+      { nom: "Bœuf haché 5 %", suit: "boeuf", cru: 1000, note: "pesé CRU : 130 / 100 / 90 g par palier" },
+      { nom: "Tostinettes", suit: "tostinette", cru: 10, unite: "unité(s)", note: "1 par box" },
+      { nom: "Galettes wrap", suit: "galette", cru: 10, unite: "unité(s)", note: "300 kcal / galette" },
+      { nom: "Salade", suit: "salade", texte: "Selon montage", note: "sans grammage imposé" },
+      { nom: "Pommes de terre", suit: "pdt", cru: 620, cuit: 500, note: "net ; 50 g cuits par P1, sans huile" },
+    ],
+    preparations: [
+      {
+        titre: "Sauce burger",
+        suit: [
+          { id: "sauceWrap", part: 150 },
+          { id: "pot", part: 250 },
+        ],
+        ingredients: [
+          { nom: "Yaourt", qte: 197, unite: "g" },
+          { nom: "Mayonnaise", qte: 98, unite: "g" },
+          { nom: "Ketchup", qte: 52, unite: "g" },
+          { nom: "Moutarde", qte: 20, unite: "g" },
+          { nom: "Cornichons hachés", qte: 23, unite: "g" },
+          { nom: "Jus de cornichons", qte: 10, unite: "g" },
+        ],
+        etapes: [
+          "Hacher les cornichons. Mélanger tous les ingrédients. Assaisonnement habituel, à goûter avant de saler.",
+          "1 c. à soupe ≈ 15 g, à étalonner.",
+        ],
+      },
+    ],
+    cuisine: [
+      "Peser le bœuf cru par palier : 130 / 100 / 90 g. Cuire sans huile, en lots séparés.",
+      "Préparer la sauce : {sauceWrap} pour garnir les wraps, {pot} pour les pots de 25 g.",
+      "Laver et essorer la salade. Garnir les galettes selon la fiche montage.",
+      "Fondre la tostinette avec le bœuf, fermer puis toaster sans huile ni beurre.",
+      "Pommes de terre pour les P1 : {pdt} cuites au total, sans huile ajoutée.",
+    ],
+    montage: [
+      "Étaler 1 c. à soupe de sauce dans la galette.",
+      "Ajouter la salade, le bœuf et la tostinette. Fermer et toaster.",
+      "Ajouter le pot de sauce fermé et les pommes de terre prévues (P1).",
+    ],
+    notes: [
+      "Bœuf : poids CRU, servir la portion préparée sans compléter son poids après cuisson. Pommes de terre : poids CUIT.",
+      "P2 et P3 : pas de pommes de terre. Même yaourt et mêmes marques à chaque production.",
+    ],
+    allergenes: "Lait, œuf, moutarde ; blé pour le wrap. Vérifier les étiquettes des produits.",
   },
 ];

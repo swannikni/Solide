@@ -16,7 +16,7 @@ export interface FicheRecettePdf {
   aliments: { nom: string; note?: string; cru: string; cuit: string }[];
   preparations: { titre: string; total: string | null; ingredients: { nom: string; qte: string }[]; etapes: string[] }[];
   cuisine: string[];
-  elements: { nom: string; portions: Record<Palier, number>; total: string }[];
+  elements: { nom: string; portions: Record<Palier, string>; total: string }[];
   montage: string[];
   notes: string[];
   allergenes: string;
@@ -195,7 +195,7 @@ function rendre(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo: { data: string; r
   });
 
   // ---------- Montage ----------
-  section("Montage", "poids cuits par box");
+  section("Montage", "portions par box");
   const cm = { nom: marge + 3, P1: marge + 108, P2: marge + 128, P3: marge + 148, total: marge + largeur - 3 };
   police(8 * k, "bold", GRIS);
   doc.text("DANS LA BOX", cm.nom, y);
@@ -217,7 +217,10 @@ function rendre(JsPdf: typeof JsPDF, f: FicheRecettePdf, logo: { data: string; r
     police(10.5 * k, "bold", VERT);
     doc.text(l, cm.nom, y + 5 * k);
     police(10.5 * k, "normal", TEXTE);
-    for (const p of PALIERS) doc.text(`${e.portions[p]} g`, cm[p] + 8, y + 5 * k, { align: "right" });
+    // Même mention pour les 3 paliers (« Au montage ») : écrite une seule fois.
+    const memeTexte = e.portions.P1 === e.portions.P2 && e.portions.P2 === e.portions.P3 && !/\d/.test(e.portions.P1);
+    if (memeTexte) doc.text(propre(e.portions.P1), cm.P3 + 8, y + 5 * k, { align: "right" });
+    else for (const p of PALIERS) doc.text(propre(e.portions[p]), cm[p] + 8, y + 5 * k, { align: "right" });
     police(10.5 * k, "bold", VERT);
     doc.text(propre(e.total), cm.total, y + 5 * k, { align: "right" });
     y += h;

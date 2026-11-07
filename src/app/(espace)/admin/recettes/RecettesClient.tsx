@@ -11,8 +11,10 @@ import {
   RECETTES,
   facteurDe,
   facteurs,
+  portionTexte,
   quantite,
   totalElement,
+  totalTexte,
   type Effectifs,
   type Recette,
 } from "@/lib/recettes";
@@ -95,15 +97,16 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
       "*À PRÉPARER*",
       ...c.aliments.map(
         (a) =>
-          `• ${a.nom} : ${a.cruCalc != null ? quantite(a.cruCalc, a.unite) : "—"}${a.cuitCalc != null && a.cuitCalc !== a.cruCalc ? ` → ${quantite(a.cuitCalc, a.unite)} cuit` : ""}${a.note ? ` (${a.note})` : ""}`
+          `• ${a.nom} : ${a.cruCalc != null ? quantite(a.cruCalc, a.unite) : (a.texte ?? "—")}${a.cuitCalc != null && a.cuitCalc !== a.cruCalc ? ` → ${quantite(a.cuitCalc, a.unite)} cuit` : ""}${a.note ? ` (${a.note})` : ""}`
       ),
     ];
     for (const p of c.preparations) {
       l.push("", `*${p.titre.toUpperCase()}*${p.totalG ? ` (≈ ${quantite(p.totalG)})` : ""}`, ...p.ingredients.map((i) => `• ${i.nom} : ${fmtIngredient(i)}`));
     }
     l.push("", "*CUISINE*", ...c.cuisine.map((e, i) => `${i + 1}. ${e}`));
-    l.push("", "*MONTAGE (poids cuits par box)*");
-    for (const e of c.elements) l.push(`• ${e.nom} : ${e.portions.P1} / ${e.portions.P2} / ${e.portions.P3} g — total ${quantite(e.total)}`);
+    l.push("", "*MONTAGE (portions par box)*");
+    for (const e of c.elements)
+      l.push(`• ${e.nom} : ${PALIERS_RECETTE.map((p) => portionTexte(e, p)).join(" / ")}${e.texte ? "" : ` — total ${totalTexte(e, eff)}`}`);
     l.push(...r.montage.map((m) => `→ ${m}`), "", `⚠️ Allergènes : ${r.allergenes}`);
     return l.join("\n");
   }
@@ -138,7 +141,7 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
         aliments: c.aliments.map((a) => ({
           nom: a.nom,
           note: a.note,
-          cru: a.cruCalc != null ? quantite(a.cruCalc, a.unite) : "-",
+          cru: a.cruCalc != null ? quantite(a.cruCalc, a.unite) : (a.texte ?? "-"),
           cuit: a.cuitCalc != null ? quantite(a.cuitCalc, a.unite) : "-",
         })),
         preparations: c.preparations.map((p) => ({
@@ -148,7 +151,11 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
           etapes: p.etapes,
         })),
         cuisine: c.cuisine,
-        elements: c.elements.map((e) => ({ nom: e.nom, portions: e.portions, total: quantite(e.total) })),
+        elements: c.elements.map((e) => ({
+          nom: e.nom,
+          portions: { P1: portionTexte(e, "P1"), P2: portionTexte(e, "P2"), P3: portionTexte(e, "P3") },
+          total: totalTexte(e, eff),
+        })),
         montage: r.montage,
         notes: r.notes,
         allergenes: r.allergenes,
@@ -319,7 +326,7 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
                           <span className="font-semibold text-c2b-green">{a.nom}</span>
                           {a.note && <span className="block text-[11px] text-c2b-muted">{a.note}</span>}
                         </td>
-                        <td className="py-1.5 pr-2 font-bold tabular-nums text-c2b-green">{a.cruCalc != null ? quantite(a.cruCalc, a.unite) : "—"}</td>
+                        <td className="py-1.5 pr-2 font-bold tabular-nums text-c2b-green">{a.cruCalc != null ? quantite(a.cruCalc, a.unite) : (a.texte ?? "—")}</td>
                         <td className="py-1.5 tabular-nums">{a.cuitCalc != null ? quantite(a.cuitCalc, a.unite) : "—"}</td>
                       </tr>
                     ))}
@@ -355,7 +362,7 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
             </div>
 
             <div>
-              <h3 className="mb-1.5 text-sm font-bold uppercase text-c2b-green">Montage · poids cuits par box</h3>
+              <h3 className="mb-1.5 text-sm font-bold uppercase text-c2b-green">Montage · portions par box</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -375,10 +382,10 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
                         <td className="py-1.5 pr-2 font-semibold text-c2b-green">{e.nom}</td>
                         {PALIERS_RECETTE.map((p) => (
                           <td key={p} className="whitespace-nowrap py-1.5 px-1 text-right tabular-nums">
-                            {e.portions[p]} g
+                            {portionTexte(e, p)}
                           </td>
                         ))}
-                        <td className="whitespace-nowrap py-1.5 pl-2 text-right font-bold tabular-nums text-c2b-green">{quantite(e.total)}</td>
+                        <td className="whitespace-nowrap py-1.5 pl-2 text-right font-bold tabular-nums text-c2b-green">{totalTexte(e, eff)}</td>
                       </tr>
                     ))}
                   </tbody>
