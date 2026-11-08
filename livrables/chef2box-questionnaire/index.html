@@ -405,15 +405,24 @@ body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(-
     <!-- INFOS GÉNÉRALES -->
     <div class="section" style="animation-delay:.05s">
       <div class="section-header"><span class="section-icon">👤</span><span class="section-title">Informations générales</span></div>
-      <div class="field">
-        <label>Nom complet <span style="color:var(--gold)">*</span></label>
-        <input type="text" id="f-nom" placeholder="Prénom Nom">
-        <div class="field-error" id="err-nom">Ce champ est obligatoire</div>
-      </div>
       <div class="field-row">
-        <div class="field"><label>Email</label><input type="email" id="f-email" placeholder="votre@email.com" autocomplete="off"></div>
-        <div class="field"><label>WhatsApp</label><div style="display:flex;gap:8px"><select id="f-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="f-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
+        <div class="field">
+          <label>Prénom <span style="color:var(--gold)">*</span></label>
+          <input type="text" id="f-prenom" placeholder="ex. Sarah" autocomplete="given-name">
+          <div class="field-error" id="err-prenom">Ce champ est obligatoire</div>
+        </div>
+        <div class="field">
+          <label>Nom <span style="color:var(--gold)">*</span></label>
+          <input type="text" id="f-nom" placeholder="ex. Benali" autocomplete="family-name">
+          <div class="field-error" id="err-nom">Ce champ est obligatoire</div>
+        </div>
       </div>
+      <div class="field">
+        <label>WhatsApp <span style="color:var(--gold)">*</span> <span style="font-weight:400">(choisissez l'indicatif du pays)</span></label>
+        <div style="display:flex;gap:8px"><select id="f-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="f-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div>
+        <div class="field-error" id="err-tel">Numéro WhatsApp incomplet : choisissez l'indicatif et tapez le numéro complet (ex. 06 12 34 56 78)</div>
+      </div>
+      <div class="field"><label>Email</label><input type="email" id="f-email" placeholder="votre@email.com" autocomplete="off"></div>
       <div class="field-row">
         <div class="field">
           <label>Âge <span style="color:var(--gold)">*</span></label>
@@ -1041,7 +1050,24 @@ function submitForm() {
     }
   }
 
+  requireField('f-prenom', 'err-prenom');
   requireField('f-nom', 'err-nom');
+  // WhatsApp obligatoire, longueur vérifiée selon l'indicatif choisi.
+  (function () {
+    const LONGUEURS = { '+212': [9], '+33': [9], '+32': [8, 9], '+41': [9], '+34': [9], '+44': [10], '+1': [10], '+971': [8, 9] };
+    const el = document.getElementById('f-tel');
+    const brut = (el ? el.value : '').replace(/[^0-9+]/g, '');
+    const pays = (document.getElementById('f-tel-pays') || {}).value || '+212';
+    const chiffres = brut.replace(/[^0-9]/g, '');
+    const ok = brut.startsWith('+') || brut.startsWith('00')
+      ? chiffres.replace(/^00/, '').length >= 10 && chiffres.replace(/^00/, '').length <= 15
+      : (LONGUEURS[pays] || [8, 9, 10]).includes(chiffres.replace(/^0/, '').length);
+    if (!ok) {
+      if (el) el.classList.add('error');
+      document.getElementById('err-tel').classList.add('show');
+      valid = false;
+    }
+  })();
   requireField('f-age', 'err-age');
   requireField('f-taille', 'err-taille');
   requireField('f-poids', 'err-poids');
@@ -1083,7 +1109,7 @@ function submitForm() {
     return;
   }
 
-  const nom = getVal('f-nom');
+  const nom = `${getVal('f-prenom')} ${getVal('f-nom')}`;
 
   const data = {
     nom,
