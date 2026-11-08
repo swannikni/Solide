@@ -81,6 +81,7 @@ export function EnvoiClient({
   const envoyes = new Set(envoyesParSemaine[semaine] ?? []);
   const [silenceVu, setSilenceVu] = useState(false);
   const [filtre, setFiltre] = useState<Filtre>("restants");
+  const [recherche, setRecherche] = useState("");
   const [preparation, setPreparation] = useState("");
   const [modeleOuvert, setModeleOuvert] = useState(false);
   // Image du menu : déposée par semaine, gardée en mémoire pour le partage photo.
@@ -163,9 +164,14 @@ export function EnvoiClient({
   const actifs = destinataires.filter((d) => !d.pause && !silencieux(d));
   const ecartes = destinataires.filter((d) => d.pause || silencieux(d));
   const envoyesActifs = actifs.filter((d) => envoyes.has(cleEnvoi(d))).length;
-  const liste = actifs.filter((d) =>
-    filtre === "restants" ? !envoyes.has(cleEnvoi(d)) : filtre === "tous" ? true : d.type === filtre
-  );
+  // Recherche par nom ou numéro (sans accents), dans l'onglet choisi.
+  const sansAccents = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const cherche = sansAccents(recherche.trim());
+  const correspond = (d: Destinataire) => !cherche || sansAccents(d.nom).includes(cherche) || d.numero.includes(cherche.replace(/[^\d]/g, "") || "§");
+  const liste = actifs
+    .filter((d) => (filtre === "restants" ? !envoyes.has(cleEnvoi(d)) : filtre === "tous" ? true : d.type === filtre))
+    .filter(correspond);
+  const ecartesTrouves = cherche ? ecartes.filter(correspond) : [];
   const prochain = actifs.find((d) => !envoyes.has(cleEnvoi(d)) && d.jeton);
   const sansLien = actifs.filter((d) => !d.jeton).length;
   const nbClients = actifs.filter((d) => d.type === "client").length;
@@ -421,6 +427,23 @@ export function EnvoiClient({
 
       {/* Liste */}
       <section className="space-y-2">
+        <div className="relative">
+          <input
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="🔍 Rechercher un nom ou un numéro…"
+            className="champ py-2.5 pr-9 text-sm"
+          />
+          {recherche && (
+            <button
+              onClick={() => setRecherche("")}
+              className="absolute right-2 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full text-c2b-muted"
+              aria-label="Effacer la recherche"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {(
             [
@@ -477,6 +500,16 @@ export function EnvoiClient({
             );
           })}
         </ul>
+        {liste.length === 0 && (
+          <p className="carte p-4 text-center text-sm text-c2b-muted">
+            {cherche ? "Personne de ce nom dans cet onglet." : filtre === "restants" ? "Tout le monde a reçu le menu ✓" : "Personne ici."}
+          </p>
+        )}
+        {ecartesTrouves.length > 0 && (
+          <p className="px-1 text-xs text-c2b-muted">
+            Aussi trouvé dans « Ne répondent pas » : {ecartesTrouves.map((d) => d.nom).join(", ")}.
+          </p>
+        )}
         {ecartes.length > 0 && (
           <div className="carte space-y-2 p-3">
             <button onClick={() => setSilenceVu((v) => !v)} className="flex w-full items-center justify-between text-left">
