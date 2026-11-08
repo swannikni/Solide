@@ -1291,7 +1291,7 @@ export function ClientsClient({
                                             <button onClick={() => copierLien(fc)} className="btn-secondary py-2 text-xs">
                                               {lienCopie ? "Copié ✓" : "Copier"}
                                             </button>
-                                            <a href={lienDe(fc)!} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2 text-xs">
+                                            <a href={lienDe(fc)!} className="btn-secondary py-2 text-xs">
                                               Ouvrir
                                             </a>
                                           </div>
@@ -1502,7 +1502,7 @@ export function ClientsClient({
                               <button onClick={() => copierLien(fc)} className="btn-secondary py-2 text-xs">
                                 {lienCopie ? "Copié ✓" : "Copier"}
                               </button>
-                              <a href={lienDe(fc)!} target="_blank" rel="noopener noreferrer" className="btn-secondary py-2 text-xs">
+                              <a href={lienDe(fc)!} className="btn-secondary py-2 text-xs">
                                 Ouvrir
                               </a>
                             </div>

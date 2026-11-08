@@ -73,6 +73,7 @@ export function MonEspaceClient({
   conditions = {},
   imageMenu = null,
   bilan = null,
+  vueAdmin = false,
 }: {
   jeton: string;
   prenom: string;
@@ -85,6 +86,7 @@ export function MonEspaceClient({
   conditions?: Conditions; // remise, livraison offerte (fiche du client)
   imageMenu?: string | null; // image du menu de la semaine
   bilan?: BilanClient | null; // son bilan du questionnaire
+  vueAdmin?: boolean; // ouvert par l'admin (barre de retour)
 }) {
   const router = useRouter();
   // Nouveau venu avec un bilan : il découvre d'abord son bilan.
@@ -275,6 +277,17 @@ export function MonEspaceClient({
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6 space-y-5">
+      {vueAdmin && (
+        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-2 bg-c2b-green px-4 py-2.5 text-sm text-c2b-cream" style={{ paddingTop: "max(0.625rem, env(safe-area-inset-top))" }}>
+          <button
+            onClick={() => (window.history.length > 1 ? window.history.back() : window.location.assign("/admin/envoi"))}
+            className="font-bold"
+          >
+            ← Retour à l&apos;admin
+          </button>
+          <span className="ml-auto text-xs text-c2b-cream/70">Vue admin : ce que voit {prenom}</span>
+        </div>
+      )}
       <header className="space-y-2">
         <Logo className="h-12 w-auto" />
         <h1 className="titre text-[30px] leading-tight">

@@ -632,8 +632,6 @@ export function EnvoiClient({
                         </a>
                         <a
                           href={`/ma-semaine/${d.jeton}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="btn-secondary py-2 text-center text-xs"
                         >
                           Voir son espace

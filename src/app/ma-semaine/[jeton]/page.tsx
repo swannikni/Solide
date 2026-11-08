@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { lireSession } from "@/lib/session";
 import { completerTarifs } from "@/lib/paiements";
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { encoreModifiable, lundiDe, type RepasChoisi, type Zone } from "@/lib/ma-semaine";
@@ -73,8 +74,11 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
     );
   }
 
+  // L'admin qui regarde l'espace d'un client : barre de retour, et sa visite
+  // ne compte pas comme une ouverture du client.
+  const vueAdmin = !!(await lireSession().catch(() => null))?.client?.est_admin;
   // Lien ouvert : sert à repérer qui ne lit jamais le menu (Admin → Envoi menu).
-  await admin.from("application_personnes").update({ vu_le: new Date().toISOString() }).eq("id", fiche.id);
+  if (!vueAdmin) await admin.from("application_personnes").update({ vu_le: new Date().toISOString() }).eq("id", fiche.id);
 
   // Son bilan (questionnaire du site) : le plus récent avec son numéro (comparé
   // chiffre à chiffre, quel que soit le format), sinon avec son nom.
@@ -220,6 +224,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       conditions={{ remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte }}
       imageMenu={await imageMenu()}
       bilan={bilan}
+      vueAdmin={vueAdmin}
     />
   );
 }
