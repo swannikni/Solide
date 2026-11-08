@@ -55,6 +55,7 @@ export function MonEspaceClient({
   semainesCompte,
   tarifs,
   conditions = {},
+  imageMenu = null,
 }: {
   jeton: string;
   prenom: string;
@@ -65,6 +66,7 @@ export function MonEspaceClient({
   semainesCompte: SemaineCompte[];
   tarifs: Tarifs;
   conditions?: Conditions; // remise, livraison offerte (fiche du client)
+  imageMenu?: string | null; // image du menu de la semaine
 }) {
   const router = useRouter();
   const [onglet, setOnglet] = useState<Onglet>("commander");
@@ -282,6 +284,15 @@ export function MonEspaceClient({
 
       {message && (
         <p className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${message.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{message.texte}</p>
+      )}
+
+      {/* Image du menu de la semaine (déposée par Chef2Box). */}
+      {onglet === "commander" && imageMenu && (
+        <details className="carte overflow-hidden" open>
+          <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-c2b-green">📷 Le menu de la semaine</summary>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageMenu} alt="Menu Chef2Box de la semaine" className="w-full" />
+        </details>
       )}
 
       {/* ---- Commander ---- */}

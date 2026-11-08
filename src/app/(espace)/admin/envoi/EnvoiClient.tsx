@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Send, Check, RotateCcw } from "lucide-react";
+import { Send, Check, RotateCcw, ImagePlus, Camera } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
@@ -54,10 +54,12 @@ export function EnvoiClient({
   semaines,
   menus,
   destinatairesInitiaux,
+  imagesInitiales = [],
 }: {
   semaines: string[];
   menus: Record<string, Record<string, { dejeuner: string; diner: string }>>;
   destinatairesInitiaux: Destinataire[];
+  imagesInitiales?: string[]; // semaines dont l'image du menu est déposée
 }) {
   const supabase = createClient();
   const [semaine, setSemaine] = useState(semaines[0]);
@@ -67,6 +69,55 @@ export function EnvoiClient({
   const [filtre, setFiltre] = useState<Filtre>("restants");
   const [preparation, setPreparation] = useState("");
   const [modeleOuvert, setModeleOuvert] = useState(false);
+  // Image du menu : déposée par semaine, gardée en mémoire pour le partage photo.
+  const [images, setImages] = useState<Set<string>>(new Set(imagesInitiales));
+  const [version, setVersion] = useState(0);
+  const [fichierImage, setFichierImage] = useState<File | null>(null);
+  const [etatImage, setEtatImage] = useState("");
+  const aImage = images.has(semaine);
+  useEffect(() => {
+    setFichierImage(null);
+    if (!images.has(semaine)) return;
+    fetch(`/api/menu-image/${semaine}?v=${version}`)
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => b && setFichierImage(new File([b], `menu-chef2box-${semaine}.jpg`, { type: b.type || "image/jpeg" })))
+      .catch(() => {});
+  }, [semaine, images, version]);
+
+  // Image réduite (1080 px de large, JPEG) puis enregistrée pour la semaine.
+  async function deposerImage(fichier: File) {
+    setEtatImage("Envoi de l'image…");
+    try {
+      const bitmap = await createImageBitmap(fichier);
+      const largeur = Math.min(1080, bitmap.width);
+      const hauteur = Math.round((bitmap.height * largeur) / bitmap.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = largeur;
+      canvas.height = hauteur;
+      canvas.getContext("2d")!.drawImage(bitmap, 0, 0, largeur, hauteur);
+      const data = canvas.toDataURL("image/jpeg", 0.85);
+      const { error } = await supabase
+        .from("application_parametres")
+        .upsert({ cle: `menu_image:${semaine}`, valeur: { data, maj: new Date().toISOString() } });
+      if (error) throw error;
+      setImages((s) => new Set(s).add(semaine));
+      setVersion((v) => v + 1);
+      setEtatImage("Image enregistrée ✓");
+    } catch {
+      setEtatImage("Image non enregistrée : réessayez avec une photo JPG ou PNG.");
+    }
+  }
+
+  // Envoi avec la vraie photo : partage du téléphone (choisir le contact dans WhatsApp).
+  async function partagerPhoto(d: Destinataire) {
+    if (!fichierImage) return;
+    const donnees = { files: [fichierImage], text: message(d) };
+    if (!navigator.canShare?.(donnees)) return setEtatImage("Le partage de photo n'est pas disponible sur cet appareil.");
+    try {
+      await navigator.share(donnees);
+      marquer(d);
+    } catch {}
+  }
 
   // Modèle et envois déjà faits : gardés sur ce téléphone (par semaine).
   useEffect(() => {
@@ -219,6 +270,33 @@ export function EnvoiClient({
         )}
       </section>
 
+      {/* Image du menu */}
+      <section className="carte space-y-2 p-4">
+        <p className="text-sm font-bold text-c2b-green">📷 Image du menu</p>
+        {aImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/menu-image/${semaine}?v=${version}`} alt="Menu de la semaine" className="max-h-80 rounded-xl border border-c2b-green/10" />
+        ) : (
+          <p className="text-xs text-c2b-muted">
+            Déposez l&apos;image du menu de cette semaine : elle s&apos;affiche dans l&apos;aperçu du lien sur WhatsApp et dans l&apos;espace de chaque client.
+          </p>
+        )}
+        <label className="btn-secondary flex w-full cursor-pointer items-center justify-center gap-1.5 py-2.5 text-sm">
+          <ImagePlus size={16} /> {aImage ? "Changer l'image" : "Déposer l'image"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) deposerImage(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {etatImage && <p className="text-xs font-bold text-c2b-green">{etatImage}</p>}
+      </section>
+
       {/* Liens à préparer (une fois) */}
       {sansLien > 0 && (
         <section className="carte space-y-2 border-c2b-gold/60 p-4">
@@ -266,7 +344,18 @@ export function EnvoiClient({
             >
               <Send size={18} /> Envoyer à {prochain.nom.split(/\s+/)[0]}
             </a>
-            <p className="text-[11px] text-c2b-muted">WhatsApp s&apos;ouvre avec le message prêt : envoyez, revenez, le suivant s&apos;affiche.</p>
+            {fichierImage && (
+              <button
+                onClick={() => partagerPhoto(prochain)}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-[#25D366] bg-white py-2.5 text-sm font-bold text-[#128C7E]"
+              >
+                <Camera size={16} /> Avec la photo (choisir {prochain.nom.split(/\s+/)[0]} dans WhatsApp)
+              </button>
+            )}
+            <p className="text-[11px] text-c2b-muted">
+              WhatsApp s&apos;ouvre avec le message prêt : envoyez, revenez, le suivant s&apos;affiche.
+              {aImage && " L'aperçu du lien montre l'image du menu."}
+            </p>
           </div>
         ) : (
           <p className="rounded-xl bg-emerald-50 px-3 py-3 text-center text-sm font-bold text-emerald-700">

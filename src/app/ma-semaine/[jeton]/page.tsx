@@ -4,9 +4,30 @@ import { dateDuJour, decalerDate } from "@/lib/dates";
 import { encoreModifiable, lundiDe, type RepasChoisi, type Zone } from "@/lib/ma-semaine";
 import { MonEspaceClient, type SemaineOuverte, type SemaineCompte } from "@/app/ma-semaine/[jeton]/MonEspaceClient";
 import { Logo } from "@/components/Logo";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Mon espace · Chef2Box", robots: { index: false } };
+// Semaine dont on montre le menu (le week-end : celle qui commence).
+const semaineMenu = () => lundiDe(decalerDate(dateDuJour(), 2));
+async function imageMenu() {
+  const admin = createAdminClient();
+  if (!admin) return null;
+  const lundi = semaineMenu();
+  const { data } = await admin.from("application_parametres").select("cle").eq("cle", `menu_image:${lundi}`).maybeSingle();
+  return data ? `/api/menu-image/${lundi}` : null;
+}
+
+// Aperçu du lien dans WhatsApp : l'image du menu de la semaine.
+export async function generateMetadata(): Promise<Metadata> {
+  const image = await imageMenu();
+  const base = process.env.URL ?? "https://chef2box-appli.netlify.app";
+  return {
+    title: "Mon espace · Chef2Box",
+    description: "Le menu de la semaine : commandez vos repas en 1 minute.",
+    robots: { index: false },
+    ...(image ? { openGraph: { title: "Le menu Chef2Box de la semaine", images: [{ url: `${base}${image}` }] } } : {}),
+  };
+}
 
 // « Mon espace Chef2Box » : le lien personnel envoyé sur WhatsApp. Le client
 // commande ses repas (jusqu'à la veille 20 h), voit ce qui est prévu, ce
@@ -141,6 +162,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       semainesCompte={semainesCompte}
       tarifs={completerTarifs(parametre?.valeur)}
       conditions={{ remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte }}
+      imageMenu={await imageMenu()}
     />
   );
 }

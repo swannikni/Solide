@@ -24,7 +24,7 @@ export default async function EnvoiPage() {
   const lundi = lundiDe(decalerDate(aujourdhui, 2));
   const semaines = [lundi, decalerDate(lundi, 7)];
 
-  const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }] = await Promise.all([
+  const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }, { data: images }] = await Promise.all([
     supabase
       .from("application_personnes")
       .select("id, nom, telephone, jeton, partenaire")
@@ -46,6 +46,11 @@ export default async function EnvoiPage() {
       .gte("date", semaines[0])
       .lte("date", decalerDate(semaines[1], 4))
       .returns<{ date: string; repas_type: Service; plat: string | null }[]>(),
+    supabase
+      .from("application_parametres")
+      .select("cle")
+      .in("cle", semaines.map((l) => `menu_image:${l}`))
+      .returns<{ cle: string }[]>(),
   ]);
 
   const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
@@ -91,7 +96,12 @@ export default async function EnvoiPage() {
 
   return (
     <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
-      <EnvoiClient semaines={semaines} menus={menus} destinatairesInitiaux={destinataires} />
+      <EnvoiClient
+        semaines={semaines}
+        menus={menus}
+        destinatairesInitiaux={destinataires}
+        imagesInitiales={(images ?? []).map((i) => i.cle.replace("menu_image:", ""))}
+      />
     </div>
   );
 }
