@@ -36,10 +36,11 @@ const SEUIL_SILENCE = 3;
 const silencieux = (d: Destinataire) => d.type === "prospect" && !d.vuLe && d.envois >= SEUIL_SILENCE;
 const cleEnvoi = (d: Destinataire) => (d.ficheId ? `f:${d.ficheId}` : d.cle);
 
-type Filtre = "restants" | "tous" | "client" | "prospect";
+type Filtre = "restants" | "tous" | "client" | "prospect" | "ouverts";
 
 // Deux messages : les prospects découvrent leur bilan ; les clients commandent.
-type Public = "prospect" | "client";
+// Trois messages : 1er contact d'un prospect, relance d'un prospect, client.
+type Public = "prospect" | "relance" | "client";
 const MODELES_DEFAUT: Record<Public, string> = {
   prospect: `Bonjour {prenom} 👋
 
@@ -53,6 +54,14 @@ Ton espace personnel est prêt : ton bilan complet, le menu de la semaine du {se
 🔒 C'est ta page à toi : pas de compte à créer, rien à payer en ligne (paiement à la livraison ou par virement), aucun engagement tant que tu ne valides pas une commande.
 
 Une question ? Réponds simplement à ce message 🙂`,
+  relance: `Bonjour {prenom} 👋
+
+Le nouveau menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
+
+Ton espace t'attend (ton bilan est toujours dedans) :
+👉 {lien}
+
+Coche les repas qui te font envie, le prix s'affiche, sans engagement. Une question ? Réponds à ce message 🙂`,
   client: `Bonjour {prenom} 👋
 
 Le menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
@@ -172,7 +181,8 @@ export function EnvoiClient({
   useEffect(() => {
     const p = lire("c2b-envoi-modele-prospect");
     const c = lire("c2b-envoi-modele-client");
-    setModeles({ prospect: p ?? MODELES_DEFAUT.prospect, client: c ?? MODELES_DEFAUT.client });
+    const r = lire("c2b-envoi-modele-relance");
+    setModeles({ prospect: p ?? MODELES_DEFAUT.prospect, relance: r ?? MODELES_DEFAUT.relance, client: c ?? MODELES_DEFAUT.client });
   }, []);
 
   const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(semaine, i));
@@ -189,9 +199,11 @@ export function EnvoiClient({
   const [origine, setOrigine] = useState("https://chef2box-appli.netlify.app");
   useEffect(() => setOrigine(window.location.origin), []);
   // Prospect (jamais commandé) : message de découverte ; client : message habituel.
+  // Prospect jamais contacté : bienvenue ; déjà contacté : relance courte.
+  const publicDe = (d: Destinataire): Public => (d.type === "client" ? "client" : d.envois > 0 ? "relance" : "prospect");
   const lienPerso = (jeton: string) => (lienCourt ? `https://chef2box.com/e/${jeton}` : `${origine}/ma-semaine/${jeton}`);
   const message = (d: Destinataire) =>
-    modeles[d.type]
+    modeles[publicDe(d)]
       // Sans bilan connu : la ligne {bilan} disparaît.
       .replace(/^.*\{bilan\}.*\n?\n?/m, (ligne) => (d.bilan ? ligne.replace("{bilan}", apercuBilan(d.bilan)) : ""))
       .replaceAll("{prenom}", d.nom.split(/\s+/)[0])
@@ -209,7 +221,15 @@ export function EnvoiClient({
   const cherche = sansAccents(recherche.trim());
   const correspond = (d: Destinataire) => !cherche || sansAccents(d.nom).includes(cherche) || d.numero.includes(cherche.replace(/[^\d]/g, "") || "§");
   const liste = actifs
-    .filter((d) => (filtre === "restants" ? !envoyes.has(cleEnvoi(d)) : filtre === "tous" ? true : d.type === filtre))
+    .filter((d) =>
+      filtre === "restants"
+        ? !envoyes.has(cleEnvoi(d))
+        : filtre === "tous"
+          ? true
+          : filtre === "ouverts"
+            ? d.type === "prospect" && !!d.vuLe
+            : d.type === filtre
+    )
     .filter(correspond);
   const ecartesTrouves = cherche ? ecartes.filter(correspond) : [];
   const prochain = actifs.find((d) => !envoyes.has(cleEnvoi(d)) && d.jeton);
@@ -399,14 +419,14 @@ export function EnvoiClient({
         </button>
         {modeleOuvert && (
           <div className="space-y-1.5">
-            <div className="grid grid-cols-2 gap-1.5">
-              {(["prospect", "client"] as Public[]).map((p) => (
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["prospect", "relance", "client"] as Public[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setModeleVu(p)}
                   className={`rounded-full py-2 text-xs font-bold ${modeleVu === p ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"}`}
                 >
-                  {p === "prospect" ? "Message prospects" : "Message clients"}
+                  {p === "prospect" ? "1er contact" : p === "relance" ? "Relance prospect" : "Clients"}
                 </button>
               ))}
             </div>
@@ -572,6 +592,7 @@ export function EnvoiClient({
               ["tous", `Tous (${actifs.length})`],
               ["client", `Clients (${nbClients})`],
               ["prospect", `Prospects (${actifs.length - nbClients})`],
+              ["ouverts", `👀 Ont ouvert, pas commandé (${actifs.filter((d) => d.type === "prospect" && d.vuLe).length})`],
             ] as [Filtre, string][]
           ).map(([f, libelle]) => (
             <button
@@ -678,6 +699,18 @@ export function EnvoiClient({
                           Copier son lien
                         </button>
                       </div>
+                    )}
+                    {d.type === "prospect" && d.vuLe && (
+                      <a
+                        href={`https://wa.me/${d.numero}?text=${encodeURIComponent(
+                          `Bonjour ${d.nom.split(/\s+/)[0]} 🙂 Tu as pu regarder ton bilan Chef2Box ? Si tu as une question sur ta portion, les plats ou la livraison, je suis là. Tu peux aussi commencer par 1 ou 2 repas pour tester.`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-lg bg-c2b-gold/15 px-3 py-2 text-center text-xs font-bold text-c2b-green"
+                      >
+                        💬 A ouvert son lien sans commander : lui écrire un message perso
+                      </a>
                     )}
                     {edition ? (
                       <div className="space-y-1.5 rounded-lg bg-c2b-cream p-2.5">

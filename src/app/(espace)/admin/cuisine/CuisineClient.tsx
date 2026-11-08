@@ -1072,6 +1072,10 @@ export function CuisineClient({
       .eq("id", d.id);
     fin(d.id);
     if (e1 || e2 || e3) return setMessage("Validation incomplète, réessayez.");
+    // Première commande validée : son questionnaire passe en « client ».
+    const derniers9 = (fiches.get(cleNom(nom ?? ""))?.telephone ?? d.personne?.telephone ?? "").replace(/[^\d]/g, "").slice(-9);
+    if (derniers9.length === 9)
+      await supabase.from("application_questionnaires").update({ suivi: "client" }).ilike("telephone", `%${derniers9}%`);
     // On rouvre la semaine concernée pour voir la personne au planning.
     window.location.href = `/admin/cuisine?date=${d.repas.map((r) => r.date).sort()[0]}`;
   }
