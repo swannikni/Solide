@@ -1903,3 +1903,19 @@ alter table public.application_tournee_reglages enable row level security;
 drop policy if exists tournee_reglages_admin on public.application_tournee_reglages;
 create policy tournee_reglages_admin on public.application_tournee_reglages for all to authenticated
   using (public.application_is_admin()) with check (public.application_is_admin());
+
+-- ============================================================
+-- Envoi du menu : envois par semaine, ouverture du lien, pause.
+-- ============================================================
+create table if not exists public.application_envois (
+  personne_id uuid not null references public.application_personnes(id) on delete cascade,
+  semaine date not null,
+  envoye_le timestamptz not null default now(),
+  primary key (personne_id, semaine)
+);
+alter table public.application_envois enable row level security;
+drop policy if exists envois_admin on public.application_envois;
+create policy envois_admin on public.application_envois for all to authenticated
+  using (public.application_is_admin()) with check (public.application_is_admin());
+alter table public.application_personnes add column if not exists vu_le timestamptz;
+alter table public.application_personnes add column if not exists envoi_pause boolean not null default false;
