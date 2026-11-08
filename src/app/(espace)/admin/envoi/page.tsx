@@ -8,6 +8,12 @@ export const dynamic = "force-dynamic";
 
 type Service = "dejeuner" | "diner";
 
+// Réponse libre du questionnaire, sans les « — » / « rien » qui ne disent rien.
+function utile(v: unknown, max: number) {
+  const t = typeof v === "string" ? v.trim() : "";
+  return t && !/^(—|-|rien|aucune?|non|ras|néant)$/i.test(t) ? t.slice(0, max) : null;
+}
+
 // Numéro WhatsApp en chiffres internationaux (06… → 2126…), ou null.
 function numero(t: string | null) {
   if (!t) return null;
@@ -43,13 +49,23 @@ export default async function EnvoiPage() {
     supabase.from("application_cuisine_extras").select("nom").limit(20000).returns<{ nom: string }[]>(),
     supabase
       .from("application_questionnaires")
-      .select("id, nom, telephone, palier, statut, suivi, calories")
+      .select("id, nom, telephone, palier, statut, suivi, calories, reponses")
       .neq("statut", "ignore")
       .not("telephone", "is", null)
       .not("calories", "is", null)
       .order("created_at", { ascending: false })
       .limit(3000)
-      .returns<{ id: string; nom: string; telephone: string | null; palier: Palier | null; statut: string; suivi: string | null }[]>(),
+      .returns<
+        {
+          id: string;
+          nom: string;
+          telephone: string | null;
+          palier: Palier | null;
+          statut: string;
+          suivi: string | null;
+          reponses: Record<string, string | number | null> | null;
+        }[]
+      >(),
     supabase
       .from("application_cuisine_services")
       .select("date, repas_type, plat")
@@ -132,6 +148,10 @@ export default async function EnvoiPage() {
       vuLe: null,
       pause: false,
       palier: q.palier,
+      // Repris sur sa fiche à la création du lien (la cuisine en a besoin s'il commande).
+      allergies: utile(q.reponses?.allergies, 300),
+      refus: utile(q.reponses?.refuses, 300),
+      note: utile(q.reponses?.preferes, 190) ? `Aime : ${utile(q.reponses?.preferes, 190)}` : null,
       // Même nom qu'une fiche existante (autre numéro) : fiche créée sous « Nom (questionnaire) ».
       homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
     });

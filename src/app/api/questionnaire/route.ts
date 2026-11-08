@@ -83,5 +83,38 @@ export async function POST(request: Request) {
     reponses,
   });
   if (error) return repondre({ erreur: "Enregistrement impossible." }, 500);
+
+  // Bilan refait par quelqu'un qui a déjà sa fiche (lien envoyé) mais n'a
+  // jamais commandé : sa fiche suit le nouveau bilan (palier, allergies…).
+  // Un client qui a déjà commandé garde sa fiche : l'admin décide.
+  const derniers9 = (texte(d.tel, 30) ?? "").replace(/[^\d]/g, "").slice(-9);
+  if (derniers9.length === 9 && calcul) {
+    const { data: fiches } = await admin
+      .from("application_personnes")
+      .select("id, nom, telephone")
+      .ilike("telephone", `%${derniers9.slice(-4)}%`)
+      .limit(20)
+      .returns<{ id: string; nom: string; telephone: string | null }[]>();
+    for (const f of (fiches ?? []).filter((x) => (x.telephone ?? "").replace(/[^\d]/g, "").endsWith(derniers9))) {
+      const { count } = await admin
+        .from("application_cuisine_extras")
+        .select("id", { count: "exact", head: true })
+        .ilike("nom", f.nom.replace(/[%_\\]/g, "\\$&"));
+      if ((count ?? 0) > 0) continue;
+      const utile = (v: unknown, max: number) => {
+        const t = typeof v === "string" ? v.trim() : "";
+        return t && !/^(—|-|rien|aucune?|non|ras|néant)$/i.test(t) ? t.slice(0, max) : null;
+      };
+      await admin
+        .from("application_personnes")
+        .update({
+          palier: calcul.palier,
+          allergies: utile(d.allergies, 300),
+          refus: utile(d.refuses, 300),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", f.id);
+    }
+  }
   return repondre({ ok: true }, 201);
 }

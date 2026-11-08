@@ -76,26 +76,43 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
   // Lien ouvert : sert à repérer qui ne lit jamais le menu (Admin → Envoi menu).
   await admin.from("application_personnes").update({ vu_le: new Date().toISOString() }).eq("id", fiche.id);
 
-  // Son bilan (questionnaire du site) : retrouvé par son numéro, sinon son nom.
-  const derniers9 = (fiche.telephone ?? "").replace(/[^\d]/g, "").slice(-9);
-  const requeteBilan = admin
-    .from("application_questionnaires")
-    .select("created_at, calories, proteines, glucides, lipides, palier, profil")
-    .not("calories", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const { data: questionnaire } = await (derniers9.length === 9
-    ? requeteBilan.ilike("telephone", `%${derniers9}%`)
-    : requeteBilan.ilike("nom", fiche.nom.replace(/[%_\\]/g, "\\$&"))
-  ).maybeSingle<{
+  // Son bilan (questionnaire du site) : le plus récent avec son numéro (comparé
+  // chiffre à chiffre, quel que soit le format), sinon avec son nom.
+  type Questionnaire = {
     created_at: string;
+    telephone: string | null;
     calories: number;
     proteines: number | null;
     glucides: number | null;
     lipides: number | null;
     palier: "P1" | "P2" | "P3" | null;
     profil: { objectifs?: string[]; poids?: number } | null;
-  }>();
+  };
+  const derniers9 = (fiche.telephone ?? "").replace(/[^\d]/g, "").slice(-9);
+  const champs = "created_at, telephone, calories, proteines, glucides, lipides, palier, profil";
+  let questionnaire: Questionnaire | null = null;
+  if (derniers9.length === 9) {
+    const { data } = await admin
+      .from("application_questionnaires")
+      .select(champs)
+      .not("calories", "is", null)
+      .ilike("telephone", `%${derniers9.slice(-4)}%`)
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .returns<Questionnaire[]>();
+    questionnaire = (data ?? []).find((q) => (q.telephone ?? "").replace(/[^\d]/g, "").endsWith(derniers9)) ?? null;
+  }
+  if (!questionnaire && !derniers9) {
+    const { data } = await admin
+      .from("application_questionnaires")
+      .select(champs)
+      .not("calories", "is", null)
+      .ilike("nom", fiche.nom.replace(/[%_\\]/g, "\\$&"))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .returns<Questionnaire[]>();
+    questionnaire = data?.[0] ?? null;
+  }
   const bilan = questionnaire
     ? {
         date: questionnaire.created_at.slice(0, 10),

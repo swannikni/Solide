@@ -19,6 +19,9 @@ export interface Destinataire {
   jeton: string | null;
   palier?: Palier | null;
   homonyme?: boolean;
+  allergies?: string | null;
+  refus?: string | null;
+  note?: string | null;
   envois: number; // semaines où le menu lui a été envoyé
   dernierEnvoi: string | null; // date du dernier envoi
   numeroAEnregistrer?: boolean; // sa fiche n'a pas encore ce numéro
@@ -33,18 +36,29 @@ const cleEnvoi = (d: Destinataire) => (d.ficheId ? `f:${d.ficheId}` : d.cle);
 
 type Filtre = "restants" | "tous" | "client" | "prospect";
 
-const MODELE_DEFAUT = `Bonjour {prenom} 👋
+// Deux messages : les prospects découvrent leur bilan ; les clients commandent.
+type Public = "prospect" | "client";
+const MODELES_DEFAUT: Record<Public, string> = {
+  prospect: `Bonjour {prenom} 👋
 
-Voici le menu Chef2Box de la semaine du {semaine} 🍽️
-
-👉 Ton lien personnel (ton bilan, le menu et ta commande) :
+Merci d'avoir fait ton bilan Chef2Box ! Ton espace personnel est prêt :
 {lien}
 
-1. Coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux.
-2. Vérifie ton quartier : le prix s'affiche en bas.
-3. Touche « Valider ma commande ».
+Dedans :
+📊 ton bilan (tes besoins du jour et ta portion de repas),
+🍽️ le menu de la semaine du {semaine},
+🛒 ta commande en 1 minute : coche midi et/ou soir pour les jours que tu veux, le prix s'affiche, puis « Valider ma commande ».
 
-Modifiable jusqu'à la veille 20 h. Une question ? Réponds simplement à ce message.`;
+Ta première commande est confirmée par nous sur WhatsApp. Une question ? Réponds simplement à ce message.`,
+  client: `Bonjour {prenom} 👋
+
+Le menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
+
+👉 Commande ici, comme d'habitude :
+{lien}
+
+Coche midi et/ou soir pour les jours que tu veux, puis « Valider ma commande ». Modifiable jusqu'à la veille 20 h.`,
+};
 
 const lire = (cle: string) => {
   try {
@@ -78,7 +92,8 @@ export function EnvoiClient({
   const supabase = createClient();
   const [semaine, setSemaine] = useState(semaines[0]);
   const [destinataires, setDestinataires] = useState(destinatairesInitiaux);
-  const [modele, setModele] = useState(MODELE_DEFAUT);
+  const [modeles, setModeles] = useState<Record<Public, string>>(MODELES_DEFAUT);
+  const [modeleVu, setModeleVu] = useState<Public>("prospect");
   const [envoyesParSemaine, setEnvoyesParSemaine] = useState<Record<string, string[]>>(envoyesInitiaux);
   const envoyes = new Set(envoyesParSemaine[semaine] ?? []);
   const [silenceVu, setSilenceVu] = useState(false);
@@ -142,8 +157,9 @@ export function EnvoiClient({
 
   // Modèle et envois déjà faits : gardés sur ce téléphone (par semaine).
   useEffect(() => {
-    const m = lire("c2b-envoi-modele");
-    if (m) setModele(m);
+    const p = lire("c2b-envoi-modele-prospect");
+    const c = lire("c2b-envoi-modele-client");
+    setModeles({ prospect: p ?? MODELES_DEFAUT.prospect, client: c ?? MODELES_DEFAUT.client });
   }, []);
 
   const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(semaine, i));
@@ -159,8 +175,9 @@ export function EnvoiClient({
 
   const [origine, setOrigine] = useState("https://chef2box-appli.netlify.app");
   useEffect(() => setOrigine(window.location.origin), []);
+  // Prospect (jamais commandé) : message de découverte ; client : message habituel.
   const message = (d: Destinataire) =>
-    modele
+    modeles[d.type]
       .replaceAll("{prenom}", d.nom.split(/\s+/)[0])
       .replaceAll("{semaine}", dateLongue(semaine))
       .replaceAll("{menu}", lignesMenu.join("\n") || "(menu bientôt en ligne)")
@@ -221,7 +238,15 @@ export function EnvoiClient({
     const nom = (d.homonyme ? `${d.nom} (questionnaire)` : d.nom).slice(0, 80);
     const { data, error } = await supabase
       .from("application_personnes")
-      .insert({ nom, telephone: `+${d.numero}`, palier: d.palier ?? null, jeton })
+      .insert({
+        nom,
+        telephone: `+${d.numero}`,
+        palier: d.palier ?? null,
+        allergies: d.allergies ?? null,
+        refus: d.refus ?? null,
+        note: d.note ?? null,
+        jeton,
+      })
       .select("id")
       .single<{ id: string }>();
     return !error && data ? { jeton, ficheId: data.id } : null;
@@ -339,26 +364,38 @@ export function EnvoiClient({
           <p className="text-xs font-bold text-amber-700">⚠️ {joursSansMenu} jour{joursSansMenu > 1 ? "s" : ""} sans plat dans le menu.</p>
         )}
         <button onClick={() => setModeleOuvert((o) => !o)} className="text-xs font-bold text-c2b-gold underline">
-          {modeleOuvert ? "Fermer le message" : "Modifier le message"}
+          {modeleOuvert ? "Fermer les messages" : "Modifier les messages (prospects / clients)"}
         </button>
         {modeleOuvert && (
           <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["prospect", "client"] as Public[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setModeleVu(p)}
+                  className={`rounded-full py-2 text-xs font-bold ${modeleVu === p ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"}`}
+                >
+                  {p === "prospect" ? "Message prospects" : "Message clients"}
+                </button>
+              ))}
+            </div>
             <textarea
-              value={modele}
+              value={modeles[modeleVu]}
               onChange={(e) => {
-                setModele(e.target.value);
-                ecrire("c2b-envoi-modele", e.target.value);
+                setModeles((m) => ({ ...m, [modeleVu]: e.target.value }));
+                ecrire(`c2b-envoi-modele-${modeleVu}`, e.target.value);
               }}
-              rows={11}
+              rows={13}
               className="champ py-2 text-sm"
             />
             <p className="text-[11px] text-c2b-muted">
-              {"{prenom}"} = son prénom · {"{semaine}"} = la date · {"{menu}"} = le menu · {"{lien}"} = son lien perso
+              {"{prenom}"} = son prénom · {"{semaine}"} = la date · {"{menu}"} = le menu en texte · {"{lien}"} = son lien perso. Un prospect
+              devient client dès sa première commande : il reçoit alors le message clients.
             </p>
             <button
               onClick={() => {
-                setModele(MODELE_DEFAUT);
-                ecrire("c2b-envoi-modele", MODELE_DEFAUT);
+                setModeles((m) => ({ ...m, [modeleVu]: MODELES_DEFAUT[modeleVu] }));
+                ecrire(`c2b-envoi-modele-${modeleVu}`, MODELES_DEFAUT[modeleVu]);
               }}
               className="text-xs font-semibold text-c2b-muted underline"
             >
