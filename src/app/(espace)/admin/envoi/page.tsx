@@ -61,6 +61,7 @@ export default async function EnvoiPage() {
           nom: string;
           telephone: string | null;
           palier: Palier | null;
+          calories: number | null;
           statut: string;
           suivi: string | null;
           reponses: Record<string, string | number | null> | null;
@@ -94,6 +95,12 @@ export default async function EnvoiPage() {
   );
 
   const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
+  // Aperçu du bilan pour le message des prospects : dernier questionnaire par numéro.
+  const bilanParNumero = new Map<string, { calories: number; palier: Palier | null }>();
+  for (const q of questionnaires ?? []) {
+    const n = numero(q.telephone);
+    if (n && !bilanParNumero.has(n.slice(-9)) && q.calories) bilanParNumero.set(n.slice(-9), { calories: q.calories, palier: q.palier });
+  }
   const destinataires: Destinataire[] = [];
   const numerosVus = new Set<string>();
   // Fiches « Nom 2 » (ex. Mehdi 2, repas du samedi commandés le vendredi) :
@@ -166,6 +173,7 @@ export default async function EnvoiPage() {
       homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
     });
   }
+  for (const d of destinataires) d.bilan = bilanParNumero.get(d.numero.slice(-9)) ?? null;
   destinataires.sort((a, b) => (a.type === b.type ? a.nom.localeCompare(b.nom, "fr") : a.type === "client" ? -1 : 1));
 
   const menus: Record<string, Record<string, { dejeuner: string; diner: string }>> = {};

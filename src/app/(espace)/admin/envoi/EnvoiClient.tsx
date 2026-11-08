@@ -26,6 +26,7 @@ export interface Destinataire {
   dernierEnvoi: string | null; // date du dernier envoi
   numeroAEnregistrer?: boolean; // sa fiche n'a pas encore ce numéro
   autres?: { nom: string; jeton: string }[]; // même numéro (couple) : leur lien aussi
+  bilan?: { calories: number; palier: Palier | null } | null; // aperçu de son bilan
   vuLe: string | null; // dernière ouverture de son lien
   pause: boolean; // ne plus lui envoyer
 }
@@ -42,15 +43,16 @@ type Public = "prospect" | "client";
 const MODELES_DEFAUT: Record<Public, string> = {
   prospect: `Bonjour {prenom} 👋
 
-Merci d'avoir fait ton bilan Chef2Box ! Ton espace personnel est prêt :
-{lien}
+Ici l'équipe Chef2Box : tu as fait ton bilan nutrition sur chef2box.com, merci !
 
-Dedans :
-📊 ton bilan (tes besoins du jour et ta portion de repas),
-🍽️ le menu de la semaine du {semaine},
-🛒 ta commande en 1 minute : coche midi et/ou soir pour les jours que tu veux, le prix s'affiche, puis « Valider ma commande ».
+📊 {bilan}
 
-Ta première commande est confirmée par nous sur WhatsApp. Une question ? Réponds simplement à ce message.`,
+Ton espace personnel est prêt : ton bilan complet, le menu de la semaine du {semaine} et la commande en 1 minute.
+👉 {lien}
+
+🔒 C'est ta page à toi : pas de compte à créer, rien à payer en ligne (paiement à la livraison ou par virement), aucun engagement tant que tu ne valides pas une commande.
+
+Une question ? Réponds simplement à ce message 🙂`,
   client: `Bonjour {prenom} 👋
 
 Le menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
@@ -60,6 +62,13 @@ Le menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
 
 Coche midi et/ou soir pour les jours que tu veux, puis « Valider ma commande ». Modifiable jusqu'à la veille 20 h.`,
 };
+
+const KCAL_REPAS = { P1: "800 kcal", P2: "680-700 kcal", P3: "550-600 kcal" };
+// « Ton besoin : 2 736 kcal/jour → ton repas Chef2Box : Palier 1 (800 kcal) »
+const apercuBilan = (b: Destinataire["bilan"]) =>
+  b
+    ? `Ton besoin : ${b.calories.toLocaleString("fr-FR")} kcal/jour${b.palier ? ` → ton repas Chef2Box : Palier ${b.palier.slice(1)} (${KCAL_REPAS[b.palier]})` : ""}`
+    : "";
 
 const lire = (cle: string) => {
   try {
@@ -95,6 +104,9 @@ export function EnvoiClient({
   const [destinataires, setDestinataires] = useState(destinatairesInitiaux);
   const [modeles, setModeles] = useState<Record<Public, string>>(MODELES_DEFAUT);
   const [modeleVu, setModeleVu] = useState<Public>("prospect");
+  // Lien sur le domaine chef2box.com (plus court, plus rassurant) : une fois le site déposé.
+  const [lienCourt, setLienCourt] = useState(false);
+  useEffect(() => setLienCourt(lire("c2b-envoi-lien-court") === "1"), []);
   const [envoyesParSemaine, setEnvoyesParSemaine] = useState<Record<string, string[]>>(envoyesInitiaux);
   const envoyes = new Set(envoyesParSemaine[semaine] ?? []);
   const [silenceVu, setSilenceVu] = useState(false);
@@ -177,13 +189,16 @@ export function EnvoiClient({
   const [origine, setOrigine] = useState("https://chef2box-appli.netlify.app");
   useEffect(() => setOrigine(window.location.origin), []);
   // Prospect (jamais commandé) : message de découverte ; client : message habituel.
+  const lienPerso = (jeton: string) => (lienCourt ? `https://chef2box.com/e/${jeton}` : `${origine}/ma-semaine/${jeton}`);
   const message = (d: Destinataire) =>
     modeles[d.type]
+      // Sans bilan connu : la ligne {bilan} disparaît.
+      .replace(/^.*\{bilan\}.*\n?\n?/m, (ligne) => (d.bilan ? ligne.replace("{bilan}", apercuBilan(d.bilan)) : ""))
       .replaceAll("{prenom}", d.nom.split(/\s+/)[0])
       .replaceAll("{semaine}", dateLongue(semaine))
       .replaceAll("{menu}", lignesMenu.join("\n") || "(menu bientôt en ligne)")
-      .replaceAll("{lien}", d.jeton ? `${origine}/ma-semaine/${d.jeton}` : "https://chef2box.com") +
-    (d.autres ?? []).map((a) => `\n\nLien de ${a.nom.split(/\s+/)[0]} : ${origine}/ma-semaine/${a.jeton}`).join("");
+      .replaceAll("{lien}", d.jeton ? lienPerso(d.jeton) : "https://chef2box.com") +
+    (d.autres ?? []).map((a) => `\n\nLien de ${a.nom.split(/\s+/)[0]} : ${lienPerso(a.jeton)}`).join("");
 
   // Ceux qui ne répondent jamais (ou mis en pause) sortent de l'envoi.
   const actifs = destinataires.filter((d) => !d.pause && !silencieux(d));
@@ -365,6 +380,20 @@ export function EnvoiClient({
         {lignesMenu.length > 0 && joursSansMenu > 0 && (
           <p className="text-xs font-bold text-amber-700">⚠️ {joursSansMenu} jour{joursSansMenu > 1 ? "s" : ""} sans plat dans le menu.</p>
         )}
+        <label className="flex items-start gap-2 text-xs text-c2b-green">
+          <input
+            type="checkbox"
+            checked={lienCourt}
+            onChange={(e) => {
+              setLienCourt(e.target.checked);
+              ecrire("c2b-envoi-lien-court", e.target.checked ? "1" : "0");
+            }}
+            className="mt-0.5 h-4 w-4 accent-[#1c2e1e]"
+          />
+          <span>
+            <strong>Liens chef2box.com/e/…</strong> (plus courts et rassurants). À cocher seulement une fois le site chef2box.com redéposé.
+          </span>
+        </label>
         <button onClick={() => setModeleOuvert((o) => !o)} className="text-xs font-bold text-c2b-gold underline">
           {modeleOuvert ? "Fermer les messages" : "Modifier les messages (prospects / clients)"}
         </button>
@@ -391,7 +420,8 @@ export function EnvoiClient({
               className="champ py-2 text-sm"
             />
             <p className="text-[11px] text-c2b-muted">
-              {"{prenom}"} = son prénom · {"{semaine}"} = la date · {"{menu}"} = le menu en texte · {"{lien}"} = son lien perso. Un prospect
+              {"{prenom}"} = son prénom · {"{semaine}"} = la date · {"{menu}"} = le menu en texte · {"{lien}"} = son lien perso ·{" "}
+              {"{bilan}"} = son besoin du jour et son palier. Un prospect
               devient client dès sa première commande : il reçoit alors le message clients.
             </p>
             <button
