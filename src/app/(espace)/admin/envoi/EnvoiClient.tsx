@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Send, Check, RotateCcw, ImagePlus, Camera } from "lucide-react";
+import { Send, Check, ImagePlus, Camera } from "lucide-react";
 import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
@@ -19,20 +19,30 @@ export interface Destinataire {
   jeton: string | null;
   palier?: Palier | null;
   homonyme?: boolean;
+  envois: number; // semaines où le menu lui a été envoyé
+  vuLe: string | null; // dernière ouverture de son lien
+  pause: boolean; // ne plus lui envoyer
 }
+
+// Prospect qui n'a jamais ouvert son lien après 3 envois : on arrête de le relancer.
+const SEUIL_SILENCE = 3;
+const silencieux = (d: Destinataire) => d.type === "prospect" && !d.vuLe && d.envois >= SEUIL_SILENCE;
+const cleEnvoi = (d: Destinataire) => (d.ficheId ? `f:${d.ficheId}` : d.cle);
 
 type Filtre = "restants" | "tous" | "client" | "prospect";
 
 const MODELE_DEFAUT = `Bonjour {prenom} 👋
 
-Le menu Chef2Box de la semaine du {semaine} est en ligne :
+Voici le menu Chef2Box de la semaine du {semaine} 🍽️
 
-{menu}
-
-Commande ici en 1 minute (midi, soir, les jours que tu veux) :
+👉 Pour commander, ouvre ton lien personnel :
 {lien}
 
-Modifiable jusqu'à la veille 20 h. À très vite !`;
+1. Coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux.
+2. Vérifie ton quartier : le prix s'affiche en bas.
+3. Touche « Valider ma commande ».
+
+Modifiable jusqu'à la veille 20 h. Une question ? Réponds simplement à ce message.`;
 
 const lire = (cle: string) => {
   try {
@@ -55,17 +65,21 @@ export function EnvoiClient({
   menus,
   destinatairesInitiaux,
   imagesInitiales = [],
+  envoyesInitiaux = {},
 }: {
   semaines: string[];
   menus: Record<string, Record<string, { dejeuner: string; diner: string }>>;
   destinatairesInitiaux: Destinataire[];
   imagesInitiales?: string[]; // semaines dont l'image du menu est déposée
+  envoyesInitiaux?: Record<string, string[]>; // par semaine : « f:<fiche> » déjà prévenus
 }) {
   const supabase = createClient();
   const [semaine, setSemaine] = useState(semaines[0]);
   const [destinataires, setDestinataires] = useState(destinatairesInitiaux);
   const [modele, setModele] = useState(MODELE_DEFAUT);
-  const [envoyes, setEnvoyes] = useState<Set<string>>(new Set());
+  const [envoyesParSemaine, setEnvoyesParSemaine] = useState<Record<string, string[]>>(envoyesInitiaux);
+  const envoyes = new Set(envoyesParSemaine[semaine] ?? []);
+  const [silenceVu, setSilenceVu] = useState(false);
   const [filtre, setFiltre] = useState<Filtre>("restants");
   const [preparation, setPreparation] = useState("");
   const [modeleOuvert, setModeleOuvert] = useState(false);
@@ -124,9 +138,6 @@ export function EnvoiClient({
     const m = lire("c2b-envoi-modele");
     if (m) setModele(m);
   }, []);
-  useEffect(() => {
-    setEnvoyes(new Set(JSON.parse(lire(`c2b-envoi-${semaine}`) ?? "[]") as string[]));
-  }, [semaine]);
 
   const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(semaine, i));
   const menu = menus[semaine] ?? {};
@@ -148,21 +159,31 @@ export function EnvoiClient({
       .replaceAll("{menu}", lignesMenu.join("\n") || "(menu bientôt en ligne)")
       .replaceAll("{lien}", d.jeton ? `${origine}/ma-semaine/${d.jeton}` : "https://chef2box.com");
 
-  const liste = destinataires.filter((d) =>
-    filtre === "restants" ? !envoyes.has(d.cle) : filtre === "tous" ? true : d.type === filtre
+  // Ceux qui ne répondent jamais (ou mis en pause) sortent de l'envoi.
+  const actifs = destinataires.filter((d) => !d.pause && !silencieux(d));
+  const ecartes = destinataires.filter((d) => d.pause || silencieux(d));
+  const envoyesActifs = actifs.filter((d) => envoyes.has(cleEnvoi(d))).length;
+  const liste = actifs.filter((d) =>
+    filtre === "restants" ? !envoyes.has(cleEnvoi(d)) : filtre === "tous" ? true : d.type === filtre
   );
-  const prochain = destinataires.find((d) => !envoyes.has(d.cle) && d.jeton);
-  const sansLien = destinataires.filter((d) => !d.jeton).length;
-  const nbClients = destinataires.filter((d) => d.type === "client").length;
+  const prochain = actifs.find((d) => !envoyes.has(cleEnvoi(d)) && d.jeton);
+  const sansLien = actifs.filter((d) => !d.jeton).length;
+  const nbClients = actifs.filter((d) => d.type === "client").length;
 
+  // Envoi noté dans la base (visible depuis n'importe quel téléphone).
   function marquer(d: Destinataire, envoye = true) {
-    setEnvoyes((s) => {
-      const n = new Set(s);
-      if (envoye) n.add(d.cle);
-      else n.delete(d.cle);
-      ecrire(`c2b-envoi-${semaine}`, JSON.stringify([...n]));
-      return n;
+    const c = cleEnvoi(d);
+    setEnvoyesParSemaine((m) => {
+      const l = new Set(m[semaine] ?? []);
+      if (envoye) l.add(c);
+      else l.delete(c);
+      return { ...m, [semaine]: [...l] };
     });
+    setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, envois: Math.max(0, x.envois + (envoye ? 1 : -1)) } : x)));
+    if (d.ficheId) {
+      if (envoye) supabase.from("application_envois").upsert({ personne_id: d.ficheId, semaine }).then(() => {});
+      else supabase.from("application_envois").delete().eq("personne_id", d.ficheId).eq("semaine", semaine).then(() => {});
+    }
     // Prospect contacté : son suivi passe à « contacté ».
     if (envoye && d.cle.startsWith("q:")) {
       supabase.from("application_questionnaires").update({ suivi: "contacte" }).eq("id", d.cle.slice(2)).or("suivi.is.null,suivi.neq.client").then(() => {});
@@ -199,6 +220,25 @@ export function EnvoiClient({
     const echecs = aFaire.length - maj.size;
     setPreparation(echecs ? `${maj.size} liens prêts, ${echecs} impossibles (nom déjà pris ?).` : `${maj.size} liens prêts ✓`);
   }
+
+  // Ne plus envoyer / réactiver.
+  async function mettreEnPause(d: Destinataire, pause: boolean) {
+    if (!d.ficheId) return;
+    const { error } = await supabase.from("application_personnes").update({ envoi_pause: pause }).eq("id", d.ficheId);
+    if (!error) setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, pause, envois: pause ? x.envois : Math.min(x.envois, SEUIL_SILENCE - 1) } : x)));
+  }
+
+  const suivi = (d: Destinataire) =>
+    [
+      d.envois ? `📩 ${d.envois} envoi${d.envois > 1 ? "s" : ""}` : null,
+      d.vuLe
+        ? `👀 ouvert le ${new Date(d.vuLe).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+        : d.envois
+          ? "jamais ouvert"
+          : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
   const lienWa = (d: Destinataire) => `https://wa.me/${d.numero}?text=${encodeURIComponent(message(d))}`;
 
@@ -317,14 +357,14 @@ export function EnvoiClient({
       <section className="carte space-y-3 p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-bold text-c2b-green">
-            Envoyés : {envoyes.size} / {destinataires.length}
+            Envoyés : {envoyesActifs} / {actifs.length}
           </p>
           <p className="text-xs text-c2b-muted">
-            {nbClients} clients · {destinataires.length - nbClients} prospects
+            {nbClients} clients · {actifs.length - nbClients} prospects
           </p>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-c2b-green/10">
-          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${destinataires.length ? (envoyes.size / destinataires.length) * 100 : 0}%` }} />
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${actifs.length ? (envoyesActifs / actifs.length) * 100 : 0}%` }} />
         </div>
         {prochain ? (
           <div className="space-y-2 rounded-xl bg-c2b-cream p-3">
@@ -335,27 +375,42 @@ export function EnvoiClient({
                 {prochain.type === "client" ? "client" : "prospect"}
               </span>
             </p>
-            <a
-              href={lienWa(prochain)}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => marquer(prochain)}
-              className="flex items-center justify-center gap-2 rounded-full bg-[#25D366] py-3.5 text-base font-bold text-white"
-            >
-              <Send size={18} /> Envoyer à {prochain.nom.split(/\s+/)[0]}
-            </a>
-            {fichierImage && (
-              <button
-                onClick={() => partagerPhoto(prochain)}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-[#25D366] bg-white py-2.5 text-sm font-bold text-[#128C7E]"
-              >
-                <Camera size={16} /> Avec la photo (choisir {prochain.nom.split(/\s+/)[0]} dans WhatsApp)
-              </button>
+            {suivi(prochain) && <p className="text-[11px] text-c2b-muted">{suivi(prochain)}</p>}
+            {fichierImage ? (
+              <>
+                <button
+                  onClick={() => partagerPhoto(prochain)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] py-3.5 text-base font-bold text-white"
+                >
+                  <Camera size={18} /> Photo + message à {prochain.nom.split(/\s+/)[0]}
+                </button>
+                <p className="text-[11px] text-c2b-muted">
+                  Le partage s&apos;ouvre : choisissez WhatsApp puis {prochain.nom.split(/\s+/)[0]} (+{prochain.numero}). La photo part avec le texte et son lien.
+                </p>
+                <a
+                  href={lienWa(prochain)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => marquer(prochain)}
+                  className="block text-center text-xs font-bold text-[#128C7E] underline"
+                >
+                  Sans photo (ouvre directement sa conversation)
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href={lienWa(prochain)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => marquer(prochain)}
+                  className="flex items-center justify-center gap-2 rounded-full bg-[#25D366] py-3.5 text-base font-bold text-white"
+                >
+                  <Send size={18} /> Envoyer à {prochain.nom.split(/\s+/)[0]}
+                </a>
+                <p className="text-[11px] text-c2b-muted">Déposez l&apos;image du menu ci-dessus pour l&apos;envoyer avec la photo.</p>
+              </>
             )}
-            <p className="text-[11px] text-c2b-muted">
-              WhatsApp s&apos;ouvre avec le message prêt : envoyez, revenez, le suivant s&apos;affiche.
-              {aImage && " L'aperçu du lien montre l'image du menu."}
-            </p>
           </div>
         ) : (
           <p className="rounded-xl bg-emerald-50 px-3 py-3 text-center text-sm font-bold text-emerald-700">
@@ -369,10 +424,10 @@ export function EnvoiClient({
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              ["restants", `À envoyer (${destinataires.length - envoyes.size})`],
-              ["tous", `Tous (${destinataires.length})`],
+              ["restants", `À envoyer (${actifs.length - envoyesActifs})`],
+              ["tous", `Tous (${actifs.length})`],
               ["client", `Clients (${nbClients})`],
-              ["prospect", `Prospects (${destinataires.length - nbClients})`],
+              ["prospect", `Prospects (${actifs.length - nbClients})`],
             ] as [Filtre, string][]
           ).map(([f, libelle]) => (
             <button
@@ -386,7 +441,7 @@ export function EnvoiClient({
         </div>
         <ul className="space-y-1.5">
           {liste.slice(0, 300).map((d) => {
-            const fait = envoyes.has(d.cle);
+            const fait = envoyes.has(cleEnvoi(d));
             return (
               <li key={d.cle} className={`carte flex items-center gap-2 px-3 py-2 ${fait ? "opacity-60" : ""}`}>
                 <div className="min-w-0 flex-1">
@@ -396,7 +451,10 @@ export function EnvoiClient({
                       {d.type === "client" ? "client" : "prospect"}
                     </span>
                   </p>
-                  <p className="text-[11px] text-c2b-muted">+{d.numero}</p>
+                  <p className="truncate text-[11px] text-c2b-muted">
+                    +{d.numero}
+                    {suivi(d) && ` · ${suivi(d)}`}
+                  </p>
                 </div>
                 {fait ? (
                   <button onClick={() => marquer(d, false)} className="flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">
@@ -419,16 +477,42 @@ export function EnvoiClient({
             );
           })}
         </ul>
-        {envoyes.size > 0 && (
-          <button
-            onClick={() => {
-              setEnvoyes(new Set());
-              ecrire(`c2b-envoi-${semaine}`, "[]");
-            }}
-            className="mx-auto flex items-center gap-1 py-2 text-xs font-semibold text-c2b-muted underline"
-          >
-            <RotateCcw size={12} /> Tout remettre à « à envoyer »
-          </button>
+        {ecartes.length > 0 && (
+          <div className="carte space-y-2 p-3">
+            <button onClick={() => setSilenceVu((v) => !v)} className="flex w-full items-center justify-between text-left">
+              <span className="text-sm font-bold text-c2b-green">🔕 Ne répondent pas ({ecartes.length})</span>
+              <span className="text-xs font-bold text-c2b-gold">{silenceVu ? "Masquer" : "Voir"}</span>
+            </button>
+            <p className="text-[11px] text-c2b-muted">
+              Prospects qui n&apos;ont jamais ouvert leur lien après {SEUIL_SILENCE} envois, ou mis en pause : ils ne reçoivent plus le menu.
+            </p>
+            {silenceVu && (
+              <ul className="space-y-1.5">
+                {ecartes.map((d) => (
+                  <li key={d.cle} className="flex items-center gap-2 rounded-lg bg-c2b-cream px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-c2b-green">{d.nom}</p>
+                      <p className="truncate text-[11px] text-c2b-muted">{d.pause ? "En pause" : suivi(d)}</p>
+                    </div>
+                    {d.pause ? (
+                      <button onClick={() => mettreEnPause(d, false)} className="text-xs font-bold text-c2b-green underline">
+                        Réactiver
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={() => mettreEnPause(d, false)} className="text-xs font-bold text-c2b-green underline">
+                          Relancer
+                        </button>
+                        <button onClick={() => mettreEnPause(d, true)} className="text-xs font-bold text-red-600 underline">
+                          Pause
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </section>
     </main>

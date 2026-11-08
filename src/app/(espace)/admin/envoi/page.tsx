@@ -24,12 +24,22 @@ export default async function EnvoiPage() {
   const lundi = lundiDe(decalerDate(aujourdhui, 2));
   const semaines = [lundi, decalerDate(lundi, 7)];
 
-  const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }, { data: images }] = await Promise.all([
+  const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }, { data: images }, { data: envois }] = await Promise.all([
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, jeton, partenaire")
+      .select("id, nom, telephone, jeton, partenaire, vu_le, envoi_pause")
       .limit(3000)
-      .returns<{ id: string; nom: string; telephone: string | null; jeton: string | null; partenaire: boolean | null }[]>(),
+      .returns<
+        {
+          id: string;
+          nom: string;
+          telephone: string | null;
+          jeton: string | null;
+          partenaire: boolean | null;
+          vu_le: string | null;
+          envoi_pause: boolean | null;
+        }[]
+      >(),
     supabase.from("application_cuisine_extras").select("nom").limit(20000).returns<{ nom: string }[]>(),
     supabase
       .from("application_questionnaires")
@@ -51,7 +61,13 @@ export default async function EnvoiPage() {
       .select("cle")
       .in("cle", semaines.map((l) => `menu_image:${l}`))
       .returns<{ cle: string }[]>(),
+    supabase.from("application_envois").select("personne_id, semaine").limit(50000).returns<{ personne_id: string; semaine: string }[]>(),
   ]);
+  const nbEnvois = new Map<string, number>();
+  for (const e of envois ?? []) nbEnvois.set(e.personne_id, (nbEnvois.get(e.personne_id) ?? 0) + 1);
+  const envoyes: Record<string, string[]> = Object.fromEntries(
+    semaines.map((l) => [l, (envois ?? []).filter((e) => e.semaine === l).map((e) => `f:${e.personne_id}`)])
+  );
 
   const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
   const destinataires: Destinataire[] = [];
@@ -67,6 +83,9 @@ export default async function EnvoiPage() {
       type: dejaVenus.has(f.nom.trim().toLowerCase()) ? "client" : "prospect",
       ficheId: f.id,
       jeton: f.jeton,
+      envois: nbEnvois.get(f.id) ?? 0,
+      vuLe: f.vu_le,
+      pause: !!f.envoi_pause,
     });
   }
   const nomsFiches = new Set((fiches ?? []).map((f) => f.nom.trim().toLowerCase()));
@@ -81,6 +100,9 @@ export default async function EnvoiPage() {
       type: "prospect",
       ficheId: null,
       jeton: null,
+      envois: 0,
+      vuLe: null,
+      pause: false,
       palier: q.palier,
       // Même nom qu'une fiche existante (autre numéro) : fiche créée sous « Nom (questionnaire) ».
       homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
@@ -101,6 +123,7 @@ export default async function EnvoiPage() {
         menus={menus}
         destinatairesInitiaux={destinataires}
         imagesInitiales={(images ?? []).map((i) => i.cle.replace("menu_image:", ""))}
+        envoyesInitiaux={envoyes}
       />
     </div>
   );

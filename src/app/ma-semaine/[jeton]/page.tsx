@@ -73,6 +73,9 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
     );
   }
 
+  // Lien ouvert : sert à repérer qui ne lit jamais le menu (Admin → Envoi menu).
+  await admin.from("application_personnes").update({ vu_le: new Date().toISOString() }).eq("id", fiche.id);
+
   const aujourdhui = dateDuJour();
   const lundiActuel = lundiDe(aujourdhui);
   // Semaines où l'on peut commander : celle en cours (s'il reste des jours) et les 2 suivantes.
