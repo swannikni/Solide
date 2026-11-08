@@ -25,6 +25,7 @@ export interface Destinataire {
   envois: number; // semaines où le menu lui a été envoyé
   dernierEnvoi: string | null; // date du dernier envoi
   numeroAEnregistrer?: boolean; // sa fiche n'a pas encore ce numéro
+  autres?: { nom: string; jeton: string }[]; // même numéro (couple) : leur lien aussi
   vuLe: string | null; // dernière ouverture de son lien
   pause: boolean; // ne plus lui envoyer
 }
@@ -181,7 +182,8 @@ export function EnvoiClient({
       .replaceAll("{prenom}", d.nom.split(/\s+/)[0])
       .replaceAll("{semaine}", dateLongue(semaine))
       .replaceAll("{menu}", lignesMenu.join("\n") || "(menu bientôt en ligne)")
-      .replaceAll("{lien}", d.jeton ? `${origine}/ma-semaine/${d.jeton}` : "https://chef2box.com");
+      .replaceAll("{lien}", d.jeton ? `${origine}/ma-semaine/${d.jeton}` : "https://chef2box.com") +
+    (d.autres ?? []).map((a) => `\n\nLien de ${a.nom.split(/\s+/)[0]} : ${origine}/ma-semaine/${a.jeton}`).join("");
 
   // Ceux qui ne répondent jamais (ou mis en pause) sortent de l'envoi.
   const actifs = destinataires.filter((d) => !d.pause && !silencieux(d));
@@ -567,7 +569,8 @@ export function EnvoiClient({
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="truncate text-sm font-bold text-c2b-green">
-                      {d.nom}{" "}
+                      {d.nom}
+                      {d.autres?.length ? ` & ${d.autres.map((a) => a.nom.split(/\s+/)[0]).join(" & ")}` : ""}{" "}
                       <span className={`text-[10px] font-bold ${d.type === "client" ? "text-emerald-700" : "text-c2b-gold"}`}>
                         {d.type === "client" ? "client" : "prospect"}
                       </span>

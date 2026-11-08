@@ -80,6 +80,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
   // chiffre à chiffre, quel que soit le format), sinon avec son nom.
   type Questionnaire = {
     created_at: string;
+    nom: string;
     telephone: string | null;
     calories: number;
     proteines: number | null;
@@ -89,7 +90,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
     profil: { objectifs?: string[]; poids?: number } | null;
   };
   const derniers9 = (fiche.telephone ?? "").replace(/[^\d]/g, "").slice(-9);
-  const champs = "created_at, telephone, calories, proteines, glucides, lipides, palier, profil";
+  const champs = "created_at, nom, telephone, calories, proteines, glucides, lipides, palier, profil";
   let questionnaire: Questionnaire | null = null;
   if (derniers9.length === 9) {
     const { data } = await admin
@@ -100,7 +101,10 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       .order("created_at", { ascending: false })
       .limit(30)
       .returns<Questionnaire[]>();
-    questionnaire = (data ?? []).find((q) => (q.telephone ?? "").replace(/[^\d]/g, "").endsWith(derniers9)) ?? null;
+    // Même numéro pour deux personnes (couple) : celui à son prénom d'abord.
+    const memeNumero = (data ?? []).filter((q) => (q.telephone ?? "").replace(/[^\d]/g, "").endsWith(derniers9));
+    const prenom = fiche.nom.trim().split(/\s+/)[0].toLowerCase();
+    questionnaire = memeNumero.find((q) => q.nom.trim().toLowerCase().startsWith(prenom)) ?? memeNumero[0] ?? null;
   }
   if (!questionnaire && !derniers9) {
     const { data } = await admin

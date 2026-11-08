@@ -96,9 +96,19 @@ export default async function EnvoiPage() {
   const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
   const destinataires: Destinataire[] = [];
   const numerosVus = new Set<string>();
-  for (const f of fiches ?? []) {
+  // Fiches « Nom 2 » (ex. Mehdi 2, repas du samedi commandés le vendredi) :
+  // même personne, pas de message en plus. Un couple sur un même numéro : un
+  // seul message, avec le lien de chacun.
+  const estDoublure = (nom: string) => /\s\d+$/.test(nom.trim());
+  const fichesTriees = [...(fiches ?? [])].sort((a, b) => Number(estDoublure(a.nom)) - Number(estDoublure(b.nom)));
+  for (const f of fichesTriees) {
     const n = numero(f.telephone);
-    if (!n || f.partenaire || numerosVus.has(n)) continue;
+    if (!n || f.partenaire) continue;
+    if (numerosVus.has(n)) {
+      const principal = destinataires.find((x) => x.numero === n && x.ficheId);
+      if (principal && !estDoublure(f.nom) && f.jeton) (principal.autres ??= []).push({ nom: f.nom.trim(), jeton: f.jeton });
+      continue;
+    }
     numerosVus.add(n);
     destinataires.push({
       cle: `f:${f.id}`,
