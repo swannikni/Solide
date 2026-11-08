@@ -20,6 +20,8 @@ export interface Destinataire {
   palier?: Palier | null;
   homonyme?: boolean;
   envois: number; // semaines où le menu lui a été envoyé
+  dernierEnvoi: string | null; // date du dernier envoi
+  numeroAEnregistrer?: boolean; // sa fiche n'a pas encore ce numéro
   vuLe: string | null; // dernière ouverture de son lien
   pause: boolean; // ne plus lui envoyer
 }
@@ -82,6 +84,10 @@ export function EnvoiClient({
   const [silenceVu, setSilenceVu] = useState(false);
   const [filtre, setFiltre] = useState<Filtre>("restants");
   const [recherche, setRecherche] = useState("");
+  // Fiche d'actions ouverte (toucher un nom), modification en cours, message par ligne.
+  const [ouvert, setOuvert] = useState<string | null>(null);
+  const [edition, setEdition] = useState<{ nom: string; numero: string } | null>(null);
+  const [etatLigne, setEtatLigne] = useState<Record<string, string>>({});
   const [preparation, setPreparation] = useState("");
   const [modeleOuvert, setModeleOuvert] = useState(false);
   // Image du menu : déposée par semaine, gardée en mémoire pour le partage photo.
@@ -185,7 +191,13 @@ export function EnvoiClient({
       else l.delete(c);
       return { ...m, [semaine]: [...l] };
     });
-    setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, envois: Math.max(0, x.envois + (envoye ? 1 : -1)) } : x)));
+    setDestinataires((prev) =>
+      prev.map((x) =>
+        x.cle === d.cle
+          ? { ...x, envois: Math.max(0, x.envois + (envoye ? 1 : -1)), dernierEnvoi: envoye ? new Date().toISOString() : x.dernierEnvoi }
+          : x
+      )
+    );
     if (d.ficheId) {
       if (envoye) supabase.from("application_envois").upsert({ personne_id: d.ficheId, semaine }).then(() => {});
       else supabase.from("application_envois").delete().eq("personne_id", d.ficheId).eq("semaine", semaine).then(() => {});
@@ -197,6 +209,31 @@ export function EnvoiClient({
   }
 
   // Crée les liens manquants : jeton pour les fiches, fiche + jeton pour les prospects.
+  // Lien d'une personne : jeton sur sa fiche, ou fiche + jeton pour un prospect.
+  async function lienDe(d: Destinataire): Promise<Partial<Destinataire> | null> {
+    const jeton = nouveauJeton();
+    if (d.ficheId) {
+      const maj: Record<string, unknown> = { jeton };
+      if (d.numeroAEnregistrer) maj.telephone = `+${d.numero}`;
+      const { error } = await supabase.from("application_personnes").update(maj).eq("id", d.ficheId);
+      return error ? null : { jeton, numeroAEnregistrer: false };
+    }
+    const nom = (d.homonyme ? `${d.nom} (questionnaire)` : d.nom).slice(0, 80);
+    const { data, error } = await supabase
+      .from("application_personnes")
+      .insert({ nom, telephone: `+${d.numero}`, palier: d.palier ?? null, jeton })
+      .select("id")
+      .single<{ id: string }>();
+    return !error && data ? { jeton, ficheId: data.id } : null;
+  }
+
+  async function preparerUn(d: Destinataire) {
+    setEtatLigne((m) => ({ ...m, [d.cle]: "Création du lien…" }));
+    const maj = await lienDe(d);
+    if (maj) setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, ...maj } : x)));
+    setEtatLigne((m) => ({ ...m, [d.cle]: maj ? "Lien prêt ✓" : "Lien impossible (nom déjà pris ?)" }));
+  }
+
   async function preparerLiens() {
     const aFaire = destinataires.filter((d) => !d.jeton);
     let faits = 0;
@@ -205,19 +242,8 @@ export function EnvoiClient({
       setPreparation(`Préparation des liens… ${faits} / ${aFaire.length}`);
       await Promise.all(
         aFaire.slice(i, i + 10).map(async (d) => {
-          const jeton = nouveauJeton();
-          if (d.ficheId) {
-            const { error } = await supabase.from("application_personnes").update({ jeton }).eq("id", d.ficheId);
-            if (!error) maj.set(d.cle, { jeton });
-          } else {
-            const nom = (d.homonyme ? `${d.nom} (questionnaire)` : d.nom).slice(0, 80);
-            const { data, error } = await supabase
-              .from("application_personnes")
-              .insert({ nom, telephone: `+${d.numero}`, palier: d.palier ?? null, jeton })
-              .select("id")
-              .single<{ id: string }>();
-            if (!error && data) maj.set(d.cle, { jeton, ficheId: data.id });
-          }
+          const m = await lienDe(d);
+          if (m) maj.set(d.cle, m);
           faits++;
         })
       );
@@ -225,6 +251,28 @@ export function EnvoiClient({
     setDestinataires((prev) => prev.map((d) => (maj.has(d.cle) ? { ...d, ...maj.get(d.cle) } : d)));
     const echecs = aFaire.length - maj.size;
     setPreparation(echecs ? `${maj.size} liens prêts, ${echecs} impossibles (nom déjà pris ?).` : `${maj.size} liens prêts ✓`);
+  }
+
+  // Modifier le nom ou le numéro d'une personne (sa fiche).
+  async function enregistrerModif(d: Destinataire) {
+    const nom = (edition?.nom ?? d.nom).trim().slice(0, 80);
+    const chiffres = (edition?.numero ?? "").replace(/[^\d]/g, "").replace(/^00/, "").replace(/^0(?=[5-7])/, "212");
+    if (!nom) return;
+    if (chiffres.length < 9 || chiffres.length > 15) return setEtatLigne((m) => ({ ...m, [d.cle]: "Numéro incomplet (avec l'indicatif, ex. +212 6…)." }));
+    if (d.ficheId) {
+      if (nom !== d.nom) {
+        const { error } = await supabase.rpc("application_renommer_personne", { p_ancien: d.nom, p_nouveau: nom });
+        if (error) return setEtatLigne((m) => ({ ...m, [d.cle]: /existe/.test(error.message) ? "Ce nom existe déjà." : "Nom non enregistré." }));
+      }
+      const { error } = await supabase.from("application_personnes").update({ telephone: `+${chiffres}` }).eq("id", d.ficheId);
+      if (error) return setEtatLigne((m) => ({ ...m, [d.cle]: "Numéro non enregistré." }));
+    } else {
+      const { error } = await supabase.from("application_questionnaires").update({ nom, telephone: `+${chiffres}` }).eq("id", d.cle.slice(2));
+      if (error) return setEtatLigne((m) => ({ ...m, [d.cle]: "Non enregistré, réessayez." }));
+    }
+    setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, nom, numero: chiffres, numeroAEnregistrer: false } : x)));
+    setEdition(null);
+    setEtatLigne((m) => ({ ...m, [d.cle]: "Modifié ✓" }));
   }
 
   // Ne plus envoyer / réactiver.
@@ -236,7 +284,11 @@ export function EnvoiClient({
 
   const suivi = (d: Destinataire) =>
     [
-      d.envois ? `📩 ${d.envois} envoi${d.envois > 1 ? "s" : ""}` : null,
+      d.dernierEnvoi
+        ? `📩 envoyé le ${new Date(d.dernierEnvoi).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}${d.envois > 1 ? ` (${d.envois} fois)` : ""}`
+        : d.envois
+          ? `📩 ${d.envois} envoi${d.envois > 1 ? "s" : ""}`
+          : null,
       d.vuLe
         ? `👀 ouvert le ${new Date(d.vuLe).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
         : d.envois
@@ -465,36 +517,143 @@ export function EnvoiClient({
         <ul className="space-y-1.5">
           {liste.slice(0, 300).map((d) => {
             const fait = envoyes.has(cleEnvoi(d));
+            const estOuvert = ouvert === d.cle;
             return (
-              <li key={d.cle} className={`carte flex items-center gap-2 px-3 py-2 ${fait ? "opacity-60" : ""}`}>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-c2b-green">
-                    {d.nom}{" "}
-                    <span className={`text-[10px] font-bold ${d.type === "client" ? "text-emerald-700" : "text-c2b-gold"}`}>
-                      {d.type === "client" ? "client" : "prospect"}
-                    </span>
-                  </p>
-                  <p className="truncate text-[11px] text-c2b-muted">
-                    +{d.numero}
-                    {suivi(d) && ` · ${suivi(d)}`}
-                  </p>
-                </div>
-                {fait ? (
-                  <button onClick={() => marquer(d, false)} className="flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">
-                    <Check size={13} /> Envoyé
-                  </button>
-                ) : d.jeton ? (
-                  <a
-                    href={lienWa(d)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => marquer(d)}
-                    className="flex items-center gap-1 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-bold text-white"
+              <li key={d.cle} className={`carte px-3 py-2 ${fait && !estOuvert ? "opacity-70" : ""}`}>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setOuvert(estOuvert ? null : d.cle);
+                      setEdition(null);
+                    }}
+                    aria-expanded={estOuvert}
+                    className="min-w-0 flex-1 text-left"
                   >
-                    <Send size={13} /> Envoyer
-                  </a>
-                ) : (
-                  <span className="text-[11px] font-semibold text-c2b-muted">Lien à préparer</span>
+                    <p className="truncate text-sm font-bold text-c2b-green">
+                      {d.nom}{" "}
+                      <span className={`text-[10px] font-bold ${d.type === "client" ? "text-emerald-700" : "text-c2b-gold"}`}>
+                        {d.type === "client" ? "client" : "prospect"}
+                      </span>
+                    </p>
+                    <p className="truncate text-[11px] text-c2b-muted">
+                      +{d.numero}
+                      {suivi(d) && ` · ${suivi(d)}`}
+                    </p>
+                  </button>
+                  {fait ? (
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">
+                      <Check size={13} /> Envoyé
+                    </span>
+                  ) : d.jeton ? (
+                    <a
+                      href={lienWa(d)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => marquer(d)}
+                      className="flex items-center gap-1 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-bold text-white"
+                    >
+                      <Send size={13} /> Envoyer
+                    </a>
+                  ) : (
+                    <button onClick={() => preparerUn(d)} className="rounded-full border border-c2b-green/20 px-3 py-1.5 text-xs font-bold text-c2b-green">
+                      Créer son lien
+                    </button>
+                  )}
+                </div>
+
+                {/* Actions sur la personne (toucher son nom) */}
+                {estOuvert && (
+                  <div className="mt-2 space-y-2 border-t border-c2b-green/10 pt-2">
+                    {fait && (
+                      <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700">
+                        ✅ Lien et bilan déjà envoyés cette semaine
+                        {d.dernierEnvoi && ` (le ${new Date(d.dernierEnvoi).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })})`}
+                      </p>
+                    )}
+                    {!d.jeton ? (
+                      <button onClick={() => preparerUn(d)} className="btn-primary w-full py-2.5 text-sm">
+                        Créer son lien personnel
+                      </button>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {fichierImage && (
+                          <button onClick={() => partagerPhoto(d)} className="flex items-center justify-center gap-1 rounded-full bg-[#25D366] py-2 text-xs font-bold text-white">
+                            <Camera size={14} /> {fait ? "Renvoyer avec photo" : "Photo + message"}
+                          </button>
+                        )}
+                        <a
+                          href={lienWa(d)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => marquer(d)}
+                          className={`flex items-center justify-center gap-1 rounded-full py-2 text-xs font-bold ${fichierImage ? "border border-[#25D366] text-[#128C7E]" : "bg-[#25D366] text-white"}`}
+                        >
+                          <Send size={14} /> {fait ? "Renvoyer le lien" : "Envoyer le lien"}
+                        </a>
+                        <a
+                          href={`/ma-semaine/${d.jeton}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-secondary py-2 text-center text-xs"
+                        >
+                          Voir son espace
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard?.writeText(`${origine}/ma-semaine/${d.jeton}`).then(
+                              () => setEtatLigne((m) => ({ ...m, [d.cle]: "Lien copié ✓" })),
+                              () => window.prompt("Copiez le lien :", `${origine}/ma-semaine/${d.jeton}`)
+                            );
+                          }}
+                          className="btn-secondary py-2 text-xs"
+                        >
+                          Copier son lien
+                        </button>
+                      </div>
+                    )}
+                    {edition ? (
+                      <div className="space-y-1.5 rounded-lg bg-c2b-cream p-2.5">
+                        <input
+                          value={edition.nom}
+                          onChange={(e) => setEdition({ ...edition, nom: e.target.value })}
+                          placeholder="Prénom Nom"
+                          className="champ py-2 text-sm"
+                        />
+                        <input
+                          value={edition.numero}
+                          onChange={(e) => setEdition({ ...edition, numero: e.target.value })}
+                          placeholder="+212 6 12 34 56 78"
+                          inputMode="tel"
+                          className="champ py-2 text-sm"
+                        />
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => setEdition(null)} className="btn-secondary py-2 text-xs">
+                            Annuler
+                          </button>
+                          <button onClick={() => enregistrerModif(d)} className="btn-primary py-2 text-xs">
+                            Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold">
+                        <button onClick={() => setEdition({ nom: d.nom, numero: `+${d.numero}` })} className="text-c2b-green underline">
+                          ✏️ Modifier nom / numéro
+                        </button>
+                        {fait && (
+                          <button onClick={() => marquer(d, false)} className="text-c2b-muted underline">
+                            Remettre « à envoyer »
+                          </button>
+                        )}
+                        {d.ficheId && (
+                          <button onClick={() => mettreEnPause(d, true)} className="text-red-600 underline">
+                            🔕 Ne plus lui envoyer
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {etatLigne[d.cle] && <p className="text-xs font-bold text-c2b-green">{etatLigne[d.cle]}</p>}
+                  </div>
                 )}
               </li>
             );

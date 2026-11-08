@@ -61,10 +61,18 @@ export default async function EnvoiPage() {
       .select("cle")
       .in("cle", semaines.map((l) => `menu_image:${l}`))
       .returns<{ cle: string }[]>(),
-    supabase.from("application_envois").select("personne_id, semaine").limit(50000).returns<{ personne_id: string; semaine: string }[]>(),
+    supabase
+      .from("application_envois")
+      .select("personne_id, semaine, envoye_le")
+      .limit(50000)
+      .returns<{ personne_id: string; semaine: string; envoye_le: string }[]>(),
   ]);
   const nbEnvois = new Map<string, number>();
-  for (const e of envois ?? []) nbEnvois.set(e.personne_id, (nbEnvois.get(e.personne_id) ?? 0) + 1);
+  const dernierEnvoi = new Map<string, string>();
+  for (const e of envois ?? []) {
+    nbEnvois.set(e.personne_id, (nbEnvois.get(e.personne_id) ?? 0) + 1);
+    if ((dernierEnvoi.get(e.personne_id) ?? "") < e.envoye_le) dernierEnvoi.set(e.personne_id, e.envoye_le);
+  }
   const envoyes: Record<string, string[]> = Object.fromEntries(
     semaines.map((l) => [l, (envois ?? []).filter((e) => e.semaine === l).map((e) => `f:${e.personne_id}`)])
   );
@@ -84,6 +92,7 @@ export default async function EnvoiPage() {
       ficheId: f.id,
       jeton: f.jeton,
       envois: nbEnvois.get(f.id) ?? 0,
+      dernierEnvoi: dernierEnvoi.get(f.id) ?? null,
       vuLe: f.vu_le,
       pause: !!f.envoi_pause,
     });
@@ -93,6 +102,24 @@ export default async function EnvoiPage() {
     const n = numero(q.telephone);
     if (!n || q.suivi === "pas_interesse" || numerosVus.has(n)) continue;
     numerosVus.add(n);
+    // Déjà une fiche à ce nom (sans numéro) : c'est la même personne, on garde sa fiche.
+    const fiche = (fiches ?? []).find((f) => f.nom.trim().toLowerCase() === q.nom.trim().toLowerCase() && !numero(f.telephone));
+    if (fiche) {
+      destinataires.push({
+        cle: `f:${fiche.id}`,
+        nom: fiche.nom.trim(),
+        numero: n,
+        type: dejaVenus.has(fiche.nom.trim().toLowerCase()) ? "client" : "prospect",
+        ficheId: fiche.id,
+        jeton: fiche.jeton,
+        envois: nbEnvois.get(fiche.id) ?? 0,
+        dernierEnvoi: dernierEnvoi.get(fiche.id) ?? null,
+        vuLe: fiche.vu_le,
+        pause: !!fiche.envoi_pause,
+        numeroAEnregistrer: true,
+      });
+      continue;
+    }
     destinataires.push({
       cle: `q:${q.id}`,
       nom: q.nom.trim(),
@@ -101,6 +128,7 @@ export default async function EnvoiPage() {
       ficheId: null,
       jeton: null,
       envois: 0,
+      dernierEnvoi: null,
       vuLe: null,
       pause: false,
       palier: q.palier,
