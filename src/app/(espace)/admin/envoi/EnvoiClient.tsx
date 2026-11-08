@@ -35,7 +35,7 @@ const MODELE_DEFAUT = `Bonjour {prenom} 👋
 
 Voici le menu Chef2Box de la semaine du {semaine} 🍽️
 
-👉 Pour commander, ouvre ton lien personnel :
+👉 Ton lien personnel (ton bilan, le menu et ta commande) :
 {lien}
 
 1. Coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux.

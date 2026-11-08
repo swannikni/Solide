@@ -76,6 +76,38 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
   // Lien ouvert : sert à repérer qui ne lit jamais le menu (Admin → Envoi menu).
   await admin.from("application_personnes").update({ vu_le: new Date().toISOString() }).eq("id", fiche.id);
 
+  // Son bilan (questionnaire du site) : retrouvé par son numéro, sinon son nom.
+  const derniers9 = (fiche.telephone ?? "").replace(/[^\d]/g, "").slice(-9);
+  const requeteBilan = admin
+    .from("application_questionnaires")
+    .select("created_at, calories, proteines, glucides, lipides, palier, profil")
+    .not("calories", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const { data: questionnaire } = await (derniers9.length === 9
+    ? requeteBilan.ilike("telephone", `%${derniers9}%`)
+    : requeteBilan.ilike("nom", fiche.nom.replace(/[%_\\]/g, "\\$&"))
+  ).maybeSingle<{
+    created_at: string;
+    calories: number;
+    proteines: number | null;
+    glucides: number | null;
+    lipides: number | null;
+    palier: "P1" | "P2" | "P3" | null;
+    profil: { objectifs?: string[]; poids?: number } | null;
+  }>();
+  const bilan = questionnaire
+    ? {
+        date: questionnaire.created_at.slice(0, 10),
+        calories: questionnaire.calories,
+        proteines: questionnaire.proteines,
+        glucides: questionnaire.glucides,
+        lipides: questionnaire.lipides,
+        palier: questionnaire.palier,
+        objectifs: questionnaire.profil?.objectifs ?? [],
+      }
+    : null;
+
   const aujourdhui = dateDuJour();
   const lundiActuel = lundiDe(aujourdhui);
   // Semaines où l'on peut commander : celle en cours (s'il reste des jours) et les 2 suivantes.
@@ -166,6 +198,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       tarifs={completerTarifs(parametre?.valeur)}
       conditions={{ remise: fiche.remise ?? 0, livraisonOfferte: !!fiche.livraison_offerte }}
       imageMenu={await imageMenu()}
+      bilan={bilan}
     />
   );
 }

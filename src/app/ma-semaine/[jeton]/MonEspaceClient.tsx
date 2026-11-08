@@ -21,8 +21,22 @@ export interface SemaineCompte {
   recu: number;
 }
 
-type Onglet = "commander" | "avenir" | "payer" | "fiche" | "historique";
+type Onglet = "bilan" | "commander" | "avenir" | "payer" | "fiche" | "historique";
+
+// Bilan du questionnaire (besoins du jour, palier de repas conseillé).
+export interface BilanClient {
+  date: string;
+  calories: number;
+  proteines: number | null;
+  glucides: number | null;
+  lipides: number | null;
+  palier: "P1" | "P2" | "P3" | null;
+  objectifs: string[];
+}
+const REPAS_PALIER = { P1: { kcal: 800, texte: "800 kcal" }, P2: { kcal: 690, texte: "680-700 kcal" }, P3: { kcal: 575, texte: "550-600 kcal" } };
+
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
+  { cle: "bilan", libelle: "📊 Mon bilan" },
   { cle: "commander", libelle: "🛒 Commander" },
   { cle: "avenir", libelle: "📅 À venir" },
   { cle: "payer", libelle: "💳 À payer" },
@@ -56,6 +70,7 @@ export function MonEspaceClient({
   tarifs,
   conditions = {},
   imageMenu = null,
+  bilan = null,
 }: {
   jeton: string;
   prenom: string;
@@ -67,9 +82,11 @@ export function MonEspaceClient({
   tarifs: Tarifs;
   conditions?: Conditions; // remise, livraison offerte (fiche du client)
   imageMenu?: string | null; // image du menu de la semaine
+  bilan?: BilanClient | null; // son bilan du questionnaire
 }) {
   const router = useRouter();
-  const [onglet, setOnglet] = useState<Onglet>("commander");
+  // Nouveau venu avec un bilan : il découvre d'abord son bilan.
+  const [onglet, setOnglet] = useState<Onglet>(bilan && !connu ? "bilan" : "commander");
   const [lundi, setLundi] = useState(semainesOuvertes[0]?.lundi ?? "");
   // Sélection par semaine : ce qui est prévu (ou en attente), modifiable.
   const [choix, setChoix] = useState<Record<string, string[]>>(() =>
@@ -265,7 +282,7 @@ export function MonEspaceClient({
       </header>
 
       <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
-        {ONGLETS.map((o) => (
+        {ONGLETS.filter((o) => o.cle !== "bilan" || bilan).map((o) => (
           <button
             key={o.cle}
             onClick={() => {
@@ -284,6 +301,58 @@ export function MonEspaceClient({
 
       {message && (
         <p className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${message.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{message.texte}</p>
+      )}
+
+      {/* ---- Mon bilan ---- */}
+      {onglet === "bilan" && bilan && (
+        <section className="space-y-3">
+          <div className="carte space-y-3 p-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-c2b-gold">Ton bilan Chef2Box</p>
+              <p className="text-xs text-c2b-muted">
+                Calculé le {new Date(`${bilan.date}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })} selon
+                ton profil et ton objectif.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ["🔥 Calories / jour", `${bilan.calories} kcal`],
+                ["💪 Protéines", bilan.proteines != null ? `${bilan.proteines} g` : "—"],
+                ["🍚 Glucides", bilan.glucides != null ? `${bilan.glucides} g` : "—"],
+                ["🥑 Lipides", bilan.lipides != null ? `${bilan.lipides} g` : "—"],
+              ].map(([l, v]) => (
+                <div key={l} className="rounded-xl bg-c2b-cream px-3 py-2.5">
+                  <p className="text-[11px] font-semibold text-c2b-muted">{l}</p>
+                  <p className="font-serif text-xl text-c2b-green">{v}</p>
+                </div>
+              ))}
+            </div>
+            {bilan.objectifs.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {bilan.objectifs.map((o) => (
+                  <span key={o} className="rounded-full bg-c2b-gold/15 px-2.5 py-1 text-xs font-bold text-c2b-green">
+                    🎯 {o}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          {bilan.palier && (
+            <div className="rounded-2xl bg-c2b-green p-4 text-c2b-cream">
+              <p className="text-xs font-bold uppercase tracking-wide text-c2b-gold">Ton repas Chef2Box</p>
+              <p className="mt-1 font-serif text-2xl">
+                Palier {bilan.palier.slice(1)} · {REPAS_PALIER[bilan.palier].texte}
+              </p>
+              <p className="mt-1 text-sm text-c2b-cream/85">
+                Chaque repas est préparé à ta portion : environ {Math.round((REPAS_PALIER[bilan.palier].kcal / bilan.calories) * 100)} % de tes besoins
+                du jour. Avec midi + soir, environ {Math.round(((REPAS_PALIER[bilan.palier].kcal * 2) / bilan.calories) * 100)} %.
+              </p>
+            </div>
+          )}
+          <button onClick={() => setOnglet("commander")} className="btn-primary w-full py-3.5 text-base">
+            Voir le menu et commander →
+          </button>
+        </section>
       )}
 
       {/* Image du menu de la semaine (déposée par Chef2Box). */}
