@@ -1048,9 +1048,10 @@ HA
   <div class="q-block">
     <div class="q-step-lbl">Étape 1 — Votre profil</div>
     <div class="q-grid">
-      <div class="q-field"><label>Prénom & Nom *</label><input type="text" id="q-nom" placeholder=""></div>
-      <div class="q-field"><label>Email *</label><input type="email" id="q-email" placeholder="" autocomplete="off"></div>
-      <div class="q-field q-full"><label>WhatsApp *</label><div style="display:flex;gap:8px"><select id="q-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="q-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
+      <div class="q-field"><label>Prénom *</label><input type="text" id="q-prenom" placeholder="ex. Sarah" autocomplete="given-name"></div>
+      <div class="q-field"><label>Nom *</label><input type="text" id="q-nom" placeholder="ex. Benali" autocomplete="family-name"></div>
+      <div class="q-field q-full"><label>Email *</label><input type="email" id="q-email" placeholder="" autocomplete="off"></div>
+      <div class="q-field q-full"><label>WhatsApp * <span style="font-weight:400;text-transform:none;letter-spacing:0">(choisissez l'indicatif du pays)</span></label><div style="display:flex;gap:8px"><select id="q-tel-pays" aria-label="Indicatif du pays" style="width:auto;flex:0 0 auto"><option value="+212">🇲🇦 +212</option><option value="+33">🇫🇷 +33</option><option value="+32">🇧🇪 +32</option><option value="+41">🇨🇭 +41</option><option value="+34">🇪🇸 +34</option><option value="+44">🇬🇧 +44</option><option value="+1">🇺🇸 +1</option><option value="+971">🇦🇪 +971</option></select><input type="tel" id="q-tel" placeholder="06 12 34 56 78" style="flex:1;min-width:0"></div></div>
       <div class="q-field"><label>Âge *</label><input type="number" id="q-age" placeholder="ex. 32" min="16" max="80" inputmode="numeric"></div>
       <div class="q-field"><label>Taille (cm) *</label><input type="number" id="q-taille" placeholder="ex. 175" min="130" max="220" inputmode="numeric"></div>
       <div class="q-field"><label>Poids (kg) *</label><input type="number" id="q-poids" placeholder="ex. 72" min="35" max="250" inputmode="numeric"></div>
@@ -1382,7 +1383,10 @@ function getV(id) {
 var _bilanData = {};
 
 function genererBilan() {
-  var nom      = getV('q-nom');
+  // Prénom et nom obligatoires, réunis pour le bilan et la fiche client.
+  var prenomSaisi = getV('q-prenom');
+  var nomSaisi    = getV('q-nom');
+  var nom      = prenomSaisi !== '—' && nomSaisi !== '—' ? prenomSaisi + ' ' + nomSaisi : '—';
   var sexe     = getR('sexe');
   var age      = parseInt(document.getElementById('q-age').value) || 0;
   var taille   = parseInt(document.getElementById('q-taille').value) || 0;
@@ -1395,6 +1399,7 @@ function genererBilan() {
   var plaisir  = getR('plaisir') || '—';
   var emailVal = getV('q-email');
   var tel      = getV('q-tel');
+  var telSaisi = tel;
   // Numéro au format international (+33…, +212…) : sinon le lien WhatsApp
   // du bilan (wa.me/0629…) ne s'ouvre pas.
   if (tel !== '—') {
@@ -1413,22 +1418,38 @@ function genererBilan() {
   var preferes = getV('q-preferes');
 
   var errEl = document.getElementById('q-error');
-  var MSG_OBLIGATOIRE = '⚠️ Merci de remplir tous les champs obligatoires (nom, email, WhatsApp, profil, objectif, séances, travail, repas/jour).';
+  var MSG_OBLIGATOIRE = '⚠️ Merci de remplir tous les champs obligatoires (prénom, nom, email, WhatsApp, profil, objectif, séances, travail, repas/jour).';
   var afficherErreur = function(msg) {
     errEl.textContent = msg;
     errEl.style.display = 'block';
     errEl.scrollIntoView({behavior: 'smooth', block: 'center'});
   };
 
+  if (prenomSaisi === '—' || nomSaisi === '—') {
+    afficherErreur('⚠️ Merci d\'indiquer votre prénom ET votre nom.');
+    var champNom = document.getElementById(prenomSaisi === '—' ? 'q-prenom' : 'q-nom');
+    if (champNom) champNom.focus();
+    return;
+  }
+
   if (!nom || nom === '—' || !sexe || !age || !taille || !poids || !objectif || objectif === '—') {
     afficherErreur(MSG_OBLIGATOIRE);
     return;
   }
 
-  // WhatsApp obligatoire : c'est par là que Chef2Box confirme et suit chaque client.
+  // WhatsApp obligatoire, avec le bon indicatif : longueur du numéro local
+  // vérifiée selon le pays (Maroc : 06 12 34 56 78 → 9 chiffres sans le 0).
+  var LONGUEURS = { '+212': [9], '+33': [9], '+32': [8, 9], '+41': [9], '+34': [9], '+44': [10], '+1': [10], '+971': [8, 9] };
+  var brut = telSaisi === '—' ? '' : telSaisi.replace(/[^0-9+]/g, '');
+  var international = brut.indexOf('+') === 0 || brut.indexOf('00') === 0;
+  var paysChoisi = (document.getElementById('q-tel-pays') || {}).value || '+212';
+  var local = brut.replace(/[^0-9]/g, '').replace(/^0/, '');
   var chiffresTel = tel === '—' ? '' : tel.replace(/[^0-9]/g, '');
-  if (chiffresTel.length < 9 || chiffresTel.length > 15) {
-    afficherErreur('⚠️ Merci d\'indiquer votre numéro WhatsApp complet (ex. 06 12 34 56 78) : c\'est par là que nous vous envoyons votre bilan et votre menu.');
+  var telOk = international
+    ? chiffresTel.length >= 10 && chiffresTel.length <= 15
+    : (LONGUEURS[paysChoisi] || [8, 9, 10]).indexOf(local.length) !== -1;
+  if (!telOk) {
+    afficherErreur('⚠️ Numéro WhatsApp incomplet : choisissez l\'indicatif du pays (🇲🇦 +212…) et tapez votre numéro complet (ex. 06 12 34 56 78). C\'est par là que nous vous envoyons votre bilan et votre menu.');
     var champTel = document.getElementById('q-tel');
     if (champTel) champTel.focus();
     return;
