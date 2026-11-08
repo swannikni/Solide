@@ -1,0 +1,97 @@
+import { exigerAdmin } from "@/lib/admin";
+import { EnvoiClient, type Destinataire } from "@/app/(espace)/admin/envoi/EnvoiClient";
+import { dateDuJour, decalerDate } from "@/lib/dates";
+import { lundiDe } from "@/lib/ma-semaine";
+import type { Palier } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+type Service = "dejeuner" | "diner";
+
+// Numéro WhatsApp en chiffres internationaux (06… → 2126…), ou null.
+function numero(t: string | null) {
+  if (!t) return null;
+  const n = t.replace(/[^\d]/g, "").replace(/^00/, "").replace(/^0(?=[5-7])/, "212");
+  return n.length >= 9 && n.length <= 15 ? n : null;
+}
+
+// Envoi du menu de la semaine, avec le lien personnel de chacun : clients
+// (fiches avec un numéro) et prospects (questionnaire fait + numéro).
+export default async function EnvoiPage() {
+  const { supabase } = await exigerAdmin();
+  const aujourdhui = dateDuJour();
+  // Le week-end (et le lundi), la semaine qui commence ; sinon la suivante.
+  const lundi = lundiDe(decalerDate(aujourdhui, 2));
+  const semaines = [lundi, decalerDate(lundi, 7)];
+
+  const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }] = await Promise.all([
+    supabase
+      .from("application_personnes")
+      .select("id, nom, telephone, jeton, partenaire")
+      .limit(3000)
+      .returns<{ id: string; nom: string; telephone: string | null; jeton: string | null; partenaire: boolean | null }[]>(),
+    supabase.from("application_cuisine_extras").select("nom").limit(20000).returns<{ nom: string }[]>(),
+    supabase
+      .from("application_questionnaires")
+      .select("id, nom, telephone, palier, statut, suivi, calories")
+      .neq("statut", "ignore")
+      .not("telephone", "is", null)
+      .not("calories", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(3000)
+      .returns<{ id: string; nom: string; telephone: string | null; palier: Palier | null; statut: string; suivi: string | null }[]>(),
+    supabase
+      .from("application_cuisine_services")
+      .select("date, repas_type, plat")
+      .gte("date", semaines[0])
+      .lte("date", decalerDate(semaines[1], 4))
+      .returns<{ date: string; repas_type: Service; plat: string | null }[]>(),
+  ]);
+
+  const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
+  const destinataires: Destinataire[] = [];
+  const numerosVus = new Set<string>();
+  for (const f of fiches ?? []) {
+    const n = numero(f.telephone);
+    if (!n || f.partenaire || numerosVus.has(n)) continue;
+    numerosVus.add(n);
+    destinataires.push({
+      cle: `f:${f.id}`,
+      nom: f.nom.trim(),
+      numero: n,
+      type: dejaVenus.has(f.nom.trim().toLowerCase()) ? "client" : "prospect",
+      ficheId: f.id,
+      jeton: f.jeton,
+    });
+  }
+  const nomsFiches = new Set((fiches ?? []).map((f) => f.nom.trim().toLowerCase()));
+  for (const q of questionnaires ?? []) {
+    const n = numero(q.telephone);
+    if (!n || q.suivi === "pas_interesse" || numerosVus.has(n)) continue;
+    numerosVus.add(n);
+    destinataires.push({
+      cle: `q:${q.id}`,
+      nom: q.nom.trim(),
+      numero: n,
+      type: "prospect",
+      ficheId: null,
+      jeton: null,
+      palier: q.palier,
+      // Même nom qu'une fiche existante (autre numéro) : fiche créée sous « Nom (questionnaire) ».
+      homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
+    });
+  }
+  destinataires.sort((a, b) => (a.type === b.type ? a.nom.localeCompare(b.nom, "fr") : a.type === "client" ? -1 : 1));
+
+  const menus: Record<string, Record<string, { dejeuner: string; diner: string }>> = {};
+  for (const s of services ?? []) {
+    const l = lundiDe(s.date);
+    ((menus[l] ??= {})[s.date] ??= { dejeuner: "", diner: "" })[s.repas_type] = (s.plat ?? "").trim();
+  }
+
+  return (
+    <div className="min-h-screen pt-[68px] md:pt-20 pb-28 md:pb-10">
+      <EnvoiClient semaines={semaines} menus={menus} destinatairesInitiaux={destinataires} />
+    </div>
+  );
+}

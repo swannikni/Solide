@@ -228,6 +228,7 @@ export function ClientsClient({
   const [retiresSemaine, setRetiresSemaine] = useState<Set<string>>(new Set());
   const [toutesFiches, setToutesFiches] = useState(false);
   const [filtreSansWa, setFiltreSansWa] = useState(false);
+  const [voirSansCommande, setVoirSansCommande] = useState(false);
   const [relanceOuverte, setRelanceOuverte] = useState(false);
   const [relances, setRelances] = useState<Set<string>>(new Set());
   const [filtreSuivi, setFiltreSuivi] = useState<SuiviProspect | "tous">("a_contacter");
@@ -242,7 +243,10 @@ export function ClientsClient({
   const questionnairesAffiches = saisieQ || tousQuestionnaires ? questionnairesTrouves : questionnairesTrouves.slice(0, 3);
   const sansWhatsApp = (fc: FicheResume) => numeroWhatsApp(fc.telephone).length < 9 && !fc.partenaire;
   const nbSansWhatsApp = fiches.filter(sansWhatsApp).length;
+  // Fiches sans aucune commande (prospects qui ont reçu leur lien) : à part.
+  const sansCommande = fiches.filter((fc) => !fc.dernier && !fc.partenaire).length;
   const fichesTrouvees = fiches
+    .filter((fc) => voirSansCommande || !!saisie || !!fc.dernier || !!fc.partenaire)
     .filter((fc) => !filtreSansWa || sansWhatsApp(fc))
     .filter((fc) => !saisie || normaliser([fc.nom, fc.telephone, fc.adresse].filter(Boolean).join(" ")).includes(saisie))
     .sort((x, y) => (y.dernier ?? "").localeCompare(x.dernier ?? "") || x.nom.localeCompare(y.nom, "fr"));
@@ -1327,6 +1331,13 @@ export function ClientsClient({
             <p className="px-1 text-xs text-c2b-muted">
               Toute personne mise en cuisine arrive ici. Sa fiche se modifie en touchant son nom dans la Cuisine.
             </p>
+            {sansCommande > 0 && (
+              <button onClick={() => setVoirSansCommande((v) => !v)} className="w-full text-left text-xs font-bold text-c2b-gold underline">
+                {voirSansCommande
+                  ? "Masquer les fiches sans commande"
+                  : `Voir aussi les ${sansCommande} fiches sans commande (prospects qui ont reçu leur lien)`}
+              </button>
+            )}
             {nbSansWhatsApp > 0 && (
               <button
                 onClick={() => setFiltreSansWa((f) => !f)}
