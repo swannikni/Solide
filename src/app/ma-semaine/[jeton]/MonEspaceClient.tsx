@@ -33,6 +33,8 @@ export interface BilanClient {
   palier: "P1" | "P2" | "P3" | null;
   objectifs: string[];
 }
+// Pourcentage arrondi à la dizaine supérieure (27 → 30, 58 → 60), 100 au plus.
+const dizaineSup = (v: number) => Math.min(100, Math.ceil(v / 10) * 10);
 const REPAS_PALIER = { P1: { kcal: 800, texte: "800 kcal" }, P2: { kcal: 690, texte: "680-700 kcal" }, P3: { kcal: 575, texte: "550-600 kcal" } };
 
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
@@ -344,8 +346,8 @@ export function MonEspaceClient({
                 Palier {bilan.palier.slice(1)} · {REPAS_PALIER[bilan.palier].texte}
               </p>
               <p className="mt-1 text-sm text-c2b-cream/85">
-                Chaque repas est préparé à ta portion : environ {Math.round((REPAS_PALIER[bilan.palier].kcal / bilan.calories) * 100)} % de tes besoins
-                du jour. Avec midi + soir, environ {Math.round(((REPAS_PALIER[bilan.palier].kcal * 2) / bilan.calories) * 100)} %.
+                Chaque repas est préparé à ta portion : environ {dizaineSup((REPAS_PALIER[bilan.palier].kcal / bilan.calories) * 100)} % de tes besoins
+                du jour. Avec midi + soir, environ {dizaineSup(((REPAS_PALIER[bilan.palier].kcal * 2) / bilan.calories) * 100)} %.
               </p>
             </div>
           )}
