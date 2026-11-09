@@ -2,6 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { BilanClient, type LigneBilan } from "@/app/(espace)/admin/paiements/bilan/BilanClient";
 import { dateDuJour } from "@/lib/dates";
 import { periodeDuMois } from "@/lib/paiements";
+import { toutLire } from "@/lib/tout-lire";
 import type { CategorieDepense } from "@/lib/depenses";
 
 export const dynamic = "force-dynamic";
@@ -40,21 +41,25 @@ export default async function BilanPage({ searchParams }: { searchParams: Promis
       .lt("semaine", `${mois}-01`)
       .returns<{ montant: number; recu: number }[]>(),
     // Repas préparés (fiche cuisine) sur les semaines du mois.
-    supabase
-      .from("application_cuisine_extras")
-      .select("date, repas_type")
-      .gte("date", periode.debut)
-      .lte("date", periode.fin)
-      .limit(20000)
-      .returns<{ date: string; repas_type: "dejeuner" | "diner" }[]>(),
-    supabase
-      .from("application_commandes")
-      .select("date_livraison, repas_type")
-      .gte("date_livraison", periode.debut)
-      .lte("date_livraison", periode.fin)
-      .neq("statut", "annulee")
-      .limit(20000)
-      .returns<{ date_livraison: string; repas_type: "dejeuner" | "diner" }[]>(),
+    toutLire(() =>
+      supabase
+        .from("application_cuisine_extras")
+        .select("date, repas_type")
+        .gte("date", periode.debut)
+        .lte("date", periode.fin)
+        .order("id")
+        .returns<{ date: string; repas_type: "dejeuner" | "diner" }[]>()
+    ),
+    toutLire(() =>
+      supabase
+        .from("application_commandes")
+        .select("date_livraison, repas_type")
+        .gte("date_livraison", periode.debut)
+        .lte("date_livraison", periode.fin)
+        .neq("statut", "annulee")
+        .order("id")
+        .returns<{ date_livraison: string; repas_type: "dejeuner" | "diner" }[]>()
+    ),
     // Dépenses du mois (dates du mois).
     supabase
       .from("application_depenses")

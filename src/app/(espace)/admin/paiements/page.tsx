@@ -2,6 +2,7 @@ import { exigerAdmin } from "@/lib/admin";
 import { PaiementsClient, type Paiement, type PersonneMois } from "@/app/(espace)/admin/paiements/PaiementsClient";
 import { dateDuJour, decalerDate, estDateValide } from "@/lib/dates";
 import { completerTarifs, lundiDe, montantAuto, semainesDe, type RepasDuJour, type Tarifs } from "@/lib/paiements";
+import { toutLire } from "@/lib/tout-lire";
 import { livraisonOfferteSemaine, prixZone, type Zone } from "@/lib/ma-semaine";
 
 export const dynamic = "force-dynamic";
@@ -41,21 +42,25 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
         .select("id, nom, telephone")
         .eq("est_admin", false)
         .returns<{ id: string; nom: string; telephone: string | null }[]>(),
-      supabase
-        .from("application_commandes")
-        .select("client_id, date_livraison, quantite")
-        .gte("date_livraison", periode.debut)
-        .lte("date_livraison", periode.fin)
-        .neq("statut", "annulee")
-        .limit(10000)
-        .returns<{ client_id: string; date_livraison: string; quantite: number | null }[]>(),
-      supabase
-        .from("application_cuisine_extras")
-        .select("nom, telephone, date, quantite")
-        .gte("date", periode.debut)
-        .lte("date", periode.fin)
-        .limit(10000)
-        .returns<{ nom: string; telephone: string | null; date: string; quantite: number | null }[]>(),
+      toutLire(() =>
+        supabase
+          .from("application_commandes")
+          .select("client_id, date_livraison, quantite")
+          .gte("date_livraison", periode.debut)
+          .lte("date_livraison", periode.fin)
+          .neq("statut", "annulee")
+          .order("id")
+          .returns<{ client_id: string; date_livraison: string; quantite: number | null }[]>()
+      ),
+      toutLire(() =>
+        supabase
+          .from("application_cuisine_extras")
+          .select("nom, telephone, date, quantite")
+          .gte("date", periode.debut)
+          .lte("date", periode.fin)
+          .order("id")
+          .returns<{ nom: string; telephone: string | null; date: string; quantite: number | null }[]>()
+      ),
       supabase.from("application_parametres").select("valeur").eq("cle", "tarifs").maybeSingle<{ valeur: Partial<Tarifs> }>(),
       supabase
         .from("application_tarifs_perso")

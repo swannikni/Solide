@@ -29,6 +29,8 @@ export interface Destinataire {
   bilan?: { calories: number; palier: Palier | null } | null; // aperçu de son bilan
   vuLe: string | null; // dernière ouverture de son lien
   pause: boolean; // ne plus lui envoyer
+  questionnaires?: string[]; // ses questionnaires (même numéro)
+  ancienClient?: string; // fiche d'un ancien client au même prénom, sans numéro
 }
 
 // Prospect qui n'a jamais ouvert son lien après 3 envois : on arrête de le relancer.
@@ -360,6 +362,23 @@ export function EnvoiClient({
     setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, nom, numero: chiffres, numeroAEnregistrer: false } : x)));
     setEdition(null);
     setEtatLigne((m) => ({ ...m, [d.cle]: "Modifié ✓" }));
+  }
+
+  // Ancien client pris pour un prospect : ses questionnaires passent « client ».
+  async function passerClient(d: Destinataire) {
+    if (!window.confirm(`${d.nom} a déjà été client(e) ? Il/elle recevra les messages clients.`)) return;
+    const ids = d.questionnaires?.length ? d.questionnaires : d.cle.startsWith("q:") ? [d.cle.slice(2)] : [];
+    if (!ids.length) {
+      setEtatLigne((m) => ({ ...m, [d.cle]: "Pas de questionnaire à son numéro : ajoute-le dans la cuisine pour qu'il compte comme client." }));
+      return;
+    }
+    const { error } = await supabase.from("application_questionnaires").update({ suivi: "client" }).in("id", ids);
+    if (error) {
+      setEtatLigne((m) => ({ ...m, [d.cle]: "Impossible pour l'instant, réessaie." }));
+      return;
+    }
+    setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, type: "client", ancienClient: undefined } : x)));
+    setEtatLigne((m) => ({ ...m, [d.cle]: "Passé(e) en client ✓" }));
   }
 
   // Ne plus envoyer / réactiver.
@@ -753,6 +772,14 @@ export function EnvoiClient({
                       >
                         💬 A ouvert son lien sans commander : lui écrire un message perso
                       </a>
+                    )}
+                    {d.type === "prospect" && (
+                      <button
+                        onClick={() => passerClient(d)}
+                        className="block w-full rounded-lg border border-c2b-green/30 px-3 py-2 text-center text-xs font-bold text-c2b-green"
+                      >
+                        {d.ancienClient ? `🤝 Même personne que « ${d.ancienClient} » (ancien client) ? Passer en client` : "🤝 Déjà été client ? Passer en client"}
+                      </button>
                     )}
                     {edition ? (
                       <div className="space-y-1.5 rounded-lg bg-c2b-cream p-2.5">

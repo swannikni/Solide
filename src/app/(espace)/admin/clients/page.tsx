@@ -4,6 +4,7 @@ import { ClientsClient, type FicheResume, type RepasSemaine } from "@/app/(espac
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { debutAVenir, lundiDe } from "@/lib/ma-semaine";
 import { completerTarifs, type Tarifs } from "@/lib/paiements";
+import { toutLire } from "@/lib/tout-lire";
 import type { Client, Questionnaire } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,12 +33,14 @@ export default async function ClientsPage() {
       .order("nom")
       .limit(2000)
       .returns<Omit<FicheResume, "dernier">[]>(),
-    supabase
-      .from("application_cuisine_extras")
-      .select("nom, date")
-      .order("date", { ascending: false })
-      .limit(10000)
-      .returns<{ nom: string; date: string }[]>(),
+    toutLire(() =>
+      supabase
+        .from("application_cuisine_extras")
+        .select("nom, date")
+        .order("date", { ascending: false })
+        .order("id")
+        .returns<{ nom: string; date: string }[]>()
+    ),
   ]);
   const dernier = new Map<string, string>();
   for (const r of repas ?? []) {

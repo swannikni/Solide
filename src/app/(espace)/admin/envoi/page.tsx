@@ -3,6 +3,7 @@ import { EnvoiClient, type Destinataire } from "@/app/(espace)/admin/envoi/Envoi
 import { dateDuJour, decalerDate } from "@/lib/dates";
 import { lundiDe } from "@/lib/ma-semaine";
 import type { Palier } from "@/lib/types";
+import { toutLire } from "@/lib/tout-lire";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,9 @@ export default async function EnvoiPage() {
           envoi_pause: boolean | null;
         }[]
       >(),
-    supabase.from("application_cuisine_extras").select("nom").limit(20000).returns<{ nom: string }[]>(),
+    toutLire(() =>
+      supabase.from("application_cuisine_extras").select("nom, telephone").order("id").returns<{ nom: string; telephone: string | null }[]>()
+    ),
     supabase
       .from("application_questionnaires")
       .select("id, nom, telephone, palier, statut, suivi, calories, reponses")
@@ -78,11 +81,14 @@ export default async function EnvoiPage() {
       .select("cle")
       .in("cle", semaines.map((l) => `menu_image:${l}`))
       .returns<{ cle: string }[]>(),
-    supabase
-      .from("application_envois")
-      .select("personne_id, semaine, envoye_le")
-      .limit(50000)
-      .returns<{ personne_id: string; semaine: string; envoye_le: string }[]>(),
+    toutLire(() =>
+      supabase
+        .from("application_envois")
+        .select("personne_id, semaine, envoye_le")
+        .order("personne_id")
+        .order("semaine")
+        .returns<{ personne_id: string; semaine: string; envoye_le: string }[]>()
+    ),
   ]);
   const nbEnvois = new Map<string, number>();
   const dernierEnvoi = new Map<string, string>();
@@ -95,6 +101,33 @@ export default async function EnvoiPage() {
   );
 
   const dejaVenus = new Set((repas ?? []).map((r) => r.nom.trim().toLowerCase()));
+  // Ancien client reconnu aussi par son numéro : repas à ce numéro, fiche à ce
+  // numéro qui a déjà mangé, ou questionnaire passé « client ».
+  const fin9 = (t: string | null) => numero(t)?.slice(-9) ?? null;
+  const numerosClients = new Set<string>();
+  for (const r of repas ?? []) {
+    const n = fin9(r.telephone);
+    if (n) numerosClients.add(n);
+  }
+  for (const f of fiches ?? []) {
+    const n = fin9(f.telephone);
+    if (n && dejaVenus.has(f.nom.trim().toLowerCase())) numerosClients.add(n);
+  }
+  const questionnairesParNumero = new Map<string, string[]>();
+  for (const q of questionnaires ?? []) {
+    const n = fin9(q.telephone);
+    if (!n) continue;
+    if (q.suivi === "client" || q.statut === "compte_cree") numerosClients.add(n);
+    questionnairesParNumero.set(n, [...(questionnairesParNumero.get(n) ?? []), q.id]);
+  }
+  const estClient = (nom: string, n: string) => dejaVenus.has(nom.trim().toLowerCase()) || numerosClients.has(n.slice(-9));
+  // Prénom d'un ancien client enregistré sans numéro (ex. « Aziz ») : sans doute
+  // la même personne, à confirmer d'un clic.
+  const anciensSansNumero = new Map<string, string>();
+  for (const f of fiches ?? []) {
+    const nom = f.nom.trim();
+    if (!numero(f.telephone) && !f.partenaire && dejaVenus.has(nom.toLowerCase())) anciensSansNumero.set(nom.split(/\s+/)[0].toLowerCase(), nom);
+  }
   // Aperçu du bilan pour le message des prospects : dernier questionnaire par numéro.
   const bilanParNumero = new Map<string, { calories: number; palier: Palier | null }>();
   for (const q of questionnaires ?? []) {
@@ -121,7 +154,7 @@ export default async function EnvoiPage() {
       cle: `f:${f.id}`,
       nom: f.nom.trim(),
       numero: n,
-      type: dejaVenus.has(f.nom.trim().toLowerCase()) ? "client" : "prospect",
+      type: estClient(f.nom, n) ? "client" : "prospect",
       ficheId: f.id,
       jeton: f.jeton,
       envois: nbEnvois.get(f.id) ?? 0,
@@ -142,7 +175,7 @@ export default async function EnvoiPage() {
         cle: `f:${fiche.id}`,
         nom: fiche.nom.trim(),
         numero: n,
-        type: dejaVenus.has(fiche.nom.trim().toLowerCase()) ? "client" : "prospect",
+        type: estClient(fiche.nom, n) ? "client" : "prospect",
         ficheId: fiche.id,
         jeton: fiche.jeton,
         envois: nbEnvois.get(fiche.id) ?? 0,
@@ -157,7 +190,7 @@ export default async function EnvoiPage() {
       cle: `q:${q.id}`,
       nom: q.nom.trim(),
       numero: n,
-      type: "prospect",
+      type: numerosClients.has(n.slice(-9)) ? "client" : "prospect",
       ficheId: null,
       jeton: null,
       envois: 0,
@@ -173,7 +206,14 @@ export default async function EnvoiPage() {
       homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
     });
   }
-  for (const d of destinataires) d.bilan = bilanParNumero.get(d.numero.slice(-9)) ?? null;
+  for (const d of destinataires) {
+    d.bilan = bilanParNumero.get(d.numero.slice(-9)) ?? null;
+    d.questionnaires = questionnairesParNumero.get(d.numero.slice(-9)) ?? [];
+    if (d.type === "prospect") {
+      const ancien = anciensSansNumero.get(d.nom.split(/\s+/)[0].toLowerCase());
+      if (ancien && ancien.toLowerCase() !== d.nom.toLowerCase()) d.ancienClient = ancien;
+    }
+  }
   destinataires.sort((a, b) => (a.type === b.type ? a.nom.localeCompare(b.nom, "fr") : a.type === "client" ? -1 : 1));
 
   const menus: Record<string, Record<string, { dejeuner: string; diner: string }>> = {};
