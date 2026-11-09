@@ -32,17 +32,42 @@ export interface Destinataire {
 }
 
 // Prospect qui n'a jamais ouvert son lien après 3 envois : on arrête de le relancer.
-const SEUIL_SILENCE = 3;
-const silencieux = (d: Destinataire) => d.type === "prospect" && !d.vuLe && d.envois >= SEUIL_SILENCE;
+// Un prospect reçoit 2 messages au plus (1er + relance), ensuite c'est à l'admin d'écrire.
+const MESSAGES_PROSPECT = 2;
 const cleEnvoi = (d: Destinataire) => (d.ficheId ? `f:${d.ficheId}` : d.cle);
 
 type Filtre = "restants" | "tous" | "client" | "prospect" | "ouverts";
 
-// Deux messages : les prospects découvrent leur bilan ; les clients commandent.
-// Trois messages : 1er contact d'un prospect, relance d'un prospect, client.
-type Public = "prospect" | "relance" | "client";
+// Quatre messages selon l'étape : client (1er message, puis relance du
+// nouveau menu) et prospect (1er message avec le bilan, puis une seule
+// relance ; ensuite plus d'envoi automatique, l'admin écrit lui-même).
+type Public = "client1" | "client2" | "prospect1" | "prospect2";
+const LIBELLES: Record<Public, string> = {
+  client1: "Client · 1er message",
+  client2: "Client · relance",
+  prospect1: "Prospect · 1er message",
+  prospect2: "Prospect · relance",
+};
 const MODELES_DEFAUT: Record<Public, string> = {
-  prospect: `Bonjour {prenom} 👋
+  client1: `Bonjour {prenom} 👋
+
+Voici ton lien personnel Chef2Box pour commander tes repas :
+👉 {lien}
+
+1. Coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux.
+2. Vérifie ton quartier : le prix s'affiche en bas.
+3. Touche « Valider ma commande ».
+
+Garde ce lien : chaque semaine le nouveau menu y est, et tu peux modifier jusqu'à la veille 20 h. Une question ? Réponds à ce message 🙂`,
+  client2: `Bonjour {prenom} 👋
+
+Le nouveau menu Chef2Box de la semaine du {semaine} est arrivé 🍽️
+
+Commande à partir de ton lien, comme d'habitude :
+👉 {lien}
+
+Modifiable jusqu'à la veille 20 h.`,
+  prospect1: `Bonjour {prenom} 👋
 
 Ici l'équipe Chef2Box : tu as fait ton bilan nutrition sur chef2box.com, merci !
 
@@ -54,7 +79,7 @@ Ton espace personnel est prêt : ton bilan complet, le menu de la semaine du {se
 🔒 C'est ta page à toi : pas de compte à créer, rien à payer en ligne (paiement à la livraison ou par virement), aucun engagement tant que tu ne valides pas une commande.
 
 Une question ? Réponds simplement à ce message 🙂`,
-  relance: `Bonjour {prenom} 👋
+  prospect2: `Bonjour {prenom} 👋
 
 Le nouveau menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
 
@@ -62,14 +87,6 @@ Ton espace t'attend (ton bilan est toujours dedans) :
 👉 {lien}
 
 Coche les repas qui te font envie, le prix s'affiche, sans engagement. Une question ? Réponds à ce message 🙂`,
-  client: `Bonjour {prenom} 👋
-
-Le menu Chef2Box de la semaine du {semaine} est en ligne 🍽️
-
-👉 Commande ici, comme d'habitude :
-{lien}
-
-Coche midi et/ou soir pour les jours que tu veux, puis « Valider ma commande ». Modifiable jusqu'à la veille 20 h.`,
 };
 
 const KCAL_REPAS = { P1: "800 kcal", P2: "680-700 kcal", P3: "550-600 kcal" };
@@ -112,7 +129,7 @@ export function EnvoiClient({
   const [semaine, setSemaine] = useState(semaines[0]);
   const [destinataires, setDestinataires] = useState(destinatairesInitiaux);
   const [modeles, setModeles] = useState<Record<Public, string>>(MODELES_DEFAUT);
-  const [modeleVu, setModeleVu] = useState<Public>("prospect");
+  const [modeleVu, setModeleVu] = useState<Public>("client1");
   // Lien sur le domaine chef2box.com (plus court, plus rassurant) : une fois le site déposé.
   const [lienCourt, setLienCourt] = useState(false);
   useEffect(() => setLienCourt(lire("c2b-envoi-lien-court") === "1"), []);
@@ -167,9 +184,9 @@ export function EnvoiClient({
   }
 
   // Envoi avec la vraie photo : partage du téléphone (choisir le contact dans WhatsApp).
-  async function partagerPhoto(d: Destinataire) {
+  async function partagerPhoto(d: Destinataire, choix?: Public) {
     if (!fichierImage) return;
-    const donnees = { files: [fichierImage], text: message(d) };
+    const donnees = { files: [fichierImage], text: message(d, choix) };
     if (!navigator.canShare?.(donnees)) return setEtatImage("Le partage de photo n'est pas disponible sur cet appareil.");
     try {
       await navigator.share(donnees);
@@ -179,10 +196,12 @@ export function EnvoiClient({
 
   // Modèle et envois déjà faits : gardés sur ce téléphone (par semaine).
   useEffect(() => {
-    const p = lire("c2b-envoi-modele-prospect");
-    const c = lire("c2b-envoi-modele-client");
-    const r = lire("c2b-envoi-modele-relance");
-    setModeles({ prospect: p ?? MODELES_DEFAUT.prospect, relance: r ?? MODELES_DEFAUT.relance, client: c ?? MODELES_DEFAUT.client });
+    setModeles({
+      client1: lire("c2b-envoi-modele-client1") ?? MODELES_DEFAUT.client1,
+      client2: lire("c2b-envoi-modele-client2") ?? MODELES_DEFAUT.client2,
+      prospect1: lire("c2b-envoi-modele-prospect1") ?? MODELES_DEFAUT.prospect1,
+      prospect2: lire("c2b-envoi-modele-prospect2") ?? MODELES_DEFAUT.prospect2,
+    });
   }, []);
 
   const jours = [0, 1, 2, 3, 4].map((i) => decalerDate(semaine, i));
@@ -200,10 +219,16 @@ export function EnvoiClient({
   useEffect(() => setOrigine(window.location.origin), []);
   // Prospect (jamais commandé) : message de découverte ; client : message habituel.
   // Prospect jamais contacté : bienvenue ; déjà contacté : relance courte.
-  const publicDe = (d: Destinataire): Public => (d.type === "client" ? "client" : d.envois > 0 ? "relance" : "prospect");
+  // Étape : messages déjà reçus avant cette semaine (l'envoi de la semaine ne compte pas).
+  const etape = (d: Destinataire) => d.envois - (envoyes.has(cleEnvoi(d)) ? 1 : 0);
+  const publicDe = (d: Destinataire): Public =>
+    d.type === "client" ? (etape(d) === 0 ? "client1" : "client2") : etape(d) === 0 ? "prospect1" : "prospect2";
+  const autrePublic = (p: Public): Public => ({ client1: "client2", client2: "client1", prospect1: "prospect2", prospect2: "prospect1" })[p] as Public;
+  // Prospect qui a déjà eu ses 2 messages : plus d'envoi automatique.
+  const prospectTermine = (d: Destinataire) => d.type === "prospect" && etape(d) >= MESSAGES_PROSPECT;
   const lienPerso = (jeton: string) => (lienCourt ? `https://chef2box.com/e/${jeton}` : `${origine}/ma-semaine/${jeton}`);
-  const message = (d: Destinataire) =>
-    modeles[publicDe(d)]
+  const message = (d: Destinataire, choix?: Public) =>
+    modeles[choix ?? publicDe(d)]
       // Sans bilan connu : la ligne {bilan} disparaît.
       .replace(/^.*\{bilan\}.*\n?\n?/m, (ligne) => (d.bilan ? ligne.replace("{bilan}", apercuBilan(d.bilan)) : ""))
       .replaceAll("{prenom}", d.nom.split(/\s+/)[0])
@@ -213,8 +238,8 @@ export function EnvoiClient({
     (d.autres ?? []).map((a) => `\n\nLien de ${a.nom.split(/\s+/)[0]} : ${lienPerso(a.jeton)}`).join("");
 
   // Ceux qui ne répondent jamais (ou mis en pause) sortent de l'envoi.
-  const actifs = destinataires.filter((d) => !d.pause && !silencieux(d));
-  const ecartes = destinataires.filter((d) => d.pause || silencieux(d));
+  const actifs = destinataires.filter((d) => !d.pause && !prospectTermine(d));
+  const ecartes = destinataires.filter((d) => d.pause || prospectTermine(d));
   const envoyesActifs = actifs.filter((d) => envoyes.has(cleEnvoi(d))).length;
   // Recherche par nom ou numéro (sans accents), dans l'onglet choisi.
   const sansAccents = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -341,7 +366,7 @@ export function EnvoiClient({
   async function mettreEnPause(d: Destinataire, pause: boolean) {
     if (!d.ficheId) return;
     const { error } = await supabase.from("application_personnes").update({ envoi_pause: pause }).eq("id", d.ficheId);
-    if (!error) setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, pause, envois: pause ? x.envois : Math.min(x.envois, SEUIL_SILENCE - 1) } : x)));
+    if (!error) setDestinataires((prev) => prev.map((x) => (x.cle === d.cle ? { ...x, pause } : x)));
   }
 
   const suivi = (d: Destinataire) =>
@@ -360,7 +385,7 @@ export function EnvoiClient({
       .filter(Boolean)
       .join(" · ");
 
-  const lienWa = (d: Destinataire) => `https://wa.me/${d.numero}?text=${encodeURIComponent(message(d))}`;
+  const lienWa = (d: Destinataire, choix?: Public) => `https://wa.me/${d.numero}?text=${encodeURIComponent(message(d, choix))}`;
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
@@ -415,18 +440,18 @@ export function EnvoiClient({
           </span>
         </label>
         <button onClick={() => setModeleOuvert((o) => !o)} className="text-xs font-bold text-c2b-gold underline">
-          {modeleOuvert ? "Fermer les messages" : "Modifier les messages (prospects / clients)"}
+          {modeleOuvert ? "Fermer les messages" : "Modifier les 4 messages (clients / prospects)"}
         </button>
         {modeleOuvert && (
           <div className="space-y-1.5">
-            <div className="grid grid-cols-3 gap-1.5">
-              {(["prospect", "relance", "client"] as Public[]).map((p) => (
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["client1", "client2", "prospect1", "prospect2"] as Public[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setModeleVu(p)}
                   className={`rounded-full py-2 text-xs font-bold ${modeleVu === p ? "bg-c2b-green text-c2b-cream" : "bg-white border border-c2b-green/15 text-c2b-green"}`}
                 >
-                  {p === "prospect" ? "1er contact" : p === "relance" ? "Relance prospect" : "Clients"}
+                  {LIBELLES[p]}
                 </button>
               ))}
             </div>
@@ -522,7 +547,10 @@ export function EnvoiClient({
                 {prochain.type === "client" ? "client" : "prospect"}
               </span>
             </p>
-            {suivi(prochain) && <p className="text-[11px] text-c2b-muted">{suivi(prochain)}</p>}
+            <p className="text-[11px] text-c2b-muted">
+              Message : <strong className="text-c2b-green">{LIBELLES[publicDe(prochain)]}</strong>
+              {suivi(prochain) && ` · ${suivi(prochain)}`}
+            </p>
             {fichierImage ? (
               <>
                 <button
@@ -627,7 +655,7 @@ export function EnvoiClient({
                       </span>
                     </p>
                     <p className="truncate text-[11px] text-c2b-muted">
-                      +{d.numero}
+                      <span className="font-bold text-c2b-green">{publicDe(d).endsWith("1") ? "1er message" : "relance"}</span> · +{d.numero}
                       {suivi(d) && ` · ${suivi(d)}`}
                     </p>
                   </button>
@@ -659,6 +687,11 @@ export function EnvoiClient({
                       <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700">
                         ✅ Lien et bilan déjà envoyés cette semaine
                         {d.dernierEnvoi && ` (le ${new Date(d.dernierEnvoi).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })})`}
+                      </p>
+                    )}
+                    {d.jeton && (
+                      <p className="text-xs text-c2b-muted">
+                        Message proposé : <strong className="text-c2b-green">{LIBELLES[publicDe(d)]}</strong>
                       </p>
                     )}
                     {!d.jeton ? (
@@ -698,6 +731,15 @@ export function EnvoiClient({
                         >
                           Copier son lien
                         </button>
+                        <a
+                          href={lienWa(d, autrePublic(publicDe(d)))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => marquer(d)}
+                          className="col-span-2 text-center text-[11px] font-bold text-c2b-muted underline"
+                        >
+                          Envoyer plutôt : {LIBELLES[autrePublic(publicDe(d))]}
+                        </a>
                       </div>
                     )}
                     {d.type === "prospect" && d.vuLe && (
@@ -773,11 +815,12 @@ export function EnvoiClient({
         {ecartes.length > 0 && (
           <div className="carte space-y-2 p-3">
             <button onClick={() => setSilenceVu((v) => !v)} className="flex w-full items-center justify-between text-left">
-              <span className="text-sm font-bold text-c2b-green">🔕 Ne répondent pas ({ecartes.length})</span>
+              <span className="text-sm font-bold text-c2b-green">💬 Prospects relancés : à toi d&apos;écrire ({ecartes.length})</span>
               <span className="text-xs font-bold text-c2b-gold">{silenceVu ? "Masquer" : "Voir"}</span>
             </button>
             <p className="text-[11px] text-c2b-muted">
-              Prospects qui n&apos;ont jamais ouvert leur lien après {SEUIL_SILENCE} envois, ou mis en pause : ils ne reçoivent plus le menu.
+              Ils ont reçu le 1er message et la relance : plus d&apos;envoi automatique. Écris-leur toi-même s&apos;ils répondent ou ont ouvert leur lien
+              (👀). Ceux mis en pause sont aussi ici.
             </p>
             {silenceVu && (
               <ul className="space-y-1.5">
@@ -793,9 +836,14 @@ export function EnvoiClient({
                       </button>
                     ) : (
                       <>
-                        <button onClick={() => mettreEnPause(d, false)} className="text-xs font-bold text-c2b-green underline">
-                          Relancer
-                        </button>
+                        <a
+                          href={`https://wa.me/${d.numero}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full bg-[#25D366] px-3 py-1 text-xs font-bold text-white"
+                        >
+                          💬 Écrire
+                        </a>
                         <button onClick={() => mettreEnPause(d, true)} className="text-xs font-bold text-red-600 underline">
                           Pause
                         </button>
