@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { genererRecettePdf } from "@/lib/recette-pdf";
 import { Copy, FileDown, Send } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import {
   BASE,
   PALIERS_RECETTE,
@@ -178,7 +177,6 @@ export function RecettesClient({ jours, aujourdhui }: { jours: JourPlanning[]; a
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Download, Share2 } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { decalerDate } from "@/lib/dates";
 import { PaiementsOnglets } from "@/app/(espace)/admin/paiements/PaiementsOnglets";
 import { CATEGORIES, type CategorieDepense } from "@/lib/depenses";
@@ -156,7 +155,6 @@ export function BilanClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
-      <AdminOnglets />
       <div className="flex items-end justify-between gap-3">
         <div>
           <span className="lbl mb-2">Espace admin</span>

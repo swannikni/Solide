@@ -9,7 +9,8 @@ import type { Client, Questionnaire } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClientsPage() {
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ detail?: string; nom?: string }> }) {
+  const params = await searchParams;
   const { supabase } = await exigerAdmin();
   const { data: clients } = await supabase
     .from("application_clients")
@@ -29,7 +30,7 @@ export default async function ClientsPage() {
   const [{ data: fiches }, { data: repas }] = await Promise.all([
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id, jeton, livraison_offerte, remise, zone, complement, partenaire")
+      .select("id, nom, telephone, adresse, palier, allergies, refus, note, client_id, jeton, livraison_offerte, remise, zone, complement, partenaire, vu_le")
       .order("nom")
       .limit(2000)
       .returns<Omit<FicheResume, "dernier">[]>(),
@@ -109,6 +110,7 @@ export default async function ClientsPage() {
         semaines={{ lundis: [lundiActuel, lundiSuivant], defaut: semaineDefaut, repas: repasSemaine, tarifs: completerTarifs(parametre?.valeur) }}
         emails={emails}
         cleServicePresente={!!admin}
+        detail={params.detail ? { section: params.detail, nom: params.nom ?? "" } : null}
       />
     </div>
   );

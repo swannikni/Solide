@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { decalerDate } from "@/lib/dates";
 
 export interface LigneSuivi {
@@ -88,7 +87,6 @@ export function SuiviClient({ lignes, aujourdhui }: { lignes: LigneSuivi[]; aujo
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">

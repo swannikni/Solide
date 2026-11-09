@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Copy, MapPin, Send } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
 
@@ -270,7 +269,6 @@ export function TourneeClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">

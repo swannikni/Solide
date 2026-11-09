@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Plus, Printer, Pencil, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { QrCode } from "@/components/QrCode";
 import { genererCodePlat, lienPlat } from "@/lib/qr";
 import type { Plat } from "@/lib/types";
@@ -97,7 +96,6 @@ export function MenuClient({ platsInitiaux }: { platsInitiaux: Plat[] }) {
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
-      <AdminOnglets />
       <header className="flex items-end justify-between gap-3">
         <div>
           <span className="lbl mb-2">Espace admin</span>

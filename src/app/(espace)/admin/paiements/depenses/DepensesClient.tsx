@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { PaiementsOnglets } from "@/app/(espace)/admin/paiements/PaiementsOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { CATEGORIES, categorie, type CategorieDepense, type Depense } from "@/lib/depenses";
@@ -95,7 +94,6 @@ export function DepensesClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
-      <AdminOnglets />
       <div className="flex items-end justify-between gap-3">
         <div>
           <span className="lbl mb-2">Espace admin</span>

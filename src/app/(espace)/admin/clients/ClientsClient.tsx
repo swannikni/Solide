@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ZONES, nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
 import type { Tarifs } from "@/lib/paiements";
 import { decalerDate } from "@/lib/dates";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
+import { Annuaire } from "@/app/(espace)/admin/clients/Annuaire";
 import { FormulaireProfil, depuisProfil, versProfil, PROFIL_VIDE, type ProfilSaisi } from "@/components/FormulaireProfil";
 import {
   PALIERS,
@@ -130,6 +130,7 @@ export interface FicheResume {
   complement?: string | null; // lien de position (Google Maps) donné par le client
   partenaire?: boolean; // partenaire (ex. Sweat On) : toujours dans la semaine, quantités libres
   dernier: string | null;
+  vu_le?: string | null; // dernière ouverture de son lien
 }
 
 // Un repas de la semaine (planning de la cuisine), pour « Clients de la semaine ».
@@ -181,6 +182,7 @@ export function ClientsClient({
   semaines = null,
   emails,
   cleServicePresente,
+  detail = null,
 }: {
   clientsInitiaux: Client[];
   questionnairesInitiaux?: Questionnaire[];
@@ -191,6 +193,8 @@ export function ClientsClient({
   semaines?: { lundis: string[]; defaut: string; repas: RepasSemaine[]; tarifs: Tarifs } | null;
   emails: Record<string, string>;
   cleServicePresente: boolean;
+  // Ouverture depuis la fiche d'une personne : vue détaillée, section et nom cherché.
+  detail?: { section: string; nom: string } | null;
 }) {
   const supabase = createClient();
   const [clients, setClients] = useState(clientsInitiaux);
@@ -203,11 +207,12 @@ export function ClientsClient({
   const [copie, setCopie] = useState(false);
   const [filtre, setFiltre] = useState<"tous" | "premium" | "gratuits">("tous");
   const nbPremium = clients.filter((c) => c.premium).length;
-  const [recherche, setRecherche] = useState("");
+  const [recherche, setRecherche] = useState(detail?.nom ?? "");
+  const [vueDetaillee, setVueDetaillee] = useState(!!detail);
   // Questionnaires : les 3 derniers, le reste en déroulant ou en cherchant.
   const [tousQuestionnaires, setTousQuestionnaires] = useState(false);
   // Listes repliées par défaut ; une recherche les ouvre sur les résultats.
-  const [ouvertes, setOuvertes] = useState<Set<string>>(new Set());
+  const [ouvertes, setOuvertes] = useState<Set<string>>(new Set(detail ? [detail.section] : []));
   const basculerListe = (cle: string) =>
     setOuvertes((s) => {
       const n = new Set(s);
@@ -218,7 +223,7 @@ export function ClientsClient({
   const [fiches, setFiches] = useState(fichesInitiales);
   const [lundiVu, setLundiVu] = useState(semaines?.defaut ?? "");
   const [repasSem, setRepasSem] = useState<RepasSemaine[]>(semaines?.repas ?? []);
-  const [semaineOuverte, setSemaineOuverte] = useState<string | null>(null);
+  const [semaineOuverte, setSemaineOuverte] = useState<string | null>(detail?.section === "semaine" ? detail.nom : null);
   // Clients ajoutés à la main à une semaine (« lundi|nom »), avant leurs repas.
   const [ajoutesSem, setAjoutesSem] = useState<string[]>([]);
   const [ajoutSem, setAjoutSem] = useState(false);
@@ -806,7 +811,6 @@ export function ClientsClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
-      <AdminOnglets />
       <header className="flex items-end justify-between gap-3">
         <div>
           <span className="lbl mb-2">Espace admin</span>
@@ -881,6 +885,28 @@ export function ClientsClient({
         </div>
       )}
 
+      <Annuaire
+        fiches={fiches}
+        questionnaires={questionnaires}
+        comptes={clients}
+        repasSemaine={repasSem}
+        relance={relance}
+      />
+
+      {/* Ancienne vue, le temps que la fiche de chaque personne fasse tout. */}
+      <button
+        onClick={() => setVueDetaillee((v) => !v)}
+        className="flex w-full items-center justify-between rounded-2xl border border-dashed border-c2b-green/25 px-4 py-3 text-left"
+      >
+        <span>
+          <span className="block text-sm font-bold text-c2b-green">Vue détaillée</span>
+          <span className="block text-xs text-c2b-muted">Semaine jour par jour, listes, comptes de l&apos;appli (l&apos;ancienne page)</span>
+        </span>
+        <ChevronDown size={18} className={`text-c2b-muted transition ${vueDetaillee ? "rotate-180" : ""}`} />
+      </button>
+
+      {vueDetaillee && (
+        <>
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-c2b-muted" />
         <input
@@ -1762,6 +1788,9 @@ export function ClientsClient({
           </>
         )}
       </section>
+
+        </>
+      )}
 
       {fiche && (
         <div className="fixed inset-0 !mt-0 bg-c2b-green/60 backdrop-blur-sm z-30 flex items-stretch md:items-center justify-center">

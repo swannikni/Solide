@@ -4,7 +4,6 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Phone, Search, Send, Trash2, UserPlus, X } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
 import { lundiDe, type Tarifs } from "@/lib/paiements";
@@ -2014,7 +2013,6 @@ export function CuisineClient({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-4">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">

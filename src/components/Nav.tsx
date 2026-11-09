@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, use, useState } from "react";
+import { Suspense, use, useCallback, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChefHat, LayoutDashboard, MessageCircle, Sparkles, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
+import { ChefHat, LayoutDashboard, Menu, MessageCircle, Sparkles, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { MenuAdmin } from "@/components/MenuAdmin";
 
 // racine : partie de l'adresse qui allume l'onglet (Admin couvre /admin/...).
 // L'admin a sa propre barre : la gestion seulement (pas l'appli client).
@@ -58,6 +59,9 @@ export function Nav({
   assistantActif?: boolean;
 }) {
   const pathname = usePathname();
+  // Menu de gauche de l'admin (tous les écrans).
+  const [menuOuvert, setMenuOuvert] = useState(false);
+  const fermerMenu = useCallback(() => setMenuOuvert(false), []);
   // Onglet touché : il s'allume tout de suite, sans attendre la fin du chargement.
   // Oublié dès que la page change.
   const [touche, setTouche] = useState<{ href: string; depuis: string } | null>(null);
@@ -76,9 +80,20 @@ export function Nav({
     <>
       <header className="print:hidden fixed top-0 inset-x-0 z-20 h-[68px] md:h-20 bg-white/95 backdrop-blur-lg border-b border-black/[0.06]">
         <div className="max-w-3xl mx-auto h-full px-4 md:px-6 flex items-center justify-between">
-          <Link href="/" aria-label="Accueil">
-            <Logo className="h-11 md:h-[52px] w-auto" />
-          </Link>
+          <div className="flex items-center gap-3">
+            {estAdmin && (
+              <button
+                onClick={() => setMenuOuvert(true)}
+                aria-label="Ouvrir le menu"
+                className="-ml-1 flex h-10 w-10 items-center justify-center rounded-xl bg-c2b-green/[0.06] text-c2b-green"
+              >
+                <Menu size={21} />
+              </button>
+            )}
+            <Link href={estAdmin ? "/admin/cuisine" : "/"} aria-label="Accueil">
+              <Logo className="h-11 md:h-[52px] w-auto" />
+            </Link>
+          </div>
           <nav className="hidden md:flex items-center gap-7">
             {liens.map(({ href, racine, label }) => (
               <Link
@@ -108,7 +123,7 @@ export function Nav({
           <Link
             href="/profil"
             onClick={() => setCible("/profil")}
-            className={`md:hidden w-10 h-10 -mr-1.5 rounded-full flex items-center justify-center transition ${
+            className={`${estAdmin ? "hidden" : "md:hidden"} w-10 h-10 -mr-1.5 rounded-full flex items-center justify-center transition ${
               actifSur("/profil", "/profil") ? "bg-c2b-green text-c2b-cream" : "bg-c2b-green/[0.06] text-c2b-green"
             }`}
             aria-label="Mon profil"
@@ -118,6 +133,7 @@ export function Nav({
         </div>
       </header>
 
+      {estAdmin && <MenuAdmin ouvert={menuOuvert} fermer={fermerMenu} pastilles={pastilles} />}
       <nav className="print:hidden md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur-lg border-t border-black/[0.06] pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch justify-around">
           {liens.map(({ href, racine, label, icon: Icon }) => {

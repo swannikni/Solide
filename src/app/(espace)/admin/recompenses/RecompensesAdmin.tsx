@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { Pastille } from "@/components/Pastille";
 import { decalerDate } from "@/lib/dates";
 import type { DemandeRecompense, Defi, Recompense, TypeDefi } from "@/lib/types";
@@ -134,7 +133,6 @@ export function RecompensesAdmin({
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-6">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">

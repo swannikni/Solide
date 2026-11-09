@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { AdminOnglets } from "@/app/(espace)/admin/AdminOnglets";
 import { decalerDate } from "@/lib/dates";
 
 export interface StatsSite {
@@ -90,7 +89,6 @@ export function SiteClient({ jours, debut, fin, stats, avant }: { jours: number;
 
   return (
     <main className="max-w-3xl mx-auto px-4 pt-6 space-y-5">
-      <AdminOnglets />
       <div>
         <span className="lbl mb-2">Espace admin</span>
         <h1 className="titre text-[34px]">
