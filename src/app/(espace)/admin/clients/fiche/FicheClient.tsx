@@ -9,6 +9,7 @@ import { ZONES, nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
 import { decalerDate } from "@/lib/dates";
 import type { Tarifs } from "@/lib/paiements";
 import type { Client, Palier, Questionnaire, SuiviProspect } from "@/lib/types";
+import { LIBELLES, MESSAGES_PROSPECT, composerMessage, lire, lireModeles, type Public } from "@/lib/messages-envoi";
 
 export interface FichePersonne {
   id: string;
@@ -101,6 +102,7 @@ export function FicheClient({
   lundis,
   lundiDefaut,
   aujourdhui,
+  envoi,
 }: {
   nom: string;
   personne: FichePersonne | null;
@@ -116,6 +118,7 @@ export function FicheClient({
   lundis: string[];
   lundiDefaut: string;
   aujourdhui: string;
+  envoi: { semaine: string; menu: string }; // semaine du menu à envoyer et son menu en texte
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -196,14 +199,37 @@ export function FicheClient({
     return null;
   }
 
-  async function envoyerLien() {
+  // Même message que « Envoi du menu », selon l'étape : client 1er message /
+  // relance, prospect 1er message (avec son bilan) / relance.
+  const [envoisFaits, setEnvoisFaits] = useState(envois);
+  const etape = envoisFaits.filter((e) => e.semaine !== envoi.semaine).length;
+  const publicPropose: Public = estClient ? (etape === 0 ? "client1" : "client2") : etape === 0 ? "prospect1" : "prospect2";
+  const autrePublic: Public = ({ client1: "client2", client2: "client1", prospect1: "prospect2", prospect2: "prospect1" } as const)[publicPropose];
+  const prospectTermine = !estClient && etape >= MESSAGES_PROSPECT;
+  const dejaCetteSemaine = envoisFaits.some((e) => e.semaine === envoi.semaine);
+
+  async function envoyerLien(choix: Public = publicPropose) {
     const f = await assurerFicheEtLien();
     if (!f?.jeton) return;
-    const l = `${window.location.origin}/ma-semaine/${f.jeton}`;
-    const texte = estClient
-      ? `Bonjour ${prenom} 👋 Voici ton espace Chef2Box : tu y commandes tes repas (midi, soir) avec le menu et le prix, tu modifies jusqu'à la veille 20 h et tu suis tes paiements. Garde ce lien : ${l}`
-      : `Bonjour ${prenom} 👋 C'est Chef2Box. Ton bilan et le menu de la semaine sont dans ton espace personnel : ${l}\nTu peux commander 1 seul repas pour tester. Une question ? Réponds-moi ici 🙂`;
+    const l = lire("c2b-envoi-lien-court") === "1" ? `https://chef2box.com/e/${f.jeton}` : `${window.location.origin}/ma-semaine/${f.jeton}`;
+    const texte = composerMessage(lireModeles()[choix], {
+      prenom,
+      bilan: q?.calories ? { calories: q.calories, palier: q.palier } : null,
+      semaine: new Date(`${envoi.semaine}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" }),
+      menu: envoi.menu,
+      lien: l,
+    });
     window.open(wa ? `https://wa.me/${wa}?text=${encodeURIComponent(texte)}` : `https://wa.me/?text=${encodeURIComponent(texte)}`, "_blank");
+    // Noté comme dans « Envoi du menu » : l'étape avance, le prospect passe « contacté ».
+    if (!dejaCetteSemaine) {
+      supabase.from("application_envois").upsert({ personne_id: f.id, semaine: envoi.semaine }).then(() => {});
+      setEnvoisFaits((prev) => [{ semaine: envoi.semaine, envoye_le: new Date().toISOString() }, ...prev]);
+    }
+    if (!estClient && questionnaires.length) {
+      const ids = questionnaires.filter((x) => x.suivi !== "client").map((x) => x.id);
+      if (ids.length) supabase.from("application_questionnaires").update({ suivi: "contacte" }).in("id", ids).then(() => {});
+      setQuestionnaires((prev) => prev.map((x) => (x.suivi === "client" ? x : { ...x, suivi: "contacte" })));
+    }
   }
   async function copierLien() {
     const f = await assurerFicheEtLien();
@@ -477,7 +503,7 @@ export function FicheClient({
         >
           <MessageCircle size={19} /> WhatsApp
         </a>
-        <button onClick={envoyerLien} className="flex flex-col items-center gap-1 rounded-2xl bg-white py-2.5 text-[11px] font-bold text-c2b-green">
+        <button onClick={() => envoyerLien()} className="flex flex-col items-center gap-1 rounded-2xl bg-white py-2.5 text-[11px] font-bold text-c2b-green">
           <Link2 size={19} /> {estClient ? "Son lien" : "Bilan + lien"}
         </button>
         <button onClick={voirEspace} className="flex flex-col items-center gap-1 rounded-2xl bg-white py-2.5 text-[11px] font-bold text-c2b-green">
@@ -805,9 +831,9 @@ export function FicheClient({
             estClient ? "Menus envoyés" : "Messages envoyés",
             <div className="space-y-2 text-sm">
               <p>{p?.vu_le ? `👀 A ouvert son lien le ${jourCourt(p.vu_le)}` : "N'a pas encore ouvert son lien."}</p>
-              {envois.length ? (
+              {envoisFaits.length ? (
                 <div className="divide-y divide-c2b-cream-2">
-                  {envois.map((e) => (
+                  {envoisFaits.map((e) => (
                     <p key={e.semaine} className="flex justify-between py-1.5">
                       <span>Menu de la semaine du {jourCourt(e.semaine)}</span>
                       <span className="text-c2b-muted">envoyé le {jourCourt(e.envoye_le)}</span>
@@ -817,11 +843,22 @@ export function FicheClient({
               ) : (
                 <p className="text-c2b-muted">Aucun envoi pour l&apos;instant.</p>
               )}
-              {!estClient && envois.length >= 2 && <p className="font-bold text-c2b-green">2 messages envoyés : à toi de lui écrire un message perso.</p>}
             </div>
           )}
-          <button onClick={envoyerLien} className="w-full rounded-full bg-[#25D366] py-2.5 text-sm font-bold text-white">
-            {estClient ? "Envoyer son lien sur WhatsApp" : "Envoyer son bilan + lien sur WhatsApp"}
+          {prospectTermine && (
+            <p className="rounded-xl bg-c2b-gold/15 px-3 py-2 text-sm font-bold text-c2b-green">
+              2 messages déjà envoyés : écris-lui plutôt un message perso (bouton WhatsApp en haut).
+            </p>
+          )}
+          <p className="text-xs text-c2b-muted">
+            Message proposé : <strong className="text-c2b-green">{LIBELLES[publicPropose]}</strong>
+            {dejaCetteSemaine && " · déjà envoyé cette semaine"} (modèles modifiables dans « Envoi du menu »)
+          </p>
+          <button onClick={() => envoyerLien()} className="w-full rounded-full bg-[#25D366] py-2.5 text-sm font-bold text-white">
+            {dejaCetteSemaine ? "Renvoyer" : "Envoyer"} : {LIBELLES[publicPropose]}
+          </button>
+          <button onClick={() => envoyerLien(autrePublic)} className="block w-full text-center text-xs font-bold text-c2b-muted underline">
+            Envoyer plutôt : {LIBELLES[autrePublic]}
           </button>
           {p && (
             <button

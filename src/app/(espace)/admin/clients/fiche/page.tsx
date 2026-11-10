@@ -97,6 +97,25 @@ export default async function FichePage({ searchParams }: { searchParams: Promis
     (x): x is string => !!x
   );
 
+  // Semaine du menu à envoyer (comme « Envoi du menu ») et son menu en texte.
+  const semaineEnvoi = lundiDe(decalerDate(aujourdhui, 2));
+  const { data: services } = await supabase
+    .from("application_cuisine_services")
+    .select("date, repas_type, plat")
+    .gte("date", semaineEnvoi)
+    .lte("date", decalerDate(semaineEnvoi, 4))
+    .returns<{ date: string; repas_type: "dejeuner" | "diner"; plat: string | null }[]>();
+  const menuTexte = [0, 1, 2, 3, 4]
+    .map((i) => {
+      const d = decalerDate(semaineEnvoi, i);
+      const plat = (s: "dejeuner" | "diner") => (services ?? []).find((x) => x.date === d && x.repas_type === s)?.plat?.trim();
+      const parts = [plat("dejeuner") && `☀️ ${plat("dejeuner")}`, plat("diner") && `🌙 ${plat("diner")}`].filter(Boolean);
+      const jour = new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", timeZone: "UTC" }).replace(".", "");
+      return parts.length ? `• ${jour.charAt(0).toUpperCase()}${jour.slice(1)} : ${parts.join(" · ")}` : null;
+    })
+    .filter(Boolean)
+    .join("\n");
+
   const [{ data: extras }, { data: commandes }, { data: paiements }, { data: envois }, { data: parametre }, { data: offre }] = await Promise.all([
     personne
       ? toutLire(() =>
@@ -183,6 +202,7 @@ export default async function FichePage({ searchParams }: { searchParams: Promis
         lundis={[lundiActuel, lundiSuivant]}
         lundiDefaut={debutAVenir() > decalerDate(lundiActuel, 4) ? lundiSuivant : lundiActuel}
         aujourdhui={aujourdhui}
+        envoi={{ semaine: semaineEnvoi, menu: menuTexte }}
       />
     </div>
   );
