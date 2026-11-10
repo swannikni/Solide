@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     reponses[cle] = typeof v === "number" ? v : texte(v, 500);
   }
 
-  const { error } = await admin.from("application_questionnaires").insert({
+  const { data: cree, error } = await admin.from("application_questionnaires").insert({
     source: "site",
     nom,
     email,
@@ -81,13 +81,14 @@ export async function POST(request: Request) {
     palier: calcul?.palier ?? null,
     profil: profilComplet(profil) ? profil : null,
     reponses,
-  });
-  if (error) return repondre({ erreur: "Enregistrement impossible." }, 500);
+  }).select("id").single<{ id: string }>();
+  if (error || !cree) return repondre({ erreur: "Enregistrement impossible." }, 500);
 
   // Bilan refait par quelqu'un qui a déjà sa fiche (lien envoyé) mais n'a
   // jamais commandé : sa fiche suit le nouveau bilan (palier, allergies…).
   // Un client qui a déjà commandé garde sa fiche : l'admin décide.
   const derniers9 = (texte(d.tel, 30) ?? "").replace(/[^\d]/g, "").slice(-9);
+  let dejaClient: string | null = null;
   if (derniers9.length === 9 && calcul) {
     const { data: fiches } = await admin
       .from("application_personnes")
@@ -100,7 +101,10 @@ export async function POST(request: Request) {
         .from("application_cuisine_extras")
         .select("id", { count: "exact", head: true })
         .ilike("nom", f.nom.replace(/[%_\\]/g, "\\$&"));
-      if ((count ?? 0) > 0) continue;
+      if ((count ?? 0) > 0) {
+        dejaClient = f.nom;
+        continue;
+      }
       const utile = (v: unknown, max: number) => {
         const t = typeof v === "string" ? v.trim() : "";
         return t && !/^(—|-|rien|aucune?|non|ras|néant)$/i.test(t) ? t.slice(0, max) : null;
@@ -116,5 +120,27 @@ export async function POST(request: Request) {
         .eq("id", f.id);
     }
   }
+
+  // Notification à l'admin : nouveau bilan (ou ancien client qui le refait).
+  const resume = [
+    calcul ? `${calcul.calories} kcal/jour` : null,
+    calcul?.palier ? `Palier ${calcul.palier.slice(1)}` : null,
+    texte(d.objTexte, 60),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  await prevenirAdmin(admin, nom, cree.id, `${dejaClient ? `Déjà client (${dejaClient}), a refait son bilan` : "Nouveau prospect"}${resume ? ` · ${resume}` : ""}. Touche pour ouvrir sa fiche.`);
   return repondre({ ok: true }, 201);
+}
+
+async function prevenirAdmin(admin: NonNullable<ReturnType<typeof createAdminClient>>, nom: string, id: string, texte: string) {
+  try {
+    const { data: secret } = await admin.rpc("application_secret", { p_nom: "rappel_cron_secret" });
+    if (!secret) return;
+    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/rappels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-cron-secret": String(secret) },
+      body: JSON.stringify({ type: "prospect", nom, id, texte }),
+    });
+  } catch {}
 }

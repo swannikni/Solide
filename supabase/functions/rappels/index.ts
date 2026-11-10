@@ -12,6 +12,8 @@
 //   par l'appli avec le même en-tête x-cron-secret).
 // - type "modif" : un client a changé quelque chose depuis son espace
 //   (repas ajoutés/retirés, annulation, fiche) ; « texte » dit quoi.
+// - type "prospect" : quelqu'un a fait son bilan (questionnaire du site) ;
+//   prévient les admins, la notification ouvre sa fiche (« id » du questionnaire).
 // - type "test"  : le client connecté s'envoie une notification d'essai.
 //
 // Les clés VAPID et le secret des tâches sont dans le coffre (Vault).
@@ -48,7 +50,13 @@ Deno.serve(async (req) => {
   });
   const secret = async (nom: string) => (await admin.rpc("application_secret", { p_nom: nom })).data as string | null;
 
-  const { type, nom, repas, texte } = (await req.json().catch(() => ({}))) as { type?: string; nom?: string; repas?: number; texte?: string };
+  const { type, nom, repas, texte, id: idQuestionnaire } = (await req.json().catch(() => ({}))) as {
+    type?: string;
+    nom?: string;
+    repas?: number;
+    texte?: string;
+    id?: string;
+  };
 
   // Qui a le droit d'appeler : la tâche planifiée (secret) ou, pour le test, un client connecté.
   let clientTest: string | null = null;
@@ -57,7 +65,7 @@ Deno.serve(async (req) => {
     const { data } = await admin.auth.getUser(jeton);
     if (!data.user) return reponse({ erreur: "non connecté" }, 401);
     clientTest = data.user.id;
-  } else if (type === "soir" || type === "bilan" || type === "inscription" || type === "demande" || type === "commande" || type === "modif") {
+  } else if (type === "soir" || type === "bilan" || type === "inscription" || type === "demande" || type === "commande" || type === "modif" || type === "prospect") {
     const attendu = await secret("rappel_cron_secret");
     if (!attendu || !egal(req.headers.get("x-cron-secret") ?? "", attendu)) return reponse({ erreur: "refusé" }, 403);
   } else {
@@ -70,7 +78,7 @@ Deno.serve(async (req) => {
 
   let requete = admin.from("application_push_abonnements").select("id, client_id, endpoint, p256dh, auth");
   if (clientTest) requete = requete.eq("client_id", clientTest);
-  if (type === "inscription" || type === "demande" || type === "commande" || type === "modif") {
+  if (type === "inscription" || type === "demande" || type === "commande" || type === "modif" || type === "prospect") {
     const { data: admins } = await admin.from("application_clients").select("id").eq("est_admin", true);
     requete = requete.in("client_id", (admins ?? []).map((a) => a.id));
   }
@@ -111,6 +119,12 @@ Deno.serve(async (req) => {
     const qui = typeof nom === "string" && nom.trim() ? nom.trim().slice(0, 80) : "Un client";
     const quoi = typeof texte === "string" && texte.trim() ? texte.trim().slice(0, 300) : "a modifié sa commande.";
     for (const id of clients) messages.set(id, { title: `✏️ ${qui}`, body: quoi, url: "/admin/cuisine" });
+  } else if (type === "prospect") {
+    const qui = typeof nom === "string" && nom.trim() ? nom.trim().slice(0, 80) : "Quelqu'un";
+    const quoi = typeof texte === "string" && texte.trim() ? texte.trim().slice(0, 300) : "vient de faire son bilan.";
+    const url =
+      typeof idQuestionnaire === "string" && /^[0-9a-f-]{36}$/i.test(idQuestionnaire) ? `/admin/clients/fiche?q=${idQuestionnaire}` : "/admin/clients";
+    for (const id of clients) messages.set(id, { title: `📊 Nouveau bilan : ${qui}`, body: quoi, url });
   } else if (type === "commande") {
     const qui = typeof nom === "string" && nom.trim() ? nom.trim().slice(0, 80) : "Un client";
     const n = typeof repas === "number" && repas > 0 ? ` (${repas} repas cette semaine)` : "";
