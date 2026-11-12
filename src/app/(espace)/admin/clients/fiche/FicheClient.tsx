@@ -9,6 +9,7 @@ import { ZONES, nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
 import { decalerDate } from "@/lib/dates";
 import type { Tarifs } from "@/lib/paiements";
 import type { Client, Palier, Questionnaire, SuiviProspect } from "@/lib/types";
+import { numeroValide } from "@/lib/telephone";
 import { LIBELLES, MESSAGES_PROSPECT, composerMessage, lire, lireModeles, type Public } from "@/lib/messages-envoi";
 
 export interface FichePersonne {
@@ -136,6 +137,8 @@ export function FicheClient({
 
   const q = questionnaires[0] ?? null;
   const telephone = p?.telephone ?? compte?.telephone ?? q?.telephone ?? null;
+  const telValide = numeroValide(telephone);
+  const [telSaisi, setTelSaisi] = useState<string | null>(null);
   const wa = numeroWa(telephone);
   const palier = p?.palier ?? compte?.palier ?? q?.palier ?? null;
   const estClient = repas.length > 0 || !!p?.partenaire || !!compte || questionnaires.some((x) => x.suivi === "client");
@@ -244,6 +247,61 @@ export function FicheClient({
     const f = await assurerFicheEtLien();
     if (f?.jeton) window.location.href = `/ma-semaine/${f.jeton}`;
   }
+
+  // Corriger le numéro WhatsApp : sa fiche, ses questionnaires et ses repas à venir.
+  async function corrigerNumero() {
+    if (telSaisi == null) return;
+    const brut = telSaisi.trim();
+    const chiffres = brut.replace(/\D/g, "").replace(/^00/, "");
+    const nouveau = brut.startsWith("+") || brut.startsWith("00") ? `+${chiffres}` : /^0[5-7]\d{8}$/.test(chiffres) ? `+212${chiffres.slice(1)}` : `+${chiffres}`;
+    if (!numeroValide(nouveau)) return informer("Numéro incomplet : mets l'indicatif et le numéro complet (ex. +33 6 12 34 56 78).");
+    setEnCours(true);
+    try {
+      const ids = questionnaires.map((x) => x.id);
+      const [a, b, c] = await Promise.all([
+        p ? supabase.from("application_personnes").update({ telephone: nouveau }).eq("id", p.id) : Promise.resolve({ error: null }),
+        ids.length ? supabase.from("application_questionnaires").update({ telephone: nouveau }).in("id", ids) : Promise.resolve({ error: null }),
+        p
+          ? supabase.from("application_cuisine_extras").update({ telephone: nouveau }).ilike("nom", p.nom.replace(/[%_\\]/g, "\\$&")).gte("date", aujourdhui)
+          : Promise.resolve({ error: null }),
+      ]);
+      if (a.error || b.error || c.error) return informer("Numéro non enregistré, réessaie.");
+      if (p) setP({ ...p, telephone: nouveau });
+      setQuestionnaires((prev) => prev.map((x) => ({ ...x, telephone: nouveau })));
+      setTelSaisi(null);
+      informer("Numéro corrigé ✓");
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  // Ligne « WhatsApp » avec alerte si le numéro est incomplet, et correction sur place.
+  const champTelephone = () =>
+    telSaisi != null ? (
+      <div className="space-y-1.5 border-b border-c2b-cream-2 py-2">
+        <p className="text-sm text-c2b-muted">WhatsApp, avec l&apos;indicatif (+212, +33…)</p>
+        <input value={telSaisi} onChange={(e) => setTelSaisi(e.target.value)} inputMode="tel" autoFocus placeholder="+33 6 12 34 56 78" className="champ py-2 text-sm" />
+        <div className="grid grid-cols-2 gap-1.5">
+          <button onClick={() => setTelSaisi(null)} className="btn-secondary py-2 text-xs">
+            Annuler
+          </button>
+          <button onClick={corrigerNumero} disabled={enCours} className="btn-primary py-2 text-xs">
+            Enregistrer
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="flex items-start justify-between gap-4 border-b border-c2b-cream-2 py-2">
+        <dt className="shrink-0 text-sm text-c2b-muted">WhatsApp</dt>
+        <dd className="min-w-0 text-right text-sm font-semibold">
+          <span className={telValide ? "text-c2b-text" : "text-red-700"}>{telephone || "Aucun numéro"}</span>
+          {!telValide && <span className="block text-xs font-bold text-red-700">⚠️ Numéro incomplet</span>}
+          <button onClick={() => setTelSaisi(telephone ?? "+")} className="block w-full text-right text-xs font-bold text-c2b-gold underline">
+            ✏️ Corriger
+          </button>
+        </dd>
+      </div>
+    );
 
   // ----- Fiche -----
   async function majFiche(maj: Partial<FichePersonne>, texte = "Enregistré ✓") {
@@ -498,7 +556,14 @@ export function FicheClient({
           href={wa ? `https://wa.me/${wa}` : undefined}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={(e) => !wa && (e.preventDefault(), informer("Pas de numéro WhatsApp : ajoute-le dans Réglages."))}
+          onClick={(e) => {
+            if (!wa || !telValide) {
+              e.preventDefault();
+              setTelSaisi(telephone ?? "+");
+              setOnglet("resume");
+              informer("Numéro WhatsApp incomplet : corrige-le ci-dessous.");
+            }
+          }}
           className="flex flex-col items-center gap-1 rounded-2xl bg-[#25D366] py-2.5 text-[11px] font-bold text-white"
         >
           <MessageCircle size={19} /> WhatsApp
@@ -513,6 +578,17 @@ export function FicheClient({
           <Copy size={19} /> Copier
         </button>
       </div>
+      {!telValide && telSaisi == null && (
+        <button
+          onClick={() => {
+            setTelSaisi(telephone ?? "+");
+            setOnglet("resume");
+          }}
+          className="w-full rounded-xl border border-red-600/30 bg-red-600/[0.06] px-4 py-2.5 text-left text-sm font-bold text-red-700"
+        >
+          ⚠️ Numéro WhatsApp {telephone ? `incomplet (${telephone})` : "manquant"} : touche ici pour le corriger
+        </button>
+      )}
       {message && <p className="rounded-xl bg-c2b-green px-4 py-2.5 text-center text-sm font-bold text-c2b-cream">{message}</p>}
 
       <nav className="-mx-4 flex gap-1 overflow-x-auto border-b border-c2b-cream-2 px-4">
@@ -540,7 +616,7 @@ export function FicheClient({
             "Sa fiche",
             <dl>
               {ligne("Palier", palier ? PALIERS_FICHE.find((x) => x.cle === palier)?.libelle ?? palier : "—")}
-              {ligne("WhatsApp", telephone ?? "—")}
+              {champTelephone()}
               {ligne("Email", email)}
               {ligne(
                 "Adresse",
@@ -584,7 +660,7 @@ export function FicheClient({
                 "Son questionnaire",
                 <dl>
                   {ligne("Fait le", jourCourt(q.created_at))}
-                  {ligne("WhatsApp", telephone ?? "—")}
+                  {champTelephone()}
                   {ligne("Email", q.email)}
                   {q.calories ? ligne("Macros", `${q.proteines} g P · ${q.glucides} g G · ${q.lipides} g L`) : null}
                   {Object.entries(q.reponses ?? {})

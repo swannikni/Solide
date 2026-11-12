@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Search, X } from "lucide-react";
 import type { Client, Questionnaire } from "@/lib/types";
+import { numeroValide } from "@/lib/telephone";
 import type { FicheResume, RepasSemaine } from "@/app/(espace)/admin/clients/ClientsClient";
 
 type Onglet = "prospects" | "clients" | "tous";
@@ -45,7 +46,7 @@ const FILTRES: Record<Onglet, { cle: string; libelle: string; garde: (e: Entree)
     { cle: "relance", libelle: "À relancer", garde: (e) => e.aRelancer },
     { cle: "appli", libelle: "Avec l'appli", garde: (e) => e.appli },
     { cle: "partenaires", libelle: "Partenaires", garde: (e) => e.partenaire },
-    { cle: "sansWa", libelle: "Sans WhatsApp", garde: (e) => e.sansWhatsApp },
+    { cle: "sansWa", libelle: "Numéro à vérifier", garde: (e) => e.sansWhatsApp },
   ],
   prospects: [
     { cle: "tous", libelle: "Tous", garde: (e) => e.suivi !== "pas_interesse" },
@@ -53,6 +54,7 @@ const FILTRES: Record<Onglet, { cle: string; libelle: string; garde: (e: Entree)
     { cle: "contacte", libelle: "Contacté", garde: (e) => e.suivi === "contacte" },
     { cle: "ouverts", libelle: "Ont ouvert leur lien", garde: (e) => e.ouvert },
     { cle: "pas_interesse", libelle: "Pas intéressé", garde: (e) => e.suivi === "pas_interesse" },
+    { cle: "sansWa", libelle: "Numéro à vérifier", garde: (e) => e.sansWhatsApp && e.suivi !== "pas_interesse" },
   ],
   tous: [{ cle: "tous", libelle: "Tous", garde: () => true }],
 };
@@ -143,7 +145,7 @@ export function Annuaire({
         aRelancer,
         appli: !!compte,
         partenaire: !!f.partenaire,
-        sansWhatsApp: !f.partenaire && !n,
+        sansWhatsApp: !f.partenaire && !numeroValide(f.telephone),
         suivi,
         ouvert: !!f.vu_le,
         tri: f.dernier ?? "",
@@ -166,7 +168,7 @@ export function Annuaire({
         aRelancer: false,
         appli: true,
         partenaire: false,
-        sansWhatsApp: !fin9(c.telephone),
+        sansWhatsApp: !numeroValide(c.telephone),
         suivi: null,
         ouvert: false,
         tri: c.created_at.slice(0, 10),
@@ -190,7 +192,7 @@ export function Annuaire({
         aRelancer: false,
         appli: false,
         partenaire: false,
-        sansWhatsApp: !fin9(q.telephone),
+        sansWhatsApp: !numeroValide(q.telephone),
         suivi: client ? null : q.suivi ?? "a_contacter",
         ouvert: false,
         tri: q.created_at.slice(0, 10),
@@ -294,6 +296,7 @@ export function Annuaire({
                 {e.info}
               </span>
             </span>
+            {e.sansWhatsApp && <span className="shrink-0 rounded-full bg-red-600/10 px-2 py-0.5 text-[10.5px] font-extrabold text-red-700">⚠️ N°</span>}
             {e.badge && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold ${TONS[e.badge.ton]}`}>{e.badge.texte}</span>}
             <ChevronRight size={16} className="shrink-0 text-c2b-muted/60" />
           </Link>
