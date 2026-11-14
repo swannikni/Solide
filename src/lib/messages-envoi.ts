@@ -2,6 +2,9 @@
 // les mêmes modèles partout, modifiables dans « Envoi du menu ».
 import type { Palier } from "@/lib/types";
 
+// Règle : nouveau (jamais commandé, ou ne connaît pas encore son lien) →
+// message rassurant avec le lien, le nouveau menu et l'explication ;
+// déjà client ou client de la semaine → rappel du lien et message sympa.
 // Quatre messages selon l'étape : client (1er message, puis relance du
 // nouveau menu) et prospect (1er message avec le bilan, puis une seule
 // relance ; ensuite plus d'envoi automatique, l'admin écrit lui-même).
@@ -15,14 +18,20 @@ export const LIBELLES: Record<Public, string> = {
 export const MODELES_DEFAUT: Record<Public, string> = {
   client1: `Bonjour {prenom} 👋
 
-Voici ton lien personnel Chef2Box pour commander tes repas :
+Bienvenue chez Chef2Box ! Voici ton espace personnel pour commander tes repas :
 👉 {lien}
 
-1. Coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux.
-2. Vérifie ton quartier : le prix s'affiche en bas.
-3. Touche « Valider ma commande ».
+🍽️ Le menu de la semaine du {semaine} :
+{menu}
 
-Garde ce lien : chaque semaine le nouveau menu y est, et tu peux modifier jusqu'à la veille 20 h. Une question ? Réponds à ce message 🙂`,
+Comment commander :
+1. Ouvre ton lien et coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux (même 1 seul repas pour tester).
+2. Indique ton quartier : le prix s'affiche en bas.
+3. Touche « Valider ma commande ». C'est tout !
+
+🔒 C'est ta page à toi : pas de compte à créer, rien à payer en ligne (paiement à la livraison ou par virement), aucun engagement tant que tu ne valides pas une commande.
+
+Tu peux modifier jusqu'à la veille 20 h. Une question ? Réponds simplement à ce message 🙂`,
   client2: `Bonjour {prenom} 👋
 
 Le menu de la semaine du {semaine} est en ligne 🍽️ Tu le retrouves directement sur ton lien perso, avec les plats du midi et du soir.
@@ -37,8 +46,16 @@ Ici l'équipe Chef2Box : tu as fait ton bilan nutrition sur chef2box.com, merci 
 
 📊 {bilan}
 
-Ton espace personnel est prêt : ton bilan complet, le menu de la semaine du {semaine} et la commande en 1 minute.
+Ton espace personnel est prêt : ton bilan complet, le menu et la commande en 1 minute.
 👉 {lien}
+
+🍽️ Le menu de la semaine du {semaine} :
+{menu}
+
+Comment commander :
+1. Ouvre ton lien et coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux (même 1 seul repas pour tester).
+2. Indique ton quartier : le prix s'affiche en bas.
+3. Touche « Valider ma commande ». C'est tout !
 
 🔒 C'est ta page à toi : pas de compte à créer, rien à payer en ligne (paiement à la livraison ou par virement), aucun engagement tant que tu ne valides pas une commande.
 
@@ -76,10 +93,10 @@ export const ecrire = (cle: string, valeur: string) => {
 // Modèles en place sur ce téléphone (modifiés dans « Envoi du menu »).
 export function lireModeles(): Record<Public, string> {
   return {
-    client1: lire("c2b-envoi-modele-client1") ?? MODELES_DEFAUT.client1,
-    client2: lire("c2b-envoi-modele-client2") ?? MODELES_DEFAUT.client2,
-    prospect1: lire("c2b-envoi-modele-prospect1") ?? MODELES_DEFAUT.prospect1,
-    prospect2: lire("c2b-envoi-modele-prospect2") ?? MODELES_DEFAUT.prospect2,
+    client1: lire("c2b-envoi-modele-v2-client1") ?? MODELES_DEFAUT.client1,
+    client2: lire("c2b-envoi-modele-v2-client2") ?? MODELES_DEFAUT.client2,
+    prospect1: lire("c2b-envoi-modele-v2-prospect1") ?? MODELES_DEFAUT.prospect1,
+    prospect2: lire("c2b-envoi-modele-v2-prospect2") ?? MODELES_DEFAUT.prospect2,
   };
 }
 

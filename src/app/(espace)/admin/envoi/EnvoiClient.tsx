@@ -404,7 +404,7 @@ export function EnvoiClient({
               value={modeles[modeleVu]}
               onChange={(e) => {
                 setModeles((m) => ({ ...m, [modeleVu]: e.target.value }));
-                ecrire(`c2b-envoi-modele-${modeleVu}`, e.target.value);
+                ecrire(`c2b-envoi-modele-v2-${modeleVu}`, e.target.value);
               }}
               rows={13}
               className="champ py-2 text-sm"
@@ -417,7 +417,7 @@ export function EnvoiClient({
             <button
               onClick={() => {
                 setModeles((m) => ({ ...m, [modeleVu]: MODELES_DEFAUT[modeleVu] }));
-                ecrire(`c2b-envoi-modele-${modeleVu}`, MODELES_DEFAUT[modeleVu]);
+                ecrire(`c2b-envoi-modele-v2-${modeleVu}`, MODELES_DEFAUT[modeleVu]);
               }}
               className="text-xs font-semibold text-c2b-muted underline"
             >
