@@ -206,7 +206,8 @@ export function FicheClient({
   // relance, prospect 1er message (avec son bilan) / relance.
   const [envoisFaits, setEnvoisFaits] = useState(envois);
   const etape = envoisFaits.filter((e) => e.semaine !== envoi.semaine).length;
-  const publicPropose: Public = estClient ? (etape === 0 ? "client1" : "client2") : etape === 0 ? "prospect1" : "prospect2";
+  const connaitSonLien = !!p?.vu_le || repas.some((r) => r.date >= decalerDate(lundis[0], -7));
+  const publicPropose: Public = estClient ? (etape === 0 && !connaitSonLien ? "client1" : "client2") : etape === 0 ? "prospect1" : "prospect2";
   const autrePublic: Public = ({ client1: "client2", client2: "client1", prospect1: "prospect2", prospect2: "prospect1" } as const)[publicPropose];
   const prospectTermine = !estClient && etape >= MESSAGES_PROSPECT;
   const dejaCetteSemaine = envoisFaits.some((e) => e.semaine === envoi.semaine);

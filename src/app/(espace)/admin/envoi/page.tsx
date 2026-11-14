@@ -48,7 +48,7 @@ export default async function EnvoiPage() {
         }[]
       >(),
     toutLire(() =>
-      supabase.from("application_cuisine_extras").select("nom, telephone").order("id").returns<{ nom: string; telephone: string | null }[]>()
+      supabase.from("application_cuisine_extras").select("nom, telephone, date").order("id").returns<{ nom: string; telephone: string | null; date: string }[]>()
     ),
     supabase
       .from("application_questionnaires")
@@ -206,7 +206,14 @@ export default async function EnvoiPage() {
       homonyme: nomsFiches.has(q.nom.trim().toLowerCase()),
     });
   }
+  // Clients qui mangent cette semaine (le week-end : la semaine qui vient de finir).
+  const lundiCourant = lundiDe(aujourdhui);
+  const finCourante = decalerDate(lundiCourant, 4);
+  const repasCourants = (repas ?? []).filter((r) => r.date >= lundiCourant && r.date <= finCourante);
+  const nomsCourants = new Set(repasCourants.map((r) => r.nom.trim().toLowerCase()));
+  const numerosCourants = new Set(repasCourants.map((r) => fin9(r.telephone)).filter(Boolean));
   for (const d of destinataires) {
+    d.cetteSemaine = nomsCourants.has(d.nom.trim().toLowerCase()) || numerosCourants.has(d.numero.slice(-9));
     d.bilan = bilanParNumero.get(d.numero.slice(-9)) ?? null;
     d.questionnaires = questionnairesParNumero.get(d.numero.slice(-9)) ?? [];
     if (d.type === "prospect") {

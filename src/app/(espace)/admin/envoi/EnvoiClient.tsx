@@ -30,13 +30,14 @@ export interface Destinataire {
   vuLe: string | null; // dernière ouverture de son lien
   pause: boolean; // ne plus lui envoyer
   questionnaires?: string[]; // ses questionnaires (même numéro)
+  cetteSemaine?: boolean; // mange cette semaine
   ancienClient?: string; // fiche d'un ancien client au même prénom, sans numéro
 }
 
 // Prospect qui n'a jamais ouvert son lien après 3 envois : on arrête de le relancer.
 const cleEnvoi = (d: Destinataire) => (d.ficheId ? `f:${d.ficheId}` : d.cle);
 
-type Filtre = "restants" | "tous" | "client" | "prospect" | "ouverts";
+type Filtre = "restants" | "tous" | "client" | "prospect" | "ouverts" | "semaine";
 
 const jourCourt = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", timeZone: "UTC" }).replace(".", "");
@@ -147,7 +148,8 @@ export function EnvoiClient({
   // Étape : messages déjà reçus avant cette semaine (l'envoi de la semaine ne compte pas).
   const etape = (d: Destinataire) => d.envois - (envoyes.has(cleEnvoi(d)) ? 1 : 0);
   const publicDe = (d: Destinataire): Public =>
-    d.type === "client" ? (etape(d) === 0 ? "client1" : "client2") : etape(d) === 0 ? "prospect1" : "prospect2";
+    // Client qui connaît déjà son lien (l'a ouvert ou mange cette semaine) : directement la relance.
+    d.type === "client" ? (etape(d) === 0 && !d.vuLe && !d.cetteSemaine ? "client1" : "client2") : etape(d) === 0 ? "prospect1" : "prospect2";
   const autrePublic = (p: Public): Public => ({ client1: "client2", client2: "client1", prospect1: "prospect2", prospect2: "prospect1" })[p] as Public;
   // Prospect qui a déjà eu ses 2 messages : plus d'envoi automatique.
   const prospectTermine = (d: Destinataire) => d.type === "prospect" && etape(d) >= MESSAGES_PROSPECT;
@@ -178,7 +180,9 @@ export function EnvoiClient({
           ? true
           : filtre === "ouverts"
             ? d.type === "prospect" && !!d.vuLe
-            : d.type === filtre
+            : filtre === "semaine"
+              ? !!d.cetteSemaine
+              : d.type === filtre
     )
     .filter(correspond);
   const ecartesTrouves = cherche ? ecartes.filter(correspond) : [];
@@ -559,6 +563,7 @@ export function EnvoiClient({
             [
               ["restants", `À envoyer (${actifs.length - envoyesActifs})`],
               ["tous", `Tous (${actifs.length})`],
+              ["semaine", `🍽️ Clients de cette semaine (${actifs.filter((d) => d.cetteSemaine).length})`],
               ["client", `Clients (${nbClients})`],
               ["prospect", `Prospects (${actifs.length - nbClients})`],
               ["ouverts", `👀 Ont ouvert, pas commandé (${actifs.filter((d) => d.type === "prospect" && d.vuLe).length})`],

@@ -25,12 +25,12 @@ Voici ton lien personnel Chef2Box pour commander tes repas :
 Garde ce lien : chaque semaine le nouveau menu y est, et tu peux modifier jusqu'à la veille 20 h. Une question ? Réponds à ce message 🙂`,
   client2: `Bonjour {prenom} 👋
 
-Le nouveau menu Chef2Box de la semaine du {semaine} est arrivé 🍽️
+Le menu de la semaine du {semaine} est en ligne 🍽️ Tu le retrouves directement sur ton lien perso, avec les plats du midi et du soir.
 
-Commande à partir de ton lien, comme d'habitude :
+Pour commander, c'est toujours au même endroit :
 👉 {lien}
 
-Modifiable jusqu'à la veille 20 h.`,
+Coche tes repas, valide, et c'est réglé. Tu peux modifier jusqu'à la veille 20 h. Bonne semaine ! 💪`,
   prospect1: `Bonjour {prenom} 👋
 
 Ici l'équipe Chef2Box : tu as fait ton bilan nutrition sur chef2box.com, merci !
