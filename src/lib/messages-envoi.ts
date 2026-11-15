@@ -21,8 +21,7 @@ export const MODELES_DEFAUT: Record<Public, string> = {
 Bienvenue chez Chef2Box ! Voici ton espace personnel pour commander tes repas :
 👉 {lien}
 
-🍽️ Le menu de la semaine du {semaine} :
-{menu}
+🍽️ Le nouveau menu de la semaine du {semaine} t'attend directement sur ton lien.
 
 Comment commander :
 1. Ouvre ton lien et coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux (même 1 seul repas pour tester).
@@ -46,11 +45,8 @@ Ici l'équipe Chef2Box : tu as fait ton bilan nutrition sur chef2box.com, merci 
 
 📊 {bilan}
 
-Ton espace personnel est prêt : ton bilan complet, le menu et la commande en 1 minute.
+Ton espace personnel est prêt : ton bilan complet, le nouveau menu de la semaine du {semaine} et la commande en 1 minute.
 👉 {lien}
-
-🍽️ Le menu de la semaine du {semaine} :
-{menu}
 
 Comment commander :
 1. Ouvre ton lien et coche ☀️ midi et/ou 🌙 soir pour les jours que tu veux (même 1 seul repas pour tester).
@@ -93,10 +89,10 @@ export const ecrire = (cle: string, valeur: string) => {
 // Modèles en place sur ce téléphone (modifiés dans « Envoi du menu »).
 export function lireModeles(): Record<Public, string> {
   return {
-    client1: lire("c2b-envoi-modele-v2-client1") ?? MODELES_DEFAUT.client1,
-    client2: lire("c2b-envoi-modele-v2-client2") ?? MODELES_DEFAUT.client2,
-    prospect1: lire("c2b-envoi-modele-v2-prospect1") ?? MODELES_DEFAUT.prospect1,
-    prospect2: lire("c2b-envoi-modele-v2-prospect2") ?? MODELES_DEFAUT.prospect2,
+    client1: lire("c2b-envoi-modele-v3-client1") ?? MODELES_DEFAUT.client1,
+    client2: lire("c2b-envoi-modele-v3-client2") ?? MODELES_DEFAUT.client2,
+    prospect1: lire("c2b-envoi-modele-v3-prospect1") ?? MODELES_DEFAUT.prospect1,
+    prospect2: lire("c2b-envoi-modele-v3-prospect2") ?? MODELES_DEFAUT.prospect2,
   };
 }
 
