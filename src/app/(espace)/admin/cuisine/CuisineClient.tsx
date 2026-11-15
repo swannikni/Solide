@@ -1292,6 +1292,23 @@ export function CuisineClient({
       </label>
       {personneModifiee ? (
         <>
+          {!estPartenaire(personneModifiee) && (
+            <div className="rounded-xl bg-white p-3">
+              <p className="text-xs font-bold text-c2b-muted">
+                📅 Ses repas · semaine du {dateCourte(jours[0], { day: "numeric", month: "short" })} au {dateCourte(jours[4], { day: "numeric", month: "short" })}
+              </p>
+              {cases(
+                jours,
+                (d, sv) => coche(personneModifiee, d, sv),
+                (d, sv) => {
+                  const actif = coche(personneModifiee, d, sv);
+                  if (actif && !window.confirm(`Enlever le repas du ${sv === "dejeuner" ? "midi" : "soir"} de ${personneModifiee.nom} (${dateLongue(d)}) ?`)) return;
+                  poser(personneModifiee, d, sv, !actif);
+                }
+              )}
+              <p className="mt-1.5 text-[11px] text-c2b-muted">Touchez une case pour ajouter ou enlever un repas. Enregistré tout de suite.</p>
+            </div>
+          )}
           {!personneModifiee.clientId && (
             <div className="space-y-1.5 rounded-xl bg-white p-3">
               <p className="text-xs font-bold text-c2b-muted">📲 Lien « Mon espace » (commandes du client)</p>
