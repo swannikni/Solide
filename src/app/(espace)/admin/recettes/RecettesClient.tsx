@@ -33,7 +33,14 @@ const jourCourt = (d: string) =>
 const sansAccents = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // Une recette dont le nom figure dans le plat du jour (« Salade César », …).
-const recetteDuPlat = (plat: string | null) => (plat ? RECETTES.find((r) => sansAccents(plat).includes(sansAccents(r.nom))) : undefined);
+const recetteDuPlat = (plat: string | null) =>
+  plat
+    ? RECETTES.find(
+        (r) =>
+          [r.nom, ...(r.autresNoms ?? [])].some((n) => sansAccents(plat).includes(sansAccents(n))) &&
+          !(r.exclus ?? []).some((m) => sansAccents(plat).includes(sansAccents(m)))
+      )
+    : undefined;
 
 // Toute la fiche, calculée pour ces effectifs.
 function calculer(r: Recette, eff: Effectifs) {

@@ -42,6 +42,8 @@ export interface Preparation {
 export interface Recette {
   id: string;
   nom: string;
+  autresNoms?: string[]; // autres noms du plat dans le menu (« French Niçoise Salad »)
+  exclus?: string[]; // mots qui désignent un autre plat (« Roasted Chicken & Creamy Mash » ≠ le sandwich)
   sousTitre: string;
   description: string;
   elements: ElementBox[];
@@ -228,6 +230,7 @@ export const RECETTES: Recette[] = [
   {
     id: "roasted-chicken",
     nom: "Roasted Chicken",
+    exclus: ["mash", "purée", "puree"],
     sousTitre: "Sourdough sandwich",
     description: "Pain au levain, poulet rôti effiloché, salade et sauce mayonnaise-moutarde. Accompagnement : pommes de terre au four.",
     elements: [
@@ -584,6 +587,7 @@ export const RECETTES: Recette[] = [
   {
     id: "salade-nicoise",
     nom: "Salade Niçoise",
+    autresNoms: ["Niçoise Salad", "Nicoise Salad"],
     sousTitre: "Riz, thon & œuf",
     description: "Riz, pommes de terre, thon, œuf, haricots verts, tomates et salade. Vinaigrette maison servie dans un pot séparé.",
     elements: [
