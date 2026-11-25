@@ -34,7 +34,7 @@ export default async function EnvoiPage() {
   const [{ data: fiches }, { data: repas }, { data: questionnaires }, { data: services }, { data: images }, { data: envois }] = await Promise.all([
     supabase
       .from("application_personnes")
-      .select("id, nom, telephone, jeton, partenaire, vu_le, envoi_pause")
+      .select("id, nom, telephone, jeton, partenaire, vu_le, envoi_pause, palier")
       .limit(3000)
       .returns<
         {
@@ -45,6 +45,7 @@ export default async function EnvoiPage() {
           partenaire: boolean | null;
           vu_le: string | null;
           envoi_pause: boolean | null;
+          palier: Palier | null;
         }[]
       >(),
     toutLire(() =>
@@ -215,6 +216,9 @@ export default async function EnvoiPage() {
   for (const d of destinataires) {
     d.cetteSemaine = nomsCourants.has(d.nom.trim().toLowerCase()) || numerosCourants.has(d.numero.slice(-9));
     d.bilan = bilanParNumero.get(d.numero.slice(-9)) ?? null;
+    // Palier choisi par l'admin sur la fiche : il passe avant celui du questionnaire.
+    const palierFiche = d.ficheId ? (fiches ?? []).find((f) => f.id === d.ficheId)?.palier : null;
+    if (d.bilan && palierFiche) d.bilan = { ...d.bilan, palier: palierFiche };
     d.questionnaires = questionnairesParNumero.get(d.numero.slice(-9)) ?? [];
     if (d.type === "prospect") {
       const ancien = anciensSansNumero.get(d.nom.split(/\s+/)[0].toLowerCase());

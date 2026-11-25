@@ -42,7 +42,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
       ? (
           await admin
             .from("application_personnes")
-            .select("id, nom, telephone, allergies, refus, note, quartier, zone, adresse, complement, livraison_offerte, remise")
+            .select("id, nom, telephone, allergies, refus, note, quartier, zone, adresse, complement, livraison_offerte, remise, palier")
             .eq("jeton", jeton)
             .maybeSingle<{
               id: string;
@@ -57,6 +57,7 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
               complement: string | null;
               livraison_offerte: boolean | null;
               remise: number | null;
+              palier: "P1" | "P2" | "P3" | null;
             }>()
         ).data
       : null;
@@ -128,7 +129,8 @@ export default async function MonEspacePage({ params }: { params: Promise<{ jeto
         proteines: questionnaire.proteines,
         glucides: questionnaire.glucides,
         lipides: questionnaire.lipides,
-        palier: questionnaire.palier,
+        // Le palier choisi par l'admin sur la fiche passe avant celui du questionnaire.
+        palier: fiche.palier ?? questionnaire.palier,
         objectifs: questionnaire.profil?.objectifs ?? [],
       }
     : null;

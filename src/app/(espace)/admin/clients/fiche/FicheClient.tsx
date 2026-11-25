@@ -218,7 +218,7 @@ export function FicheClient({
     const l = lire("c2b-envoi-lien-court") === "1" ? `https://chef2box.com/e/${f.jeton}` : `${window.location.origin}/ma-semaine/${f.jeton}`;
     const texte = composerMessage(lireModeles()[choix], {
       prenom,
-      bilan: q?.calories ? { calories: q.calories, palier: q.palier } : null,
+      bilan: q?.calories ? { calories: q.calories, palier: (f.palier ?? q.palier) as Palier | null } : null,
       semaine: new Date(`${envoi.semaine}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" }),
       menu: envoi.menu,
       lien: l,
@@ -655,8 +655,31 @@ export function FicheClient({
             <>
               <div className="grid grid-cols-2 gap-2">
                 {tuile(q.calories ?? "—", "kcal par jour")}
-                {tuile(q.palier ?? "—", "palier conseillé")}
+                {tuile(palier ?? "—", p?.palier && p.palier !== q.palier ? `palier choisi (bilan : ${q.palier ?? "—"})` : "palier conseillé")}
               </div>
+              {carte(
+                "Sa portion (dans le message et son espace)",
+                <div className="grid grid-cols-3 gap-1.5">
+                  {PALIERS_FICHE.map((x) => (
+                    <button
+                      key={x.cle}
+                      onClick={async () => {
+                        if (!p) {
+                          const f = await assurerFicheEtLien();
+                          if (!f) return;
+                          await supabase.from("application_personnes").update({ palier: x.cle }).eq("id", f.id);
+                          setP({ ...f, palier: x.cle });
+                          return informer("Palier changé ✓");
+                        }
+                        changerPalier(x.cle);
+                      }}
+                      className={`rounded-full py-2 text-[11px] font-bold ${palier === x.cle ? "bg-c2b-green text-c2b-cream" : "border border-c2b-green/15 text-c2b-green"}`}
+                    >
+                      {x.libelle}
+                    </button>
+                  ))}
+                </div>
+              )}
               {carte(
                 "Son questionnaire",
                 <dl>
