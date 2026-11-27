@@ -1919,3 +1919,19 @@ create policy envois_admin on public.application_envois for all to authenticated
   using (public.application_is_admin()) with check (public.application_is_admin());
 alter table public.application_personnes add column if not exists vu_le timestamptz;
 alter table public.application_personnes add column if not exists envoi_pause boolean not null default false;
+
+-- Macros d'un plat par palier (étiquettes des box), saisies une fois par plat.
+create table if not exists public.application_macros_plats (
+  plat_cle text not null check (char_length(plat_cle) between 1 and 120), -- nom du plat en minuscules
+  palier text not null check (palier in ('P1','P2','P3')),
+  proteines numeric(6,1) check (proteines >= 0 and proteines < 1000),
+  glucides numeric(6,1) check (glucides >= 0 and glucides < 1000),
+  lipides numeric(6,1) check (lipides >= 0 and lipides < 1000),
+  kcal numeric(6,0) check (kcal >= 0 and kcal < 5000),
+  updated_at timestamptz not null default now(),
+  primary key (plat_cle, palier)
+);
+alter table public.application_macros_plats enable row level security;
+drop policy if exists "macros plats admin" on public.application_macros_plats;
+create policy "macros plats admin" on public.application_macros_plats for all to authenticated
+  using (public.application_is_admin()) with check (public.application_is_admin());

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Phone, Search, Send, Trash2, UserPlus, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, CopyPlus, FileDown, MessageCircle, Tag, Phone, Search, Send, Trash2, UserPlus, X } from "lucide-react";
 import type { jsPDF as JsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
 import { decalerDate } from "@/lib/dates";
@@ -10,6 +10,7 @@ import { lundiDe, type Tarifs } from "@/lib/paiements";
 import { nouveauJeton, prixDemande, type Zone } from "@/lib/ma-semaine";
 import { boitesDe, genererFichePdf, libellePalier, nomAvecBoites, type LigneFiche, type ServiceFiche } from "@/lib/fiche-cuisine-pdf";
 import type { Palier } from "@/lib/types";
+import { genererEtiquettesPdf, prenomEtiquette, type Macros } from "@/lib/etiquettes-pdf";
 
 type Service = "dejeuner" | "diner";
 
@@ -260,6 +261,9 @@ export function CuisineClient({
   // Jour déroulé (un seul à la fois).
   const [jourOuvert, setJourOuvert] = useState<string | null>(jourChoisi ?? (cetteSemaine(aujourdhui) ? aujourdhui : lundi));
   const [message, setMessage] = useState("");
+  // Étiquettes : service ouvert (« date|service ») et macros saisies par palier.
+  const [etiquettesOuvert, setEtiquettesOuvert] = useState<string | null>(null);
+  const [saisieMacros, setSaisieMacros] = useState<Record<string, Record<"proteines" | "glucides" | "lipides" | "kcal", string>>>({});
   // Recherche dans la liste des clients du jour déroulé.
   const [rechercheJour, setRechercheJour] = useState("");
   // Liste des clients du jour déroulé : repliée par défaut.
@@ -970,6 +974,88 @@ export function CuisineClient({
     lien.download = fichier.name;
     lien.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  // ---- Étiquettes des box (62 × 29 mm, une par box, ordre de la fiche) ----
+  const cleDuPlat = (plat: string) => plat.trim().toLowerCase().slice(0, 120);
+  type SaisieMacros = Record<keyof Macros, string>;
+  const SAISIE_VIDE: SaisieMacros = { proteines: "", glucides: "", lipides: "", kcal: "" };
+
+  async function ouvrirEtiquettes(date: string, service: Service) {
+    const cle = `${date}|${service}`;
+    if (etiquettesOuvert === cle) return setEtiquettesOuvert(null);
+    const plat = (plats[date]?.[service] ?? "").trim();
+    if (!plat) return setMessage("Écrivez d'abord le nom du plat de ce service (en haut du jour).");
+    setEtiquettesOuvert(cle);
+    const { data } = await supabase
+      .from("application_macros_plats")
+      .select("palier, proteines, glucides, lipides, kcal")
+      .eq("plat_cle", cleDuPlat(plat))
+      .returns<({ palier: Palier } & Macros)[]>();
+    const saisie: Record<string, SaisieMacros> = {};
+    for (const p of PALIERS) saisie[p] = { ...SAISIE_VIDE };
+    for (const m of data ?? [])
+      saisie[m.palier] = {
+        proteines: m.proteines?.toString() ?? "",
+        glucides: m.glucides?.toString() ?? "",
+        lipides: m.lipides?.toString() ?? "",
+        kcal: m.kcal?.toString() ?? "",
+      };
+    setSaisieMacros(saisie);
+  }
+
+  const versNombre = (t: string) => {
+    const n = Number(t.replace(",", ".").trim());
+    return t.trim() && Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  async function imprimerEtiquettes(date: string, s: ReturnType<typeof fiche>[number]) {
+    if (!JsPdf) return setMessage("Préparation du PDF, réessayez dans une seconde.");
+    const plat = (plats[date]?.[s.cle] ?? "").trim();
+    // Macros enregistrées une fois par plat et par palier.
+    const lignes = PALIERS.map((p) => ({ palier: p, m: saisieMacros[p] ?? SAISIE_VIDE }))
+      .filter(({ m }) => Object.values(m).some((v) => v.trim()))
+      .map(({ palier, m }) => ({
+        plat_cle: cleDuPlat(plat),
+        palier,
+        proteines: versNombre(m.proteines),
+        glucides: versNombre(m.glucides),
+        lipides: versNombre(m.lipides),
+        kcal: versNombre(m.kcal),
+        updated_at: new Date().toISOString(),
+      }));
+    if (lignes.length) {
+      const { error } = await supabase.from("application_macros_plats").upsert(lignes, { onConflict: "plat_cle,palier" });
+      if (error) return setMessage("Macros non enregistrées, réessayez.");
+    }
+    const macrosDe = (p: Palier | null): Macros | null => {
+      const l = p ? lignes.find((x) => x.palier === p) : undefined;
+      return l ? { proteines: l.proteines, glucides: l.glucides, lipides: l.lipides, kcal: l.kcal } : null;
+    };
+    // Une étiquette par box, dans l'ordre de la fiche (palier puis nom ; ×2 = 2 étiquettes).
+    const etiquettes = s.paliers.flatMap((g) =>
+      g.lignes.flatMap((l) => Array.from({ length: Math.max(1, l.quantite ?? 1) }, () => ({ prenom: prenomEtiquette(l.nom), palier: g.palier, macros: macrosDe(g.palier) })))
+    );
+    const sansMacros = etiquettes.filter((e) => !e.macros).length;
+    if (sansMacros && !window.confirm(`${sansMacros} étiquette${sansMacros > 1 ? "s" : ""} sans macros (palier non rempli). Créer le PDF quand même ?`)) return;
+    const [{ CORMORANT_BOLD, DMSANS_LEGER, DMSANS_MOYEN }] = await Promise.all([import("@/lib/polices-etiquettes")]);
+    const blob = genererEtiquettesPdf(JsPdf, { serif: CORMORANT_BOLD, leger: DMSANS_LEGER, moyen: DMSANS_MOYEN }, plat, etiquettes);
+    const fichier = new File([blob], `etiquettes-${date}-${s.cle === "dejeuner" ? "midi" : "soir"}.pdf`, { type: "application/pdf" });
+    // iPhone : menu de partage → « Imprimer » (ou AirDrop, Fichiers…). Sinon : ouverture du PDF.
+    if (navigator.canShare?.({ files: [fichier] })) {
+      try {
+        await navigator.share({ files: [fichier], title: `Étiquettes ${s.libelle.toLowerCase()} ${dateLongue(date)}` });
+        return;
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const lien = document.createElement("a");
+    lien.href = url;
+    lien.download = fichier.name;
+    lien.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
 
   async function copierFiche(date: string) {
@@ -1968,8 +2054,57 @@ export function CuisineClient({
                   {s.icone} {s.court}
                   {s.plat && <span className="font-semibold"> ({s.plat})</span>}
                 </span>
-                <span className="text-lg font-bold whitespace-nowrap">{s.total} repas</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-lg font-bold whitespace-nowrap">{s.total} repas</span>
+                  {s.total > 0 && (
+                    <button
+                      onClick={() => ouvrirEtiquettes(date, s.cle)}
+                      aria-expanded={etiquettesOuvert === `${date}|${s.cle}`}
+                      className="flex items-center gap-1 rounded-full bg-c2b-cream px-2.5 py-1 text-xs font-bold text-c2b-green"
+                    >
+                      <Tag size={13} /> Étiquettes
+                    </button>
+                  )}
+                </span>
               </h3>
+              {etiquettesOuvert === `${date}|${s.cle}` && (
+                <div className="mt-2 space-y-2 rounded-xl border border-c2b-gold/40 bg-white p-3">
+                  <p className="text-xs font-bold text-c2b-muted">
+                    Macros de « {s.plat} » pour 1 portion (saisies une fois, gardées pour la prochaine fois)
+                  </p>
+                  <div className="grid grid-cols-[34px_repeat(4,minmax(0,1fr))] items-center gap-1 text-center text-[10px] font-bold uppercase text-c2b-muted">
+                    <span />
+                    <span>Prot. g</span>
+                    <span>Gluc. g</span>
+                    <span>Lip. g</span>
+                    <span>kcal</span>
+                    {PALIERS.filter((p) => s.paliers.some((g) => g.palier === p)).map((p) => (
+                      <Fragment key={p}>
+                        <span className="text-xs font-extrabold text-c2b-green">{p}</span>
+                        {(["proteines", "glucides", "lipides", "kcal"] as const).map((k) => (
+                          <input
+                            key={k}
+                            value={saisieMacros[p]?.[k] ?? ""}
+                            onChange={(e) =>
+                              setSaisieMacros((m) => ({ ...m, [p]: { ...(m[p] ?? { proteines: "", glucides: "", lipides: "", kcal: "" }), [k]: e.target.value } }))
+                            }
+                            inputMode="decimal"
+                            aria-label={`${p} ${k}`}
+                            className="champ px-1 py-1.5 text-center text-sm"
+                          />
+                        ))}
+                      </Fragment>
+                    ))}
+                  </div>
+                  {s.paliers.some((g) => g.palier === null) && (
+                    <p className="text-[11px] font-semibold text-red-700">Des repas sans palier : leurs étiquettes n&apos;auront pas de macros.</p>
+                  )}
+                  <button onClick={() => imprimerEtiquettes(date, s)} className="btn-primary w-full py-2.5 text-sm">
+                    <Tag size={15} /> Créer le PDF · {s.total} étiquette{s.total > 1 ? "s" : ""} (62 × 29 mm)
+                  </button>
+                  <p className="text-[11px] text-c2b-muted">Une étiquette par box, dans l&apos;ordre de la fiche. Sur iPhone : Partager → Imprimer.</p>
+                </div>
+              )}
               {s.total === 0 ? (
                 <p className="px-1 py-2 text-sm text-c2b-muted">Aucun repas</p>
               ) : (
