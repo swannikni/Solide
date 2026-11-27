@@ -72,7 +72,7 @@ export function Nav({
   const liens = estAdmin ? LIENS_ADMIN : liensClient;
 
   // Planche d'étiquettes à imprimer : pas de barres.
-  if (pathname.includes("/etiquettes")) return null;
+  if (pathname.startsWith("/admin/menu/etiquettes")) return null;
 
   const actifSur = (href: string, racine: string) => (cible ? cible === href : estActif(pathname, racine));
 
