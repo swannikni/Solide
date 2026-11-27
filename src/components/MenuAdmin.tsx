@@ -19,6 +19,7 @@ import {
   Wallet,
   X,
   Activity,
+  Tag,
   MapPinned,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -34,6 +35,7 @@ const GROUPES = [
       { href: "/admin/cuisine", label: "Cuisine", sous: "Repas du jour, semaine, ajouts", icon: ChefHat },
       { href: "/admin/tournee", label: "Tournée", sous: "Lien du livreur, encaissements", icon: Truck },
       { href: "/admin/recettes", label: "Recettes", sous: "Quantités par palier, PDF", icon: BookOpen },
+      { href: "/admin/etiquettes", label: "Étiquettes", sous: "Une par box, macros du client", icon: Tag },
       ...(LIVRAISON_ACTIVE ? [{ href: "/admin/livraison", label: "Livraison", sous: "Carte des livraisons", icon: MapPinned }] : []),
     ],
   },
